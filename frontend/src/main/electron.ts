@@ -667,6 +667,20 @@ function registerPreferredGlobalShortcut(): void {
   voiceShortcutState = tryRegisterVoiceShortcut(platformPreferences.voiceShortcut);
 }
 
+/** Avoid changing OS-wide protocol, login-item, or shortcut registrations in isolated automation. */
+export function registerHostStartupIntegrations(): void {
+  if (process.env.ATLAS_AUTOMATION === '1') return;
+  app.setLoginItemSettings({ openAtLogin: platformPreferences.openAtLogin, args: platformPreferences.openAtLogin ? ['--background'] : [] });
+  registerPreferredGlobalShortcut();
+  // Dedicated system-wide shortcut for the floating composer; it does not replace the user's
+  // configurable Atlas focus shortcut. Registration failure leaves the in-app API available.
+  globalShortcut.register('Control+Alt+Space', showFloatingComposer);
+  if (app.isPackaged) app.setAsDefaultProtocolClient('atlas');
+  else if (process.platform === 'win32' || process.platform === 'linux') {
+    app.setAsDefaultProtocolClient('atlas', process.execPath, [path.resolve(process.argv[1] ?? '.')]);
+  }
+}
+
 function tryRegisterVoiceShortcut(accelerator: string | null): GlobalShortcutState {
   if (!accelerator) return { accelerator: null, registered: false };
   const invalid = validateGlobalAccelerator(accelerator);
@@ -1779,15 +1793,7 @@ app.whenReady().then(async () => {
   await injectBackendPort();
   applySavedDataRoot();
   platformPreferences = loadPlatformPreferences();
-  app.setLoginItemSettings({ openAtLogin: platformPreferences.openAtLogin, args: platformPreferences.openAtLogin ? ['--background'] : [] });
-  registerPreferredGlobalShortcut();
-  // Dedicated system-wide shortcut for the floating composer; it does not replace the user's
-  // configurable Atlas focus shortcut. Registration failure leaves the in-app API available.
-  globalShortcut.register('Control+Alt+Space', showFloatingComposer);
-  if (app.isPackaged) app.setAsDefaultProtocolClient('atlas');
-  else if (process.platform === 'win32' || process.platform === 'linux') {
-    app.setAsDefaultProtocolClient('atlas', process.execPath, [path.resolve(process.argv[1] ?? '.')]);
-  }
+  registerHostStartupIntegrations();
   // Atlas draws its own title bar; the default menu's hidden accelerators (Ctrl+W closes the
   // window, Ctrl+R reloads) would fire over the app's own shortcuts.
   createApplicationMenu();

@@ -131,7 +131,7 @@ import { observeLocalizedCopy, readLocale, saveLocale, t } from './services/i18n
 import { api, relativeTime } from './services/api';
 import { extractMemoryMarkers } from './services/memoryMarkers';
 import { filterSafeSuggestions } from './services/suggestionSafety';
-import { TimelineProjection } from './components/timelineProjection';
+import { TimelineProjection, projectMessageDeltaText } from './components/timelineProjection';
 import { shouldSuggestSkillExtraction } from './services/skillExtraction';
 const ComputerEdgeBar = lazy(() => import('./components/x2').then((module) => ({ default: module.ComputerEdgeBar })));
 import UpdateBanner from './components/UpdateBanner';
@@ -810,7 +810,7 @@ function AppContent() {
   const reply = useMemo(() => {
     const completed = [...activeEvents].reverse().find((event) => event.type === 'message.completed');
     if (completed?.data.content) return String(completed.data.content);
-    return activeEvents.filter((event) => event.type === 'message.delta').map((event) => String(event.data.content ?? '')).join('');
+    return projectMessageDeltaText(activeEvents);
   }, [activeEvents]);
   const focusHistory = useMemo(() => {
     if (activeRun?.conversationId === store.activeConversationId && !runDone) return [];

@@ -1,0 +1,106 @@
+2026-11-19 03:45:08 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-snqj4txy\atlas\config\atlas.toml
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____________ test_write_file_publishes_lsp_diagnostics_ws_event ______________
+
+backend = <tests.test_c6_lsp_e2e.IsolatedBackend object at 0x00000187D9642DD0>
+e2e_root = WindowsPath('D:/Atlas/.worktrees/zcode-exec06-skill-sources/_tmp/lsp-fixtures/e2e_9065a0d993')
+
+    @pytest.mark.asyncio
+    async def test_write_file_publishes_lsp_diagnostics_ws_event(backend, e2e_root):
+        workspace = e2e_root / "workspace"
+        target = workspace / "e2e_bug.py"
+        target.write_text(CLEAN, encoding="utf-8")  # 干净基线落盘
+        state_file = e2e_root / "fake_state.json"
+    
+        turns = 0
+    
+        def responder(record):
+            nonlocal turns
+            turns += 1
+            if turns == 1:
+                # 先读后写:Hermes 的防覆盖闸要求任务见过当前全文
+                return ToolCall("read_file", {"path": str(target)})
+            if turns == 2:
+                return ToolCall("write_file", {"path": str(target), "content": BUG_ONE})
+            return Text("buggy version written")
+    
+        backend.fake._responder = responder
+>       conversation, events = await backend.run("write the buggy version", workspace=str(workspace))
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_c6_lsp_e2e.py:233: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tests.test_c6_lsp_e2e.IsolatedBackend object at 0x00000187D9642DD0>
+content = 'write the buggy version'
+conversation = '2b33c2f3-4a02-4b27-85d2-c8b13c7e87ee'
+workspace = 'D:\\Atlas\\.worktrees\\zcode-exec06-skill-sources\\_tmp\\lsp-fixtures\\e2e_9065a0d993\\workspace'
+expected = 'run.completed', options = {}
+
+    async def run(self, content, *, conversation=None, workspace=None, expected="run.completed", **options):
+        import uuid as _uuid
+    
+        conversation = conversation or await self.conversation()
+        run_id = _uuid.uuid4().hex
+        received = []
+        try:
+            async with connect(self.url.replace("http", "ws", 1) + "/ws/chat",
+                               additional_headers={"x-atlas-api-token": "c1-isolated-token"}, max_size=8_000_000) as ws:
+                await ws.send(json.dumps({"type": "run.start", "run_id": run_id, "content": content,
+                    "conversation_id": conversation, "workspace": str(workspace or self.root / "workspace"),
+                    "model": "fake-model", **options}))
+                async with asyncio.timeout(120):
+                    while True:
+                        event = json.loads(await ws.recv())
+                        received.append(event)
+                        if event.get("run_id") == run_id and event.get("event") in {"run.completed", "run.failed", "run.cancelled"}:
+                            break
+        except (TimeoutError, asyncio.TimeoutError):
+            log_tail = (self.root / "backend.log").read_text(errors="replace")[-2000:]
+            raise AssertionError(f"run did not finish; last events: {received[-3:]}\nbackend.log tail:\n{log_tail}")
+        self.events.extend(received)
+        (self.root / "events.json").write_text(json.dumps(received, ensure_ascii=False, indent=2), encoding="utf-8")
+>       assert received[-1]["event"] == expected, received[-1]
+E       AssertionError: {'type': 'agent_event', 'run_id': '5475d55330e4470c90bda72979f65009', 'event_id': '5475d55330e4470c90bda72979f65009:10', 'sequence': 10, ...}
+E       assert 'run.failed' == 'run.completed'
+E         
+E         - run.completed
+E         + run.failed
+
+tests\test_c6_lsp_e2e.py:161: AssertionError
+============================== warnings summary ===============================
+tests/test_c6_lsp_e2e.py::test_write_file_publishes_lsp_diagnostics_ws_event
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_c6_lsp_e2e.py::test_write_file_publishes_lsp_diagnostics_ws_event
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_c6_lsp_e2e.py::test_write_file_publishes_lsp_diagnostics_ws_event
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_c6_lsp_e2e.py::test_write_file_publishes_lsp_diagnostics_ws_event
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_c6_lsp_e2e.py::test_write_file_publishes_lsp_diagnostics_ws_event
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_c6_lsp_e2e.py::test_write_file_publishes_lsp_diagnostics_ws_event
+1 failed, 5 warnings in 10.74s

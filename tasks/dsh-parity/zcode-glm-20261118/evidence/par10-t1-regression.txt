@@ -1,0 +1,696 @@
+2026-11-19 05:46:10 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-f6tee_5w\atlas\config\atlas.toml
+.F.F.F....F.........F..F..                                               [100%]
+================================== FAILURES ===================================
+____ test_git_fixture_installs_through_request_task_and_persists_checkout _____
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par10-registry-runtime/.tmp/par10-t1/regression-basetemp-final/test_git_fixture_installs_thro0')
+
+    def test_git_fixture_installs_through_request_task_and_persists_checkout(tmp_path: Path) -> None:
+        import subprocess
+    
+        async def scenario() -> None:
+            source = _local_package(tmp_path)
+            subprocess.run(["git", "init", "-b", "main", str(source)], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.email", "atlas-test@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.name", "Atlas test"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "plugin.json", "package.json", "pnpm-lock.yaml"], check=True)
+            subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], check=True, capture_output=True)
+            runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+            started = await runtime.start_install_operation(str(source), source_type="git", ref="main")
+            result = await runtime.wait_install_operation(started["requestId"], wait_seconds=15)
+            assert result["status"] == "completed", result
+            assert (tmp_path / "installed" / "fixture-plugin" / "plugin.json").is_file()
+            record = runtime._state["sources"]["fixture-plugin"]
+            assert record["source"] == "git"
+            assert Path(record["checkout"]).is_dir()
+            assert (Path(record["checkout"]) / ".git").is_dir()
+            await runtime.close_install_operations()
+    
+>       asyncio.run(scenario())
+
+tests\test_plugin_install_operations.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    async def scenario() -> None:
+        source = _local_package(tmp_path)
+        subprocess.run(["git", "init", "-b", "main", str(source)], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.email", "atlas-test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.name", "Atlas test"], check=True)
+        subprocess.run(["git", "-C", str(source), "add", "plugin.json", "package.json", "pnpm-lock.yaml"], check=True)
+        subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], check=True, capture_output=True)
+        runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+        started = await runtime.start_install_operation(str(source), source_type="git", ref="main")
+        result = await runtime.wait_install_operation(started["requestId"], wait_seconds=15)
+>       assert result["status"] == "completed", result
+E       AssertionError: {'requestId': 'a76a5a5d30414219907d755c0ea94c9d', 'status': 'failed', 'createdAt': '2026-11-18T21:46:11.675514+00:00', 'updatedAt': '2026-11-18T21:46:12.113879+00:00', ...}
+E       assert 'failed' == 'completed'
+E         
+E         - completed
+E         + failed
+
+tests\test_plugin_install_operations.py:50: AssertionError
+__ test_install_upgrade_preserves_old_patch_and_revert_restores_new_upstream __
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par10-registry-runtime/.tmp/par10-t1/regression-basetemp-final/test_install_upgrade_preserves0')
+
+    def test_install_upgrade_preserves_old_patch_and_revert_restores_new_upstream(tmp_path: Path) -> None:
+        async def scenario() -> None:
+            source = _local_package(tmp_path)
+            commands = source / "commands"
+            commands.mkdir()
+            command = commands / "hello.md"
+            command.write_text("upstream v1", encoding="utf-8")
+            runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+            first = await runtime.start_install_operation(str(source))
+            assert (await runtime.wait_install_operation(first["requestId"], wait_seconds=5))["status"] == "completed"
+            assert runtime.patch_file("fixture-plugin", "commands/hello.md", "local patch")
+            command.write_text("upstream v2", encoding="utf-8")
+            second = await runtime.start_install_operation(str(source))
+            result = await runtime.wait_install_operation(second["requestId"], wait_seconds=5)
+            assert result["status"] == "completed", result
+            installed_command = tmp_path / "installed" / "fixture-plugin" / "commands" / "hello.md"
+            assert installed_command.read_text(encoding="utf-8") == "local patch"
+            assert runtime.revert_patch("fixture-plugin", "commands/hello.md")["reverted"] is True
+            assert installed_command.read_text(encoding="utf-8") == "upstream v2"
+            await runtime.close_install_operations()
+    
+>       asyncio.run(scenario())
+
+tests\test_plugin_install_operations.py:116: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    async def scenario() -> None:
+        source = _local_package(tmp_path)
+        commands = source / "commands"
+        commands.mkdir()
+        command = commands / "hello.md"
+        command.write_text("upstream v1", encoding="utf-8")
+        runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+        first = await runtime.start_install_operation(str(source))
+        assert (await runtime.wait_install_operation(first["requestId"], wait_seconds=5))["status"] == "completed"
+        assert runtime.patch_file("fixture-plugin", "commands/hello.md", "local patch")
+        command.write_text("upstream v2", encoding="utf-8")
+        second = await runtime.start_install_operation(str(source))
+        result = await runtime.wait_install_operation(second["requestId"], wait_seconds=5)
+        assert result["status"] == "completed", result
+        installed_command = tmp_path / "installed" / "fixture-plugin" / "commands" / "hello.md"
+        assert installed_command.read_text(encoding="utf-8") == "local patch"
+        assert runtime.revert_patch("fixture-plugin", "commands/hello.md")["reverted"] is True
+>       assert installed_command.read_text(encoding="utf-8") == "upstream v2"
+E       AssertionError: assert 'upstream v1' == 'upstream v2'
+E         
+E         - upstream v2
+E         ?           ^
+E         + upstream v1
+E         ?           ^
+
+tests\test_plugin_install_operations.py:113: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-11-19 05:46:15 [info     ] plugin.patches_carried         applied=1 carried=1 path=D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\regression-basetemp-final\test_install_upgrade_preserves0\installed\.prepared-38c08ceb110c437c
+___________ test_marketplace_api_installs_via_waitable_request_task ___________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par10-registry-runtime/.tmp/par10-t1/regression-basetemp-final/test_marketplace_api_installs_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000190CD603510>
+
+    def test_marketplace_api_installs_via_waitable_request_task(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+    
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+    
+        from atlas.api import plugins_router
+        from atlas.api.app_services import AppServices
+    
+        source = tmp_path / "marketplace-plugin-source"
+        source.mkdir()
+        (source / "plugin.json").write_text(json.dumps({"name": "fixture-plugin", "version": "1.0.0"}), encoding="utf-8")
+        subprocess.run(["git", "init", "-b", "main", str(source)], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.email", "atlas-test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.name", "Atlas test"], check=True)
+        subprocess.run(["git", "-C", str(source), "add", "plugin.json"], check=True)
+        subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], check=True, capture_output=True)
+        marketplace = tmp_path / "market"
+        marketplace.mkdir()
+        (marketplace / "marketplace.json").write_text(json.dumps({"plugins": [{
+            "name": "fixture-plugin", "source": {"source": "url", "url": str(source), "ref": "main"},
+        }]}), encoding="utf-8")
+        runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+        runtime.add_marketplace(marketplace, name="fixture-market")
+    
+        async def refresh():
+            return {"loaded": ["fixture-plugin"]}
+    
+        monkeypatch.setattr(plugins_router._server(), "_reload_extensions", refresh)
+        app = FastAPI()
+        app.state.services = AppServices(plugin_runtime=runtime)
+        app.include_router(plugins_router.router)
+        with TestClient(app) as client:
+            started_response = client.post("/api/plugin-marketplaces/fixture-market/install", json={
+                "plugin": "fixture-plugin", "requestId": "marketplace-install-1",
+            })
+            assert started_response.status_code == 200, started_response.text
+            started = started_response.json()
+            assert started["requestId"] == "marketplace-install-1"
+            assert started["status"] in {"queued", "running"}
+            assert "result" not in started
+            result = client.get("/api/plugins/install/marketplace-install-1?wait_ms=2000").json()
+>           assert result["status"] == "completed", result
+E           AssertionError: {'requestId': 'marketplace-install-1', 'status': 'failed', 'createdAt': '2026-11-18T21:46:16.042043+00:00', 'updatedAt': '2026-11-18T21:46:16.309500+00:00', ...}
+E           assert 'failed' == 'completed'
+E             
+E             - completed
+E             + failed
+
+tests\test_plugin_install_operations.py:181: AssertionError
+_ test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle[git] _
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par10-registry-runtime/.tmp/par10-t1/regression-basetemp-final/test_git_and_marketplace_sourc0')
+source_type = 'git'
+
+    @pytest.mark.parametrize("source_type", ["git", "marketplace"])
+    def test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle(
+        tmp_path: Path, source_type: str,
+    ) -> None:
+        import subprocess
+    
+        async def scenario() -> None:
+            source = tmp_path / "approval-source"
+            source.mkdir()
+            (source / "plugin.json").write_text(json.dumps({"name": "approval-plugin", "version": "1.0.0"}), encoding="utf-8")
+            (source / "package.json").write_text(json.dumps({
+                "name": "approval-plugin", "version": "1.0.0", "dependencies": {"direct-dep": "1.0.0"},
+            }), encoding="utf-8")
+            subprocess.run(["git", "init", "-b", "main", str(source)], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.email", "atlas-test@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.name", "Atlas test"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], check=True, capture_output=True)
+            runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+            if source_type == "marketplace":
+                market = tmp_path / "market"
+                market.mkdir()
+                (market / "marketplace.json").write_text(json.dumps({"plugins": [{
+                    "name": "approval-plugin", "source": {"source": "url", "url": str(source), "ref": "main"},
+                }]}), encoding="utf-8")
+                runtime.add_marketplace(market, name="approval-market")
+            calls = 0
+    
+            async def pnpm(_request_id: str, _cwd: Path, _registry: str | None, _args: list[str]):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    return 1, "ERR_PNPM_IGNORED_BUILDS\nIgnored build scripts: @fixture/approved-build@1.0.0"
+                return 0, "approved build completed"
+    
+            runtime._run_package_manager = pnpm
+            if source_type == "marketplace":
+                started = await runtime.start_install_operation(
+                    "marketplace:approval-market/approval-plugin", source_type="marketplace",
+                    marketplace="approval-market", plugin_name="approval-plugin",
+                )
+            else:
+                started = await runtime.start_install_operation(str(source), source_type="git", ref="main")
+            deadline = asyncio.get_running_loop().time() + 10
+            pending = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+            while pending["status"] not in {"awaiting_approval", "failed", "completed"}:
+                assert asyncio.get_running_loop().time() < deadline, pending
+                await asyncio.sleep(0.02)
+                pending = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+            assert pending["status"] == "awaiting_approval", pending
+            assert pending["approvalRequired"] == ["@fixture/approved-build"]
+            assert calls == 1
+            runtime.grant_script_approval(
+                "@fixture/approved-build", request_id=started["requestId"],
+                expires_at="2099-01-01T00:00:00Z",
+            )
+            deadline = asyncio.get_running_loop().time() + 10
+            completed = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+            while completed["status"] not in {"completed", "failed", "cancelled"}:
+                assert asyncio.get_running_loop().time() < deadline, completed
+                await asyncio.sleep(0.02)
+                completed = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+            assert completed["status"] == "completed", completed
+            assert calls == 2
+            installed_name = "approval-plugin" if source_type == "marketplace" else "approval-source"
+            assert (tmp_path / "installed" / installed_name / "plugin.json").is_file()
+            assert completed["executedBuildPackages"] == ["@fixture/approved-build"]
+            await runtime.close_install_operations()
+    
+>       asyncio.run(scenario())
+
+tests\test_plugin_install_operations.py:389: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    async def scenario() -> None:
+        source = tmp_path / "approval-source"
+        source.mkdir()
+        (source / "plugin.json").write_text(json.dumps({"name": "approval-plugin", "version": "1.0.0"}), encoding="utf-8")
+        (source / "package.json").write_text(json.dumps({
+            "name": "approval-plugin", "version": "1.0.0", "dependencies": {"direct-dep": "1.0.0"},
+        }), encoding="utf-8")
+        subprocess.run(["git", "init", "-b", "main", str(source)], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.email", "atlas-test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.name", "Atlas test"], check=True)
+        subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], check=True, capture_output=True)
+        runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+        if source_type == "marketplace":
+            market = tmp_path / "market"
+            market.mkdir()
+            (market / "marketplace.json").write_text(json.dumps({"plugins": [{
+                "name": "approval-plugin", "source": {"source": "url", "url": str(source), "ref": "main"},
+            }]}), encoding="utf-8")
+            runtime.add_marketplace(market, name="approval-market")
+        calls = 0
+    
+        async def pnpm(_request_id: str, _cwd: Path, _registry: str | None, _args: list[str]):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return 1, "ERR_PNPM_IGNORED_BUILDS\nIgnored build scripts: @fixture/approved-build@1.0.0"
+            return 0, "approved build completed"
+    
+        runtime._run_package_manager = pnpm
+        if source_type == "marketplace":
+            started = await runtime.start_install_operation(
+                "marketplace:approval-market/approval-plugin", source_type="marketplace",
+                marketplace="approval-market", plugin_name="approval-plugin",
+            )
+        else:
+            started = await runtime.start_install_operation(str(source), source_type="git", ref="main")
+        deadline = asyncio.get_running_loop().time() + 10
+        pending = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+        while pending["status"] not in {"awaiting_approval", "failed", "completed"}:
+            assert asyncio.get_running_loop().time() < deadline, pending
+            await asyncio.sleep(0.02)
+            pending = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+        assert pending["status"] == "awaiting_approval", pending
+        assert pending["approvalRequired"] == ["@fixture/approved-build"]
+        assert calls == 1
+        runtime.grant_script_approval(
+            "@fixture/approved-build", request_id=started["requestId"],
+            expires_at="2099-01-01T00:00:00Z",
+        )
+        deadline = asyncio.get_running_loop().time() + 10
+        completed = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+        while completed["status"] not in {"completed", "failed", "cancelled"}:
+            assert asyncio.get_running_loop().time() < deadline, completed
+            await asyncio.sleep(0.02)
+            completed = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+>       assert completed["status"] == "completed", completed
+E       AssertionError: {'requestId': '60919a75342246d892fbf2e9630b9b67', 'status': 'failed', 'createdAt': '2026-11-18T21:46:17.224415+00:00', 'updatedAt': '2026-11-18T21:46:17.736283+00:00', ...}
+E       assert 'failed' == 'completed'
+E         
+E         - completed
+E         + failed
+
+tests\test_plugin_install_operations.py:382: AssertionError
+_ test_install_waits_only_for_pnpm_reported_transitive_build_and_resumes_on_approval _
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par10-registry-runtime/.tmp/par10-t1/regression-basetemp-final/test_install_waits_only_for_pn0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000190CD7A7A90>
+
+    def test_install_waits_only_for_pnpm_reported_transitive_build_and_resumes_on_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def scenario() -> None:
+            runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+            source = _local_package(tmp_path, dependencies={"direct-dep": "1.0.0"})
+            ran: list[str] = []
+    
+            async def runner(_request_id: str, _cwd: Path, _registry: str | None, args: list[str]) -> tuple[int, str]:
+                ran.append(args[0])
+                if len(ran) == 1:
+                    return 1, "ERR_PNPM_IGNORED_BUILDS\nIgnored build scripts: @transitive/native-build@2.0.0"
+                return 0, "ok"
+    
+            monkeypatch.setattr(runtime, "_run_package_manager", runner)
+            started = await runtime.start_install_operation(str(source))
+            for _ in range(100):
+                status = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+                if status["status"] == "awaiting_approval":
+                    break
+                await asyncio.sleep(0.01)
+            assert status["status"] == "awaiting_approval"
+            assert status["approvalRequired"] == ["@transitive/native-build"]
+            assert ran == ["install"]
+            runtime.grant_script_approval("@transitive/native-build", expires_at="2099-01-01T00:00:00Z", request_id=started["requestId"])
+            result = await runtime.wait_install_operation(started["requestId"], wait_seconds=2)
+            assert result["status"] == "completed"
+            assert ran == ["install", "install"]
+    
+>       asyncio.run(scenario())
+
+tests\test_plugin_install_operations.py:689: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    async def scenario() -> None:
+        runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+        source = _local_package(tmp_path, dependencies={"direct-dep": "1.0.0"})
+        ran: list[str] = []
+    
+        async def runner(_request_id: str, _cwd: Path, _registry: str | None, args: list[str]) -> tuple[int, str]:
+            ran.append(args[0])
+            if len(ran) == 1:
+                return 1, "ERR_PNPM_IGNORED_BUILDS\nIgnored build scripts: @transitive/native-build@2.0.0"
+            return 0, "ok"
+    
+        monkeypatch.setattr(runtime, "_run_package_manager", runner)
+        started = await runtime.start_install_operation(str(source))
+        for _ in range(100):
+            status = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+            if status["status"] == "awaiting_approval":
+                break
+            await asyncio.sleep(0.01)
+        assert status["status"] == "awaiting_approval"
+        assert status["approvalRequired"] == ["@transitive/native-build"]
+        assert ran == ["install"]
+        runtime.grant_script_approval("@transitive/native-build", expires_at="2099-01-01T00:00:00Z", request_id=started["requestId"])
+        result = await runtime.wait_install_operation(started["requestId"], wait_seconds=2)
+>       assert result["status"] == "completed"
+E       AssertionError: assert 'failed' == 'completed'
+E         
+E         - completed
+E         + failed
+
+tests\test_plugin_install_operations.py:686: AssertionError
+________ test_real_pnpm_blocks_transitive_script_until_scoped_approval ________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par10-registry-runtime/.tmp/par10-t1/regression-basetemp-final/test_real_pnpm_blocks_transiti0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000190CDA4B490>
+
+    def test_real_pnpm_blocks_transitive_script_until_scoped_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from urllib.parse import unquote, urlsplit
+        import tarfile
+        import shutil
+        import threading
+    
+        async def scenario() -> None:
+            pnpm_entry = os.environ.get("ATLAS_PNPM_ENTRY")
+            assert pnpm_entry and Path(pnpm_entry).is_file(), "real pnpm entry must be supplied for this local integration test"
+            postinstall_marker = tmp_path / "postinstall-ran.marker"
+            pnpmfile_marker = tmp_path / "pnpmfile-ran.marker"
+            source = _local_package(tmp_path, dependencies={"direct-dep": "1.0.0"})
+            (source / "pnpm-lock.yaml").unlink()
+            direct = tmp_path / "registry-fixtures" / "direct-dep"
+            native = tmp_path / "registry-fixtures" / "native-build"
+            direct.mkdir(parents=True)
+            native.mkdir(parents=True)
+            (direct / "package.json").write_text(json.dumps({
+                "name": "direct-dep", "version": "1.0.0",
+                "dependencies": {"@fixture/native-build": "1.0.0"},
+            }), encoding="utf-8")
+            (native / "package.json").write_text(json.dumps({
+                "name": "@fixture/native-build", "version": "1.0.0",
+                "scripts": {"postinstall": "node write-marker.js"},
+            }), encoding="utf-8")
+            (native / "write-marker.js").write_text(
+                f"require('fs').writeFileSync({json.dumps(str(postinstall_marker))}, 'executed')\n", encoding="utf-8",
+            )
+            (source / ".pnpmfile.cjs").write_text(
+                f"require('fs').writeFileSync({json.dumps(str(pnpmfile_marker))}, 'executed'); module.exports = {{}}\n",
+                encoding="utf-8",
+            )
+            (source / "pnpm-workspace.yaml").write_text(
+                "packages: []\npnpmfile: ./.pnpmfile.cjs\ndangerouslyAllowAllBuilds: true\nallowBuilds:\n  '@fixture/native-build': true\n",
+                encoding="utf-8",
+            )
+            package_manifest = json.loads((source / "package.json").read_text(encoding="utf-8"))
+            package_manifest["pnpm"] = {
+                "dangerouslyAllowAllBuilds": True,
+                "allowBuilds": {"@fixture/native-build": True},
+            }
+            (source / "package.json").write_text(json.dumps(package_manifest), encoding="utf-8")
+    
+            def pack(root: Path, destination: Path) -> bytes:
+                with tarfile.open(destination, "w:gz") as archive:
+                    for file in sorted(root.rglob("*")):
+                        if file.is_file():
+                            archive.add(file, arcname=f"package/{file.relative_to(root).as_posix()}")
+                return destination.read_bytes()
+    
+            direct_tarball = pack(direct, tmp_path / "direct-dep-1.0.0.tgz")
+            native_tarball = pack(native, tmp_path / "native-build-1.0.0.tgz")
+            npm_plugin_tarball = pack(source, tmp_path / "npm-plugin-1.0.0.tgz")
+            requests: list[str] = []
+            server_holder: dict[str, ThreadingHTTPServer] = {}
+    
+            class RegistryHandler(BaseHTTPRequestHandler):
+                def do_GET(self) -> None:
+                    route = unquote(urlsplit(self.path).path)
+                    requests.append(route)
+                    server = server_holder["server"]
+                    base_url = f"http://127.0.0.1:{server.server_port}"
+                    if route == "/@fixture/npm-plugin":
+                        body = json.dumps({"name": "@fixture/npm-plugin", "dist-tags": {"latest": "1.0.0"}, "versions": {
+                            "1.0.0": {"name": "@fixture/npm-plugin", "version": "1.0.0",
+                                      "dependencies": {"direct-dep": "1.0.0"},
+                                      "dist": {"tarball": f"{base_url}/npm-plugin-1.0.0.tgz"}},
+                        }}).encode()
+                    elif route == "/npm-plugin-1.0.0.tgz":
+                        body = npm_plugin_tarball
+                    elif route == "/direct-dep":
+                        body = json.dumps({"name": "direct-dep", "dist-tags": {"latest": "1.0.0"}, "versions": {
+                            "1.0.0": {"name": "direct-dep", "version": "1.0.0",
+                                      "dependencies": {"@fixture/native-build": "1.0.0"},
+                                      "dist": {"tarball": f"{base_url}/direct-dep-1.0.0.tgz"}},
+                        }}).encode()
+                    elif route == "/@fixture/native-build":
+                        body = json.dumps({"name": "@fixture/native-build", "dist-tags": {"latest": "1.0.0"}, "versions": {
+                            "1.0.0": {"name": "@fixture/native-build", "version": "1.0.0",
+                                      "scripts": {"postinstall": "node write-marker.js"},
+                                      "dist": {"tarball": f"{base_url}/native-build-1.0.0.tgz"}},
+                        }}).encode()
+                    elif route == "/direct-dep-1.0.0.tgz":
+                        body = direct_tarball
+                    elif route == "/native-build-1.0.0.tgz":
+                        body = native_tarball
+                    else:
+                        self.send_error(404)
+                        return
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream" if route.endswith(".tgz") else "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+    
+                def log_message(self, _format: str, *_args: object) -> None:
+                    return
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), RegistryHandler)
+            server_holder["server"] = server
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            registry = f"http://127.0.0.1:{server.server_port}/"
+            npm_command = shutil.which("npm")
+            assert npm_command, "npm command must be installed for the scoped source fixture"
+            npm_entry = Path(npm_command).parent / "node_modules" / "npm" / "bin" / "npm-cli.js"
+            if not npm_entry.is_file():
+                node = shutil.which("node")
+                assert node
+                npm_entry = Path(node).parent / "node_modules" / "npm" / "bin" / "npm-cli.js"
+            assert npm_entry.is_file(), npm_entry
+            monkeypatch.setenv("ATLAS_NPM_ENTRY", str(npm_entry))
+    
+            padding = max(60, 170 - len(str(tmp_path)) - len("installed-root-"))
+            installed = tmp_path / ("installed-root-" + "x" * padding)
+            assert len(str(installed)) >= 170, "fixture must exercise an extended installation root"
+            runtime = PluginRuntime([installed], tmp_path / "state.json")
+            runtime._package_manager_timeout = 30
+            real_runner = runtime._run_package_manager
+            pnpm_output: list[tuple[list[str], int, str, list[str]]] = []
+            pnpm_cwd_lengths: list[int] = []
+            pnpm_policy: list[dict[str, object]] = []
+    
+            async def observe_pnpm(request_id: str, cwd: Path, registry: str | None, args: list[str]) -> tuple[int, str]:
+                import yaml
+    
+                workspace_policy = yaml.safe_load((cwd / "pnpm-workspace.yaml").read_text(encoding="utf-8"))
+                package_policy = json.loads((cwd / "package.json").read_text(encoding="utf-8")).get("pnpm", {})
+                pnpm_policy.append({
+                    "workspace_dangerous": workspace_policy.get("dangerouslyAllowAllBuilds"),
+                    "workspace_allowed": workspace_policy.get("allowBuilds", {}),
+                    "package_dangerous": package_policy.get("dangerouslyAllowAllBuilds"),
+                    "package_allowed": package_policy.get("allowBuilds", {}),
+                })
+                code, output = await real_runner(request_id, cwd, registry, args)
+                pnpm_cwd_lengths.append(len(str(cwd)))
+                node_modules = [str(path.relative_to(cwd)) for path in cwd.rglob("node_modules")]
+                pnpm_output.append((args, code, output, node_modules))
+                return code, output
+    
+            runtime._run_package_manager = observe_pnpm
+            async def refresh():
+                return {"loaded": []}
+    
+            from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+            from atlas.api import plugins_router
+            from atlas.api.app_services import AppServices
+            monkeypatch.setattr(plugins_router._server(), "_reload_extensions", refresh)
+            app = FastAPI()
+            app.state.services = AppServices(plugin_runtime=runtime)
+            app.include_router(plugins_router.router)
+            try:
+                with TestClient(app) as client:
+                    started = client.post("/api/plugins/install", json={
+                        "source": "@fixture/npm-plugin@1.0.0", "registry": registry,
+                    }).json()
+                    request_id = started["requestId"]
+                    deadline = time.monotonic() + 30
+                    while time.monotonic() < deadline:
+                        status = client.get(f"/api/plugins/install/{request_id}?wait_ms=250").json()
+                        if status["status"] in {"awaiting_approval", "failed", "completed"}:
+                            break
+                    assert status["status"] == "awaiting_approval", {
+                        "status": status,
+                        "pnpm": ascii([(args[0], code, output[-800:], paths) for args, code, output, paths in pnpm_output]),
+                    }
+                    assert status["approvalRequired"] == ["@fixture/native-build"]
+                    assert not postinstall_marker.exists()
+                    assert not pnpmfile_marker.exists()
+                    approved = client.post("/api/plugins/script-approvals", json={
+                        "requestId": request_id, "packageName": "@fixture/native-build", "days": 30,
+                    })
+                    assert approved.status_code == 200
+                    while time.monotonic() < deadline:
+                        result = client.get(f"/api/plugins/install/{request_id}?wait_ms=250").json()
+                        if result["status"] in {"completed", "failed", "cancelled"}:
+                            break
+                    print("REAL_PNPM_APPROVED_DIAGNOSTIC=" + ascii({
+                        "result": result,
+                        "error": result.get("error"), "rollback": result.get("rollback"),
+                        "failureType": result.get("failureType"),
+                        "pnpm_cwd_lengths": pnpm_cwd_lengths,
+                        "host_policy": pnpm_policy,
+                        "runs": [{"args": args, "exit": code, "output": output[-1200:], "node_modules": paths}
+                                 for args, code, output, paths in pnpm_output],
+                        "postinstall_marker": postinstall_marker.exists(),
+                        "pnpmfile_marker": pnpmfile_marker.exists(),
+                    }))
+                    assert result["status"] == "completed", {"result": result, "pnpm": pnpm_output}
+                    assert postinstall_marker.read_text(encoding="utf-8") == "executed"
+                    assert not pnpmfile_marker.exists()
+                    assert (installed / "fixture-plugin" / "pnpm-lock.yaml").is_file()
+                    assert all(length < 128 for length in pnpm_cwd_lengths), pnpm_cwd_lengths
+                    assert pnpm_policy == [
+                        {"workspace_dangerous": False, "workspace_allowed": {}, "package_dangerous": False, "package_allowed": {}},
+                        {"workspace_dangerous": False, "workspace_allowed": {"@fixture/native-build": True},
+                         "package_dangerous": False, "package_allowed": {}},
+                    ], pnpm_policy
+                    assert len(str(installed / "fixture-plugin" / "node_modules" / ".pnpm" / "@fixture+native-build@1.0.0" / "node_modules" / "@fixture" / "native-build")) >= 260
+                    assert "/@fixture/npm-plugin" in requests
+                    assert "/npm-plugin-1.0.0.tgz" in requests
+                    assert all(path.startswith(("/@fixture/npm-plugin", "/npm-plugin-", "/direct-dep", "/@fixture/native-build", "/direct-dep-", "/native-build-")) for path in requests)
+                    assert [args[0] for args, _code, _output, _paths in pnpm_output] == ["install", "install"]
+                    print("REAL_PNPM_CAPTURE=" + ascii([
+                        {"args": args, "exit": code, "output": output[-1200:]}
+                        for args, code, output, _paths in pnpm_output
+                    ]))
+                    print(f"REAL_PNPM_MARKERS=postinstall:{postinstall_marker.read_text(encoding='utf-8')},pnpmfile:absent")
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+    
+>       asyncio.run(scenario())
+
+tests\test_plugin_install_operations.py:958: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    async def scenario() -> None:
+        pnpm_entry = os.environ.get("ATLAS_PNPM_ENTRY")
+>       assert pnpm_entry and Path(pnpm_entry).is_file(), "real pnpm entry must be supplied for this local integration test"
+E       AssertionError: real pnpm entry must be supplied for this local integration test
+E       assert (None)
+
+tests\test_plugin_install_operations.py:752: AssertionError
+============================== warnings summary ===============================
+::test_install_source_classifier_keeps_scoped_npm_specs_out_of_git_shorthand
+  D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\overlay-core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+::test_install_source_classifier_keeps_scoped_npm_specs_out_of_git_shorthand
+  D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\overlay-core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+::test_install_source_classifier_keeps_scoped_npm_specs_out_of_git_shorthand
+  D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\overlay-core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+::test_install_source_classifier_keeps_scoped_npm_specs_out_of_git_shorthand
+  D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\overlay-core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+::test_install_source_classifier_keeps_scoped_npm_specs_out_of_git_shorthand
+  D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\overlay-core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED ..\..\..\core::test_git_fixture_installs_through_request_task_and_persists_checkout
+FAILED ..\..\..\core::test_install_upgrade_preserves_old_patch_and_revert_restores_new_upstream
+FAILED ..\..\..\core::test_marketplace_api_installs_via_waitable_request_task
+FAILED ..\..\..\core::test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle[git]
+FAILED ..\..\..\core::test_install_waits_only_for_pnpm_reported_transitive_build_and_resumes_on_approval
+FAILED ..\..\..\core::test_real_pnpm_blocks_transitive_script_until_scoped_approval
+6 failed, 20 passed, 5 warnings in 18.38s

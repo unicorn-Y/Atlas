@@ -75,6 +75,19 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
         tools.extend(agent._custom_tools.model_tools())
     if agent._local_execution:
         tools = [*tools, *agent._local_execution.get_tools_for_llm()]
+        tools.append({"type": "function", "function": {
+            "name": "working_directory",
+            "description": (
+                "Read this session's current working directory, or change it with cd. "
+                "Relative paths resolve from the current directory. Existing shells and "
+                "running processes keep their own directories. Changes stay inside the "
+                "session's trusted workspace."
+            ),
+            "parameters": {"type": "object", "properties": {
+                "cd": {"type": "string", "minLength": 1,
+                       "description": "Existing directory to enter; omit to read the current directory."},
+            }, "additionalProperties": False},
+        }})
     if agent._computer_use:
         tools = [*tools, *agent._computer_use.get_tools_for_llm()]
     if agent._web is not None:

@@ -1,0 +1,118 @@
+PAR-10-T6-5 legacy 0.1.0 tree matrix
+2026-11-18T22:55:46Z
+
+== D: real 0.1.0 win-unpacked as-is (no manifest) ==
+{
+  "ok": false,
+  "manifest_has_installer": null,
+  "verifiedArtifacts": [],
+  "issues": [
+    {
+      "code": "manifest_missing",
+      "path": "D:\\Atlas\\frontend\\windows-release\\win-unpacked"
+    }
+  ]
+}
+D_EXIT=1
+
+copying old tree for E/F...
+== E: 0.1.0 bytes + new-schema runtime manifest from this worktree's production hook ==
+wrote D:\Atlas\.worktrees\zcode-par10-win-release-repro\.par10-t6-5-sandbox\pkg-old-upgrade\resources\atlas\release-manifest.json
+{
+  "ok": true,
+  "manifestPath": "D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro\\.par10-t6-5-sandbox\\pkg-old-upgrade\\resources\\atlas\\release-manifest.json",
+  "manifest_app_version": "0.1.0",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "1889da525b0cc822900a2230569c8f0152a036f97c311b224a63cdce3396cd88"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "9a8fb79d6b7e581d127314028dcecf754b8d7fe4aca1247f82c1f33ee8fccc7e"
+    }
+  ],
+  "issues": []
+}
+E_EXIT=0
+
+== F: same manifest but app_version=0.0.9 (upgrade did not replace manifest) ==
+[eval]:1
+const fs=require('fs');const p='/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/pkg-old-upgrade/resources/atlas/release-manifest.json'.replace(/\/g,'/');const m=JSON.parse(fs.readFileSync(p,'utf8'));m.app_version='0.0.9';fs.writeFileSync(p,JSON.stringify(m,null,2)+'\n');console.log('manifest app_version=0.0.9')
+                                                                                                                                                                     ^^^^^^^
+Expected ',', got 'string literal'
+
+SyntaxError: missing ) after argument list
+    at makeContextifyScript (node:internal/vm:194:14)
+    at compileScript (node:internal/process/execution:388:10)
+    at evalTypeScript (node:internal/process/execution:260:22)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.18.1
+{
+  "ok": true,
+  "manifestPath": "D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro\\.par10-t6-5-sandbox\\pkg-old-upgrade\\resources\\atlas\\release-manifest.json",
+  "manifest_app_version": "0.1.0",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "1889da525b0cc822900a2230569c8f0152a036f97c311b224a63cdce3396cd88"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "9a8fb79d6b7e581d127314028dcecf754b8d7fe4aca1247f82c1f33ee8fccc7e"
+    }
+  ],
+  "issues": []
+}
+F_EXIT=0
+
+== F (corrected run): manifest app_version=0.0.9 ==
+{
+  "ok": false,
+  "manifestPath": "D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro\\.par10-t6-5-sandbox\\pkg-old-upgrade\\resources\\atlas\\release-manifest.json",
+  "manifest_app_version": "0.0.9",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "1889da525b0cc822900a2230569c8f0152a036f97c311b224a63cdce3396cd88"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "9a8fb79d6b7e581d127314028dcecf754b8d7fe4aca1247f82c1f33ee8fccc7e"
+    }
+  ],
+  "issues": [
+    {
+      "code": "version_mismatch",
+      "field": "app_version",
+      "expected": "0.1.0",
+      "actual": "0.0.9"
+    }
+  ]
+}
+F_EXIT=1

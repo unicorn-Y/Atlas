@@ -1,0 +1,10 @@
+{
+  "duration_seconds": 270.4219999999914,
+  "leftover_processes": [],
+  "returncode": 0,
+  "signals": [],
+  "status": "PASS",
+  "stderr_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-SESSION-PUBLIC-API-TYPES-096-scan\\stderr.log",
+  "stdout_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-SESSION-PUBLIC-API-TYPES-096-scan\\stdout.log",
+  "timed_out": false
+}

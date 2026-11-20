@@ -1,0 +1,15 @@
+{
+  "duration_seconds": 180.10899999999674,
+  "leftover_processes": [],
+  "returncode": 15,
+  "signals": [
+    {
+      "pid": 43668,
+      "result": "signalled"
+    }
+  ],
+  "status": "TIMEOUT",
+  "stderr_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-TYPESCRIPT-AST-HEAP-081-scan\\stderr.log",
+  "stdout_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-TYPESCRIPT-AST-HEAP-081-scan\\stdout.log",
+  "timed_out": true
+}

@@ -1,0 +1,8 @@
+PAR-10-T6-5 stage: package-sqlite (derived from dist:win; backend substituted from existing 0.1.0 build)
+2026-11-18T22:33:37Z
+CWD=/d/Atlas/.worktrees/zcode-par10-win-release-repro/frontend
+CMD: node scripts/package-sqlite.mjs
+-----
+Bundled SQLite updated to verified official 3.54.0 (WAL-reset fix included).
+EXIT=0
+2026-11-18T22:33:40Z

@@ -1,0 +1,102 @@
+2026-11-19 03:38:21 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-wku2t5l0\atlas\config\atlas.toml
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_________________ test_atlas_hub_state_forced_under_data_dir __________________
+
+env = {'tmp': WindowsPath('D:/Atlas/.worktrees/zcode-exec06-skill-sources/core/.tmp/par08-baseline-fail/test_atlas_hub_state...t_atlas_hub_state_forced_un0/ws'), 'registry': <atlas.skills.registry.SkillRegistry object at 0x000002CFD4BC3490>, ...}
+
+    def test_atlas_hub_state_forced_under_data_dir(env):
+        """The hub taps/lock live under the Atlas data dir, never the real HERMES_HOME."""
+        atlas_root = Path("D:/hermes-agent")
+        if not atlas_root.is_dir():  # pragma: no cover - fork checkout missing
+            pytest.skip("hermes-agent checkout not available")
+>       import tools.skills_hub as hub_mod
+E       ModuleNotFoundError: No module named 'tools'
+
+tests\test_skills_market.py:444: ModuleNotFoundError
+---------------------------- Captured stdout setup ----------------------------
+2026-11-19 03:38:22 [info     ] skills.change_invalidated
+2026-11-19 03:38:22 [info     ] skills.change_invalidated
+2026-11-19 03:38:22 [info     ] skills.change_invalidated
+2026-11-19 03:38:22 [info     ] skills.change_invalidated
+2026-11-19 03:38:22 [info     ] skills.scanned                 count=0 sources=4
+______________ test_installed_plugin_crosses_real_runtime_paths _______________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-exec06-skill-sources/core/.tmp/par08-baseline-fail/test_installed_plugin_crosses_0')
+
+    @pytest.mark.asyncio
+    async def test_installed_plugin_crosses_real_runtime_paths(tmp_path: Path) -> None:
+        python = sys.executable
+        deny = tmp_path / "deny.py"
+        _deny_script(deny)
+        source = tmp_path / "plugin-source" / "audit"
+        _make_plugin(source, python, deny)
+    
+        plugins_dir = tmp_path / "installed"
+        runtime = PluginRuntime([plugins_dir], tmp_path / "plugins-state.json")
+        runtime.install_local(source)
+    
+        mcp_client = _StubMcpClient()
+        capabilities = _StubCapabilities()
+        report = await runtime.load_all(mcp_client=mcp_client, capabilities=capabilities)
+        assert report["loaded"] == ["audit"]
+        contributions = runtime.enabled_contributions()
+        assert len(contributions) == 1
+        plugin = contributions[0]
+        assert plugin["name"] == "audit"
+    
+        # -- hook 腿：插件 hook 经 HookStore 进入真实 agent 工具执行链并阻断 --
+        store = HookStore(
+            tmp_path / "hooks.toml",
+            plugin_hooks=lambda: [hook for item in contributions for hook in item["hooks"]],
+        )
+    
+        async def user_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+            return await store.execute(event_name, payload, cwd=str(tmp_path))
+    
+        agent = AgentOrchestrator(MagicMock(), MagicMock())
+        result = await agent._execute_tools_node(_tool_state(
+            "run_checks", {"target": "core"}, _tool_runtime(tmp_path, user_hook),
+        ))
+        assert result["pending_events"][0]["is_error"] is True
+>       assert "禁止运行检查" in result["messages"][0].content
+E       AssertionError: assert '禁止运行检查' in 'Hook「claude-1bd0d05b0da374cf66c7」尚未通过信任审查，已阻止执行。请在 Hooks 设置页明确批准后重试。'
+E        +  where 'Hook「claude-1bd0d05b0da374cf66c7」尚未通过信任审查，已阻止执行。请在 Hooks 设置页明确批准后重试。' = ToolMessage(content='Hook「claude-1bd0d05b0da374cf66c7」尚未通过信任审查，已阻止执行。请在 Hooks 设置页明确批准后重试。', tool_call_id='tc-1').content
+
+tests\test_c4_plugin_e2e.py:143: AssertionError
+============================== warnings summary ===============================
+tests/test_skills_market.py::test_atlas_hub_state_forced_under_data_dir
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_skills_market.py::test_atlas_hub_state_forced_under_data_dir
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_skills_market.py::test_atlas_hub_state_forced_under_data_dir
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_skills_market.py::test_atlas_hub_state_forced_under_data_dir
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_skills_market.py::test_atlas_hub_state_forced_under_data_dir
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_skills_market.py::test_atlas_hub_state_forced_under_data_dir
+FAILED tests/test_c4_plugin_e2e.py::test_installed_plugin_crosses_real_runtime_paths
+2 failed, 5 warnings in 8.43s

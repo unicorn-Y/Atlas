@@ -24,6 +24,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import sqlite3
 import tempfile
 import shutil
@@ -51,7 +52,10 @@ _SESSION_SNAPSHOT_FIELDS = frozenset({
     "source_message_count", "source_first_message_id", "source_last_message_id",
     "summary_sha256", "summary_chars", "state",
 })
-_SESSION_SNAPSHOT_STATE_FIELDS = frozenset({"plan", "todo", "open_tool_call_ids"})
+_SESSION_SNAPSHOT_STATE_FIELDS = frozenset({
+    "plan", "todo", "open_tool_call_ids", "turn_context_projection",
+    "turn_context_ref_index",
+})
 
 
 def _valid_session_snapshot_manifest(manifest: Any, summary: str) -> bool:
@@ -103,6 +107,27 @@ def _valid_session_snapshot_manifest(manifest: Any, summary: str) -> bool:
             not isinstance(open_calls, list)
             or any(not isinstance(item, str) or not item for item in open_calls)
             or len(set(open_calls)) != len(open_calls)):
+        return False
+    projection = state.get("turn_context_projection")
+    if projection is not None and (
+            not isinstance(projection, list) or len(projection) > 128
+            or any(
+                not isinstance(item, dict)
+                or not isinstance(item.get("text"), str)
+                or not item["text"].strip()
+                or len(item["text"]) > 24_000
+                or not isinstance(item.get("current_only", False), bool)
+                for item in projection
+            )
+            or sum(len(item["text"]) for item in projection if isinstance(item, dict)
+                   and isinstance(item.get("text"), str)) > 96_000):
+        return False
+    ref_index = state.get("turn_context_ref_index")
+    if ref_index is not None and (
+            not isinstance(ref_index, list) or len(ref_index) > 512
+            or any(not isinstance(item, str) or not re.fullmatch(r"\[ref:[^\]\r\n]{1,250}\]", item)
+                   for item in ref_index)
+            or len(set(ref_index)) != len(ref_index)):
         return False
     return True
 
@@ -411,6 +436,15 @@ def compact_session_messages(
                         and item["content"].startswith("[Conversation continuation summary]"))), None)
     if summary is not None:
         summary_text = str(summary.get("content") or "")
+        state = dict(snapshot_state or {})
+        ref_index = state.get("turn_context_ref_index")
+        if isinstance(ref_index, list):
+            missing_refs = [ref for ref in ref_index if isinstance(ref, str) and ref not in summary_text]
+            if missing_refs:
+                summary_text = (summary_text.rstrip() +
+                                "\n\n[Retained context refs for searchable audit]\n" +
+                                " ".join(missing_refs))
+                summary["content"] = summary_text
         source_ids = [str(item.get("message_uid") or item.get("id") or item.get("_row_id"))
                       for item in held_messages
                       if item.get("message_uid") or item.get("id") or item.get("_row_id") is not None]
@@ -425,7 +459,7 @@ def compact_session_messages(
             "source_last_message_id": source_ids[-1] if source_ids else None,
             "summary_sha256": hashlib.sha256(summary_text.encode("utf-8")).hexdigest(),
             "summary_chars": len(summary_text),
-            "state": dict(snapshot_state or {}),
+            "state": state,
         }
         display_metadata = dict(summary.get("display_metadata") or {})
         display_metadata[_SESSION_SNAPSHOT_KEY] = manifest
@@ -566,6 +600,37 @@ def append_session_event(
         return db.append_session_event(conversation_id, event_type, payload)
 
 
+def append_inbox_enqueue_with_receipt(
+    home: str | Path, conversation_id: str, payload: dict[str, Any],
+) -> tuple[str, int, bool]:
+    """Atomically append an inbox event or return the existing request receipt."""
+    with _open_db(home) as db:
+        return db.append_inbox_enqueue_with_receipt(conversation_id, payload)
+
+
+def claim_inbox_start(
+    home: str | Path, conversation_id: str, *, event_id: str, lane: str,
+    run_id: str, request_id: str | None = None,
+) -> tuple[int | None, str | None, bool]:
+    """Atomically claim one durable inbox event for one worker run."""
+    with _open_db(home) as db:
+        return db.claim_inbox_start(
+            conversation_id, event_id=event_id, lane=lane,
+            run_id=run_id, request_id=request_id,
+        )
+
+
+def cancel_inbox_if_unstarted(
+    home: str | Path, conversation_id: str, *, event_id: str,
+    lane: str, request_id: str | None = None,
+) -> bool:
+    """Atomically cancel one queued item only while it remains unstarted."""
+    with _open_db(home) as db:
+        return db.cancel_inbox_if_unstarted(
+            conversation_id, event_id=event_id, lane=lane, request_id=request_id,
+        )
+
+
 def read_session_events(
     home: str | Path, conversation_id: str, *, after_seq: int = 0, limit: int = 1000,
 ) -> list[dict[str, Any]]:
@@ -592,6 +657,83 @@ def read_session_events(
             db.repair_interrupted_turns(conversation_id, stale_turns)
     with _open_db(home) as db:
         return db.list_session_events(conversation_id, after_seq=after_seq, limit=limit)
+
+
+def read_session_inbox_events(
+    home: str | Path, conversation_id: str, *, after_seq: int = 0, limit: int = 1000,
+) -> tuple[list[dict[str, Any]], int]:
+    """Read the inbox event stream without scanning or repairing unrelated turn history."""
+    with _open_db(home) as db:
+        return db.list_inbox_events(conversation_id, after_seq=after_seq, limit=limit)
+
+
+def classify_retry_recovery(
+    events: list[dict[str, Any]], *, run_id: str,
+) -> dict[str, Any]:
+    """Classify the last durable model attempt without replaying uncertain work.
+
+    A started request without a terminal attempt audit has an unknown remote
+    outcome. A discarded attempt with retry=true is only scheduled; the next
+    request is known not to have started yet. This function is read-only so a
+    host can choose an explicit recovery policy before starting new work.
+    """
+    attempts = [
+        event for event in events
+        if event.get("event_type") == "model/attempt"
+        and isinstance(event.get("payload"), dict)
+        and str(event["payload"].get("run_id") or "") == str(run_id)
+    ]
+    attempts.sort(key=lambda event: int(event.get("seq") or 0))
+    if not attempts:
+        return {"state": "none", "run_id": str(run_id)}
+
+    payloads = [event["payload"] for event in attempts]
+    latest = payloads[-1]
+    status = str(latest.get("status") or "")
+    retry_decision = next((
+        payload for payload in reversed(payloads)
+        if payload.get("status") == "discarded" and payload.get("retry") is True
+    ), None)
+    budget = {}
+    if retry_decision is not None:
+        for key in (
+            "retry_budget_attempts_used_after_decision",
+            "retry_budget_attempts_remaining",
+            "retry_budget_wait_s_used_after_decision",
+            "retry_budget_wait_s_remaining",
+        ):
+            if key in retry_decision:
+                budget[key] = retry_decision[key]
+
+    if status == "started":
+        return {
+            "state": "outcome_unknown", "run_id": str(run_id),
+            "attempt_id": str(latest.get("attempt_id") or ""),
+            "attempt": int(latest.get("attempt") or 0), **budget,
+        }
+    if (status == "discarded"
+            and (latest.get("category") == "cancelled"
+                 or latest.get("retry_denied_reason") == "cancelled")):
+        # Local cancellation terminates this process's wait, but does not prove
+        # the provider did not finish or apply a non-idempotent request.
+        return {
+            "state": "outcome_unknown", "run_id": str(run_id),
+            "attempt_id": str(latest.get("attempt_id") or ""),
+            "attempt": int(latest.get("attempt") or 0),
+            "attempt_status": status, "outcome_reason": "cancelled_locally",
+            **budget,
+        }
+    if status == "discarded" and latest.get("retry") is True:
+        return {
+            "state": "retry_scheduled_not_started", "run_id": str(run_id),
+            "attempt_id": str(latest.get("attempt_id") or ""),
+            "attempt": int(latest.get("attempt") or 0), **budget,
+        }
+    return {
+        "state": "settled" if status in {"committed", "discarded"} else "state_unknown",
+        "run_id": str(run_id), "attempt_id": str(latest.get("attempt_id") or ""),
+        "attempt": int(latest.get("attempt") or 0), "attempt_status": status,
+    }
 
 
 def _turn_process_is_alive(payload: dict[str, Any]) -> bool:

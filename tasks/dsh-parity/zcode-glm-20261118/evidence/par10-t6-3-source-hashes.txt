@@ -1,0 +1,57 @@
+PAR-10-T6-3 source / baseline hash record (2026-11-19, UTC+8)
+Worktree: D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate
+Branch:   zcode/par10-mcp-lifecycle-gate
+HEAD:     060071ab2ecf86d41cab90e98160183ce126bc69
+T5 source (read-only): D:\Atlas\.worktrees\zcode-par10-mcp-recovery
+T5 source writer check: no python/node process with worktree cwd or cmdline; file mtimes 2026-11-19 05:21-05:50;
+T5 git status and `git diff --binary | sha256sum` unchanged before/after copy (83bbc759...).
+
+Baseline at HEAD 060071ab, canonical blob sha256 (`git show HEAD:<path>`):
+733bc457f7badaf3f9420a94cfc55fa5b206e257d620a538bfdbed173c506d2c  core/atlas/tools/mcp_client.py
+a71797ee4331a9074d382fcc18c73b68cfa3d7e0474d5a4d4dfbc0734f83c351  core/atlas/tools/node_runtime.py
+741868e47e6405d8a1d823eebd638822e58d7853be0c384b1f100972c888a0ee  core/atlas/api/diagnostics_router.py
+3cda7f834e7a93afa795f8356fb714fd059f2091152a03372b7a8ee8f5b8b793  core/atlas/api/run_drive.py
+25ec486b950449edd841816ab5848d4a74441a2019a3e50fe6eaa842ddba6c52  core/atlas/api/tools_router.py
+3e645fba4b19bc318b52a627b51c47bc9ed5d5c22667a110a06f6e2b766edac2  core/tests/test_mcp_client.py
+0ff0686300242fba13faf755898ff51b733b0f2400039c190b702c69683ff09a  core/tests/test_mcp_lifecycle_shutdown.py
+(no baseline core/tests/test_mcp_recovery.py)
+
+Baseline worktree sha256 in the clean candidate tree before transfer (CRLF working copy):
+32223cab2555e989bc7bb4c87d028e69e57be09b7b085dde9872d4e68fccaae8  core/atlas/tools/mcp_client.py
+b571b8b236e5e35c00576b3e0371c6291bea8d4ac481771226fa1d480ce8ed89  core/atlas/tools/node_runtime.py
+72815477986c19f6767fb279325074f1415f1f1f38081ed647c17b4c06e90e17  core/atlas/api/diagnostics_router.py
+a131f90feabf98d77b3fbe13ec45195471cda5aaaad3401d371cf6d3b341caa9  core/atlas/api/run_drive.py
+3e5c3ba7423a2db4bbe0e38be5a8e76680e30dc4ee309902b175b4706e2557ff  core/atlas/api/tools_router.py
+0083c55b8fd751b236314297b428c34ba98a403cf124c56f43de7a3ae1568ead  core/tests/test_mcp_client.py
+0ff0686300242fba13faf755898ff51b733b0f2400039c190b702c69683ff09a  core/tests/test_mcp_lifecycle_shutdown.py
+
+T5 source working-copy sha256 (copied byte-for-byte, shell `cp`):
+37683a9061aa7f6dedb6597796fd4f6531f71c5d77229b3e873f5387ecf49503  core/atlas/tools/mcp_client.py
+ff23c6e780409505089c3159b352d92e7c5a939913374418b213e3bc58f2cab6  core/atlas/tools/node_runtime.py
+29cce7a23fc4a48df581b360b101eeee1f52232451f21fbc9de09548b13cd124  core/atlas/api/diagnostics_router.py
+cb11faf01f183ea8edcd967bd04a6805b0589f31f3b6c3df3933734463a3e657  core/atlas/api/run_drive.py
+96aff0b300747c10c8836d58392992102ccd4eb773ea42064a0c4bfa58e899ce  core/atlas/api/tools_router.py
+fd4a5c48b09b8a6beeb38daf6fe69b1ca9547a985da6d38bd38c155e7dbc60d4  core/tests/test_mcp_client.py
+ea79dc0854934eff7185b0958822de8105db95cc5583d977b85d2c70f353556e  core/tests/test_mcp_recovery.py
+
+Candidate final working-copy sha256:
+37683a9061aa7f6dedb6597796fd4f6531f71c5d77229b3e873f5387ecf49503  core/atlas/tools/mcp_client.py      (= T5 source)
+ff23c6e780409505089c3159b352d92e7c5a939913374418b213e3bc58f2cab6  core/atlas/tools/node_runtime.py    (= T5 source)
+29cce7a23fc4a48df581b360b101eeee1f52232451f21fbc9de09548b13cd124  core/atlas/api/diagnostics_router.py (= T5 source)
+cb11faf01f183ea8edcd967bd04a6805b0589f31f3b6c3df3933734463a3e657  core/atlas/api/run_drive.py         (= T5 source)
+96aff0b300747c10c8836d58392992102ccd4eb773ea42064a0c4bfa58e899ce  core/atlas/api/tools_router.py      (= T5 source)
+fd4a5c48b09b8a6beeb38daf6fe69b1ca9547a985da6d38bd38c155e7dbc60d4  core/tests/test_mcp_client.py       (= T5 source)
+ea79dc0854934eff7185b0958822de8105db95cc5583d977b85d2c70f353556e  core/tests/test_mcp_recovery.py     (= T5 source)
+1d18edd225198abd7bbd43703b1812615bf75671bd12d939f45ca28465ae4695  core/tests/test_mcp_lifecycle_shutdown.py (T6-3 fixture fix)
+
+Diff hashes:
+83bbc759fcd348c90591f43cd418386daf0337e1f5464b2e080973f1e161d317  T5 source `git diff --binary`
+107e75f4ace5bea20b96a59c7ff3f784119d8196dd3d1d1f1ba83d9978d4d17a  candidate `git diff --binary` (T5 + T6-3 fixture patch)
+58f2de5c67a65a8041440b6abef41915f08bb668b35cfc37daf5d4934226cfd9  evidence/par10-t6-3-lifecycle-fixture.patch
+
+Toolchain:
+Python 3.11.16 (C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe)
+pytest 9.1.1, pytest-asyncio 1.4.0, psutil 7.2.2, mcp SDK 2.0.0
+Old packaged Node:  D:\Atlas\frontend\windows-release\win-unpacked\resources\atlas\runtime\node\node.exe = v22.23.3
+New packaged Node:  D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\windows-release\win-unpacked\resources\atlas\runtime\node\node.exe
+                    = v24.21.0 (node-runtime.json sha256 archive 158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541)

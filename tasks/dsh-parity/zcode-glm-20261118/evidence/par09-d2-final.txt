@@ -1,0 +1,51 @@
+2026-11-19 05:06:48 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-ypd3lb30\atlas\config\atlas.toml
+.......................F                                                 [100%]
+================================== FAILURES ===================================
+__ test_fastapi_lazy_includes_preserve_effective_paths_parameters_and_order ___
+tests\test_route_snapshot.py:403: in test_fastapi_lazy_includes_preserve_effective_paths_parameters_and_order
+    assert route.original_route.path == "/ws/{session_id}"
+           ^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'APIWebSocketRoute' object has no attribute 'original_route'
+============================== warnings summary ===============================
+tests/test_conversation_worktree_create.py::test_create_status_merge_delete_over_http
+  D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_conversation_worktree_create.py::test_create_status_merge_delete_over_http
+  D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_conversation_worktree_create.py::test_create_status_merge_delete_over_http
+  D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_conversation_worktree_create.py::test_create_status_merge_delete_over_http
+  D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_conversation_worktree_create.py::test_create_status_merge_delete_over_http
+  D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+tests/test_route_snapshot.py::test_routes_match_frozen_snapshot
+  C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Lib\site-packages\fastapi\openapi\utils.py:254: UserWarning: Duplicate Operation ID update_custom_model_api_models_custom__model_id__put for function update_custom_model at D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\models_settings_router.py
+    warnings.warn(message, stacklevel=1)
+
+tests/test_route_snapshot.py::test_routes_match_frozen_snapshot
+  C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Lib\site-packages\fastapi\openapi\utils.py:254: UserWarning: Duplicate Operation ID delete_custom_model_api_models_custom__model_id__delete for function delete_custom_model at D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\models_settings_router.py
+    warnings.warn(message, stacklevel=1)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_route_snapshot.py::test_fastapi_lazy_includes_preserve_effective_paths_parameters_and_order
+1 failed, 23 passed, 7 warnings in 26.56s

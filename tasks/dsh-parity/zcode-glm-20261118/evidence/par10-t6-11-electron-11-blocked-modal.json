@@ -1,0 +1,214 @@
+{
+  "stage": "11-blocked-modal",
+  "overlay": false,
+  "variant": null,
+  "overlayInsideSettings": false,
+  "overlayIsTopDialog": false,
+  "settingsOpen": false,
+  "blockedReason": "modal",
+  "blockedText": "已有其它对话框打开，快捷键参考被阻止（modal）。请先关闭它，或从设置 → 快捷键打开。",
+  "activeLabel": "BODY",
+  "status": null,
+  "appGlobalCount": 0,
+  "keyLog": [
+    {
+      "key": "/",
+      "code": "Slash",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": true,
+      "target": "BODY"
+    },
+    {
+      "key": "k",
+      "code": "KeyK",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "INPUT"
+    },
+    {
+      "key": "/",
+      "code": "Slash",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "INPUT"
+    },
+    {
+      "key": "u",
+      "code": "KeyU",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": true,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "BUTTON"
+    },
+    {
+      "key": "Escape",
+      "code": "Escape",
+      "ctrlKey": false,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "INPUT"
+    },
+    {
+      "key": "/",
+      "code": "Slash",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "BUTTON"
+    },
+    {
+      "key": "/",
+      "code": "Slash",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "BODY"
+    }
+  ],
+  "dialogs": [
+    {
+      "role": "dialog",
+      "modal": "true",
+      "label": "其它模态",
+      "hasClose": false,
+      "text": "其它模态（应阻止快捷键参考）"
+    }
+  ],
+  "localCache": "{\"palette\":[\"Ctrl+Alt+U\"]}",
+  "rowCount": 0,
+  "visibleRows": [],
+  "recordingActive": false,
+  "domText": "已有其它对话框打开，快捷键参考被阻止（modal）。请先关闭它，或从设置 → 快捷键打开。\nAtlas 快捷键参考探针\n\n真实 ShortcutReferenceHost + 真实 Dialog(设置) + 真实 ShortcutsPanel\n\n打开设置\n切换其它模态\nready\n其它模态（应阻止快捷键参考）",
+  "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-11-blocked-modal.png",
+  "server": {
+    "bindings": {
+      "palette": [
+        "Ctrl+Alt+U"
+      ],
+      "newTask": [
+        "Ctrl+N"
+      ],
+      "temporaryChat": [
+        "Ctrl+Shift+Y"
+      ],
+      "settings": [
+        "Ctrl+,"
+      ],
+      "nextTab": [
+        "Ctrl+Tab"
+      ],
+      "prevTab": [
+        "Ctrl+Shift+Tab"
+      ],
+      "closeTab": [
+        "Ctrl+W"
+      ],
+      "closeWindow": [
+        "Ctrl+Shift+W"
+      ],
+      "tab1": [
+        "Ctrl+1"
+      ],
+      "tab2": [
+        "Ctrl+2"
+      ],
+      "tab3": [
+        "Ctrl+3"
+      ],
+      "tab4": [
+        "Ctrl+4"
+      ],
+      "tab5": [
+        "Ctrl+5"
+      ],
+      "tab6": [
+        "Ctrl+6"
+      ],
+      "tab7": [
+        "Ctrl+7"
+      ],
+      "tab8": [
+        "Ctrl+8"
+      ],
+      "tab9": [
+        "Ctrl+9"
+      ],
+      "toggleSidebar": [
+        "Ctrl+B"
+      ],
+      "toggleInspector": [
+        "Ctrl+."
+      ],
+      "focusComposer": [
+        "Ctrl+L"
+      ],
+      "toggleFocus": [
+        "Ctrl+Shift+O"
+      ],
+      "stopRun": [
+        "Ctrl+Shift+Backspace"
+      ],
+      "sendNow": [
+        "Ctrl+Enter"
+      ],
+      "stashInput": [
+        "Ctrl+Shift+S"
+      ],
+      "sidebarSearch": [
+        "Ctrl+Shift+F"
+      ],
+      "sidebarProjectPicker": [
+        "Ctrl+Alt+P"
+      ],
+      "sidebarNextGroup": [
+        "Ctrl+Alt+J"
+      ],
+      "sidebarPreviousGroup": [
+        "Ctrl+Alt+K"
+      ],
+      "focusNextPane": [
+        "Ctrl+Alt+ArrowRight"
+      ],
+      "focusPreviousPane": [
+        "Ctrl+Alt+ArrowLeft"
+      ],
+      "openSideChat": [
+        "Ctrl+;"
+      ],
+      "openDiff": [
+        "Ctrl+Alt+D"
+      ],
+      "diffPreviousHunk": [
+        "Ctrl+Alt+ArrowUp"
+      ],
+      "diffNextHunk": [
+        "Ctrl+Alt+ArrowDown"
+      ],
+      "diffCollapseHunks": [
+        "Ctrl+Alt+["
+      ],
+      "diffExpandHunks": [
+        "Ctrl+Alt+]"
+      ]
+    },
+    "updated_at": 1795047414406009900,
+    "revision": "b0124b826c92ace623ae221c125f6abbd3d332078c1a9a8cf497a44b8e9b3feb"
+  }
+}

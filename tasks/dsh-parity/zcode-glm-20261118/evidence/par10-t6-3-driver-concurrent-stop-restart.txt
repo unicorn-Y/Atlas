@@ -1,0 +1,13 @@
+SCENARIO concurrent-stop-restart
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 06:14:07 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\.tmp\par10-t6-3\data\concurrent-stop-restart\config\atlas.toml
+2026-11-19 06:14:07 [info     ] mcp.starting                   count=1 names=['real']
+2026-11-19 06:14:09 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 06:14:09 [info     ] mcp.server_ready               server=real tools=['echo']
+2026-11-19 06:14:10 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 06:14:10 [info     ] mcp.server_stopped             server=real
+OBSERVATION concurrent_stop_restart {"outcomes": ["NoneType", "NoneType"], "status": {"available": true, "blocking_reason": null, "servers": [{"name": "real", "enabled": true, "connected": false, "state": "stopped", "tool_discovery": "complete", "tool_count": 0, "blocking_reason": null}]}}
+CHECK PASS concurrent stop/restart: no child survives :: []
+CHECK PASS concurrent stop/restart: terminal state is stopped/failed :: stopped
+CHECK PASS concurrent stop/restart: only cancellation may surface :: []
+RESULT concurrent-stop-restart checks=3 failed=0

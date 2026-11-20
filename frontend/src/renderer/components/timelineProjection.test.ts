@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent } from '../../types/runtime';
 import { buildTimeline } from './timeline';
-import { compactTimelineReplay, TimelineProjection } from './timelineProjection';
+import { compactTimelineReplay, projectMessageDeltaText, TimelineProjection } from './timelineProjection';
 
 const event = (id: string, sequence: number, type: AgentEvent['type'], content: string): AgentEvent => ({
   id, runId: 'run-1', sequence, type, timestamp: new Date(0).toISOString(), data: { content },
@@ -57,6 +57,31 @@ describe('TimelineProjection', () => {
     expect(compacted[1].id).toBe('chunk-0');
     expect(buildTimeline(compacted)).toEqual(buildTimeline(replay));
     expect(new TimelineProjection().project(replay)).toEqual(buildTimeline(replay));
+  });
+
+  it('retracts only the failed attempt in both incremental and replayed projections', () => {
+    const input = event('input', 1, 'run.started', 'hello');
+    const old = event('old', 2, 'message.delta', 'OLD answer');
+    old.data.attempt_id = 'attempt-old';
+    const preparing = event('preparing', 3, 'tool.preparing', '');
+    preparing.data = { attempt: 1, attempt_id: 'attempt-old', index: 0, name: 'delete_file' };
+    const rollback: AgentEvent = {
+      ...event('rollback', 4, 'run.status', ''),
+      type: 'message.rollback' as AgentEvent['type'],
+      data: { attempt: 1, attempt_id: 'attempt-old' },
+    };
+    const newer = event('new', 5, 'message.delta', 'NEW answer');
+    newer.data.attempt_id = 'attempt-new';
+    const projection = new TimelineProjection();
+
+    expect(projection.project([input, old, preparing]).some((item) => item.kind === 'reply' && item.content.includes('OLD'))).toBe(true);
+    const afterRollback = projection.project([input, old, preparing, rollback]);
+    expect(afterRollback.some((item) => item.kind === 'reply' && item.content.includes('OLD'))).toBe(false);
+    expect(afterRollback.some((item) => item.kind === 'steps' && item.steps.some((step) => step.toolName === 'delete_file'))).toBe(false);
+    const final = [input, old, preparing, rollback, newer];
+    expect(projection.project(final)).toEqual(buildTimeline([input, newer]));
+    expect(new TimelineProjection().project(final)).toEqual(buildTimeline([input, newer]));
+    expect(projectMessageDeltaText(final)).toBe('NEW answer');
   });
 
   it('recognizes identical reconnected events and preserves unchanged structural nodes', () => {

@@ -1,0 +1,26 @@
+SCENARIO immediate-exit
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+PHASE immediate_exit_start
+2026-11-19 05:09:29 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-exec05-mcp\.tmp\par09-mcp-real\data\immediate-exit\config\atlas.toml
+2026-11-19 05:09:29 [info     ] mcp.starting                   count=1 names=['exiter']
+Failed to assign process 55976 to Job Object
+Traceback (most recent call last):
+  File "C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Lib\site-packages\mcp\os\win32\utilities.py", line 237, in _maybe_assign_process_to_job
+    win32job.AssignProcessToJobObject(job, process_handle)
+pywintypes.error: (5, 'AssignProcessToJobObject', '拒绝访问。')
+2026-11-19 05:09:30 [warning  ] mcp.background_start_failed    reason='启动命令：C:\\Users\\25011\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe [local path] --token [redacted]\nMCP server failed during launch or initialization; stderr 摘要：\nfatal: PAR09_TEST_SECRET=[redacted] startup aborted'
+PHASE immediate_exit_failed {"available": false, "blocking_reason": "启动命令：C:\\Users\\25011\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe [local path] --token [redacted]\nMCP server failed during launch or initialization; stderr 摘要：\nfatal: PAR09_TEST_SECRET=[redacted] startup aborted", "servers": [{"name": "exiter", "enabled": true, "connected": false, "state": "failed", "tool_discovery": "failed", "tool_count": 0, "blocking_reason": "启动命令：C:\\Users\\25011\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe [local path] --token [redacted]\nMCP server failed during launch or initialization; stderr 摘要：\nfatal: PAR09_TEST_SECRET=[redacted] startup aborted"}]}
+CHECK PASS immediate_exit: settles to state=failed :: {'row': {'name': 'exiter', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'failed', 'tool_discovery': 'failed', 'tool_count': 0, 'blocking_reason': '启动命令：C:\\Users\\25011\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe [local path] --token [redacted]\nMCP server failed during launch or initialization; stderr 摘要：\nfatal: PAR09_TEST_SECRET=[redacted] startup aborted'}, 'elapsed': 0.610000000015134}
+CHECK PASS immediate_exit: runtime fail-closed :: False
+CHECK PASS immediate_exit: blocking_reason present :: 启动命令：C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe [local path] --token [redacted]
+MCP server failed during launch or initialization; stderr 摘要：
+fatal: PAR09_TEST_SECRET=[redacted] startup aborted
+CHECK PASS immediate_exit: reason omits 'immediate-exit-secret-value' :: 启动命令：C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe [local path] --token [redacted]
+MCP server failed during launch or initialization; stderr 摘要：
+fatal: PAR09_TEST_SECRET=[redacted] startup aborted
+CHECK PASS immediate_exit: reason keeps safe diagnostic 'stderr' :: 启动命令：C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe [local path] --token [redacted]
+MCP server failed during launch or initialization; stderr 摘要：
+fatal: PAR09_TEST_SECRET=[redacted] startup aborted
+CHECK PASS immediate_exit: startup progress ends failed :: {'server': 'exiter', 'state': 'failed', 'message': '启动命令：C:\\Users\\25011\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe [local path] --token [redacted]\nMCP server failed during launch or initialization; stderr 摘要：\nfatal: PAR09_TEST_SECRET=[redacted] startup aborted', 'transport': 'stdio', 'timestamp': '2026-11-18T21:09:30.323738+00:00'}
+CHECK PASS immediate_exit: state remains failed, never returns to starting :: {'name': 'exiter', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'failed', 'tool_discovery': 'failed', 'tool_count': 0, 'blocking_reason': '启动命令：C:\\Users\\25011\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe [local path] --token [redacted]\nMCP server failed during launch or initialization; stderr 摘要：\nfatal: PAR09_TEST_SECRET=[redacted] startup aborted'}
+RESULT immediate-exit checks=7 failed=0

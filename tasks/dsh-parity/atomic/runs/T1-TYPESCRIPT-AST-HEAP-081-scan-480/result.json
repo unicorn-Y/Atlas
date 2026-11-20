@@ -1,0 +1,10 @@
+{
+  "duration_seconds": 273.98399999999674,
+  "leftover_processes": [],
+  "returncode": 0,
+  "signals": [],
+  "status": "PASS",
+  "stderr_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-TYPESCRIPT-AST-HEAP-081-scan-480\\stderr.log",
+  "stdout_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-TYPESCRIPT-AST-HEAP-081-scan-480\\stdout.log",
+  "timed_out": false
+}

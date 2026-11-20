@@ -222,6 +222,10 @@ code, pre, kbd, samp { font-family: var(--atlas-mono-font, ui-monospace, SFMono-
   * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 }
 
+html[data-input-modality='pointer'] body :focus-visible:not(:read-write) {
+  outline-color: transparent;
+}
+
 @layer components {
   .sheet { background: var(--sheet-bg); box-shadow: var(--shadow-sheet); -webkit-backdrop-filter: var(--sheet-blur); backdrop-filter: var(--sheet-blur); }
   .orb-bg { opacity: var(--orb-opacity); filter: var(--orb-filter); }

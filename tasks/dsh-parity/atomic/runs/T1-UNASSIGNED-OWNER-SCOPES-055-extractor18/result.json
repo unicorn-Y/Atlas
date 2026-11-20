@@ -1,0 +1,10 @@
+{
+  "duration_seconds": 98.04700000000594,
+  "leftover_processes": [],
+  "returncode": 1,
+  "signals": [],
+  "status": "FAIL",
+  "stderr_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-UNASSIGNED-OWNER-SCOPES-055-extractor18\\stderr.log",
+  "stdout_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-UNASSIGNED-OWNER-SCOPES-055-extractor18\\stdout.log",
+  "timed_out": false
+}

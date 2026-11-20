@@ -389,6 +389,20 @@ def carry_over(previous_root: str | Path, new_root: str | Path) -> dict[str, Any
         shutil.copytree(old_base, new_base)
         files = new_base / FILES_DIRNAME
         carried = sum(1 for path in files.rglob("*") if path.is_file()) if files.is_dir() else 0
+    # Revert must restore the version currently shipped, not the previous one.
+    files = new_base / FILES_DIRNAME
+    if files.is_dir():
+        for patch_file in files.rglob("*"):
+            if not patch_file.is_file():
+                continue
+            relative = patch_file.relative_to(files)
+            shipped = Path(new_root) / relative
+            original = _original_path(Path(new_root), relative)
+            if shipped.is_file():
+                original.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(shipped, original)
+            else:
+                original.unlink(missing_ok=True)
     return {"carried": carried, "had_patches": True}
 
 

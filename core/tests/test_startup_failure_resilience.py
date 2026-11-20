@@ -419,3 +419,5 @@ async def test_cancelled_dbos_worker_cannot_publish_late_global_instance(
         ]
     finally:
         release.set()
+
+

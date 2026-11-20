@@ -106,8 +106,10 @@ async def ws_chat(
                     run.cancel_event.set()
                     if run.trust_future is not None and not run.trust_future.done():
                         run.trust_future.set_result(False)
-                    elif run.task is not None and not run.task.done():
-                        run.task.cancel()
+                    # The run's event pump observes cancel_event and cancels the
+                    # model worker itself, then drains attempt rollback events.
+                    # Cancelling the outer task here can close the async-generator
+                    # chain before those rollback events reach the WebSocket.
                     if run.task is not None:
                         await asyncio.gather(run.task, return_exceptions=True)
                     if not any(event.get("event") in (

@@ -1,0 +1,58 @@
+SCENARIO lifecycle
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+PHASE start
+2026-11-19 05:08:46 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-exec05-mcp\.tmp\par09-mcp-real\data\lifecycle\config\atlas.toml
+2026-11-19 05:08:46 [info     ] mcp.starting                   count=1 names=['real']
+PHASE start_immediate {"available": false, "blocking_reason": "MCP server startup is still in progress", "servers": [{"name": "real", "enabled": true, "connected": false, "state": "starting", "tool_discovery": "pending", "tool_count": 0, "blocking_reason": null}, {"name": "off", "enabled": false, "connected": false, "state": "disabled", "tool_discovery": "not_started", "tool_count": 0, "blocking_reason": "server is disabled"}]}
+2026-11-19 05:08:48 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par09-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:08:48 [info     ] mcp.server_ready               server=real tools=['echo']
+PHASE started {"available": true, "blocking_reason": null, "servers": [{"name": "real", "enabled": true, "connected": true, "state": "connected", "tool_discovery": "complete", "tool_count": 1, "blocking_reason": null}, {"name": "off", "enabled": false, "connected": false, "state": "disabled", "tool_discovery": "not_started", "tool_count": 0, "blocking_reason": "server is disabled"}]}
+CHECK PASS real stdio server connects and settles :: {'available': True, 'blocking_reason': None, 'servers': [{'name': 'real', 'enabled': True, 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}, {'name': 'off', 'enabled': False, 'connected': False, 'state': 'disabled', 'tool_discovery': 'not_started', 'tool_count': 0, 'blocking_reason': 'server is disabled'}]}
+CHECK PASS real state connected :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}
+CHECK PASS tool discovery completed with 1 tool :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}
+CHECK PASS connected server has no blocker :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}
+CHECK PASS disabled server stays disabled :: {'name': 'off', 'configured': True, 'enabled': False, 'transport': 'stdio', 'connected': False, 'state': 'disabled', 'tool_discovery': 'not_started', 'tool_count': 0, 'blocking_reason': 'server is disabled'}
+CHECK PASS runtime available after all servers settle :: True
+CHECK PASS tool index contains only real__echo :: ['real__echo']
+CHECK PASS LLM tool schema exposes real__echo :: ['real__echo']
+2026-11-19 05:08:48 [info     ] mcp.call_tool                  args={'text': 'hello'} tool=real__echo
+CHECK PASS real tool call round-trips :: {'content': [{'type': 'text', 'text': 'echo:hello'}], 'is_error': False}
+CHECK PASS child process spawned :: 61116
+PHASE stop
+2026-11-19 05:08:48 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 05:08:48 [info     ] mcp.server_stopped             server=real
+PHASE stopped {"available": true, "blocking_reason": null, "servers": [{"name": "real", "enabled": true, "connected": false, "state": "stopped", "tool_discovery": "complete", "tool_count": 0, "blocking_reason": null}, {"name": "off", "enabled": false, "connected": false, "state": "disabled", "tool_discovery": "not_started", "tool_count": 0, "blocking_reason": "server is disabled"}]}
+CHECK PASS stop records state=stopped :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'stopped', 'tool_discovery': 'complete', 'tool_count': 0, 'blocking_reason': None}
+CHECK PASS stop clears connected :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'stopped', 'tool_discovery': 'complete', 'tool_count': 0, 'blocking_reason': None}
+CHECK PASS stop clears tool index :: []
+CHECK PASS child wrote exit marker :: [61116]
+CHECK PASS child process gone after stop :: 61116
+PHASE start_again
+2026-11-19 05:08:48 [info     ] mcp.starting                   count=1 names=['real']
+2026-11-19 05:08:50 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par09-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:08:50 [info     ] mcp.server_ready               server=real tools=['echo']
+PHASE started_again {"available": true, "blocking_reason": null, "servers": [{"name": "real", "enabled": true, "connected": true, "state": "connected", "tool_discovery": "complete", "tool_count": 1, "blocking_reason": null}, {"name": "off", "enabled": false, "connected": false, "state": "disabled", "tool_discovery": "not_started", "tool_count": 0, "blocking_reason": "server is disabled"}]}
+CHECK PASS second start reconnects :: {'available': True, 'blocking_reason': None, 'servers': [{'name': 'real', 'enabled': True, 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}, {'name': 'off', 'enabled': False, 'connected': False, 'state': 'disabled', 'tool_discovery': 'not_started', 'tool_count': 0, 'blocking_reason': 'server is disabled'}]}
+CHECK PASS second start spawned a fresh child :: {'first': 61116, 'second': 60592}
+CHECK PASS tools rediscovered after restart :: ['real__echo']
+PHASE restart_server
+2026-11-19 05:08:50 [info     ] mcp.server_stopped             server=real
+2026-11-19 05:08:51 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par09-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:08:51 [info     ] mcp.server_ready               server=real tools=['echo']
+PHASE restarted {"available": true, "blocking_reason": null, "servers": [{"name": "real", "enabled": true, "connected": true, "state": "connected", "tool_discovery": "complete", "tool_count": 1, "blocking_reason": null}, {"name": "off", "enabled": false, "connected": false, "state": "disabled", "tool_discovery": "not_started", "tool_count": 0, "blocking_reason": "server is disabled"}]}
+CHECK PASS explicit restart reconnects :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}
+CHECK PASS explicit restart spawned a fresh child :: {'second': 60592, 'third': 62040}
+CHECK PASS old child from restart is gone :: 60592
+PHASE auto_reconnect_kill
+OBSERVATION kill_immediate {"killed_pid": 62040, "killed_pid_alive": false, "pid_file": 62040, "starts_before": 3, "starts_now": 3, "status": {"available": true, "blocking_reason": null, "servers": [{"name": "real", "enabled": true, "connected": true, "state": "connected", "tool_discovery": "complete", "tool_count": 1, "blocking_reason": null}, {"name": "off", "enabled": false, "connected": false, "state": "disabled", "tool_discovery": "not_started", "tool_count": 0, "blocking_reason": "server is disabled"}]}}
+PHASE auto_reconnect_observation {"available": true, "blocking_reason": null, "servers": [{"name": "real", "enabled": true, "connected": true, "state": "connected", "tool_discovery": "complete", "tool_count": 1, "blocking_reason": null}, {"name": "off", "enabled": false, "connected": false, "state": "disabled", "tool_discovery": "not_started", "tool_count": 0, "blocking_reason": "server is disabled"}]}
+OBSERVATION auto_reconnect {"monitor_spawned_new_child": false, "starts": [61116, 60592, 62040], "killed_pid": 62040, "current_pid": 62040, "status": {"available": true, "blocking_reason": null, "servers": [{"name": "real", "enabled": true, "connected": true, "state": "connected", "tool_discovery": "complete", "tool_count": 1, "blocking_reason": null}, {"name": "off", "enabled": false, "connected": false, "state": "disabled", "tool_discovery": "not_started", "tool_count": 0, "blocking_reason": "server is disabled"}]}}
+PHASE final_stop
+2026-11-19 05:09:00 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 05:09:00 [info     ] mcp.server_stopped             server=real
+PHASE final_stopped {"available": true, "blocking_reason": null, "servers": [{"name": "real", "enabled": true, "connected": false, "state": "stopped", "tool_discovery": "complete", "tool_count": 0, "blocking_reason": null}, {"name": "off", "enabled": false, "connected": false, "state": "disabled", "tool_discovery": "not_started", "tool_count": 0, "blocking_reason": "server is disabled"}]}
+CHECK PASS final stop records stopped :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'stopped', 'tool_discovery': 'complete', 'tool_count': 0, 'blocking_reason': None}
+CHECK PASS final stop clears tools :: []
+CHECK PASS no child process remains after final stop :: []
+CHECK PASS normal lifecycle status does not echo configured secret :: lifecycle-secret-do-not-echo
+RESULT lifecycle checks=25 failed=0

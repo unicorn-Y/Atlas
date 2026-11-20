@@ -1,0 +1,12 @@
+SCENARIO stop-during-recovery
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 05:51:36 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-par10-mcp-recovery\.tmp\par10-final2\data\stop-during-recovery\config\atlas.toml
+2026-11-19 05:51:36 [info     ] mcp.starting                   count=1 names=['real']
+2026-11-19 05:51:38 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:51:38 [info     ] mcp.server_ready               server=real tools=['echo']
+CHECK PASS stop: connected before kill :: {'available': True, 'node_required': False, 'blocking_reason': None, 'servers': [{'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}], 'startup_progress': [{'server': 'real', 'state': 'connecting', 'message': '正在连接 MCP 服务', 'transport': 'stdio', 'timestamp': '2026-11-18T21:51:36.655628+00:00'}, {'server': 'real', 'state': 'connecting', 'message': '正在建立传输连接', 'transport': 'stdio', 'timestamp': '2026-11-18T21:51:36.873560+00:00'}, {'server': 'real', 'state': 'initializing', 'message': '连接已建立，正在初始化协议', 'transport': 'stdio', 'timestamp': '2026-11-18T21:51:38.910437+00:00'}, {'server': 'real', 'state': 'discovering_tools', 'message': '正在读取工具目录', 'transport': 'stdio', 'timestamp': '2026-11-18T21:51:38.912877+00:00'}, {'server': 'real', 'state': 'ready', 'message': '已就绪 · 1 个工具', 'transport': 'stdio', 'timestamp': '2026-11-18T21:51:38.912877+00:00'}]}
+2026-11-19 05:51:39 [warning  ] mcp.connection_lost            reason='MCP server failed during launch or initialization (ConnectionError)' server=real
+CHECK PASS stop: no auto-spawn after user stop :: {'at_stop': 1, 'after': 1}
+CHECK PASS stop: no child survives stop :: []
+CHECK PASS stop: state is stopped :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'stopped', 'tool_discovery': 'pending', 'tool_count': 0, 'blocking_reason': None}
+RESULT stop-during-recovery checks=4 failed=0

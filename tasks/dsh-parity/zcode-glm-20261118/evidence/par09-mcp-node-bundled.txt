@@ -1,0 +1,25 @@
+SCENARIO node-bundled
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+PHASE node_runtime {"requested_runtime_dir": "D:\\Atlas\\frontend\\windows-release\\win-unpacked\\resources\\atlas\\runtime\\node", "executable": "D:\\Atlas\\frontend\\windows-release\\win-unpacked\\resources\\atlas\\runtime\\node\\node.exe", "source": "bundled", "npx_script": "D:\\Atlas\\frontend\\windows-release\\win-unpacked\\resources\\atlas\\runtime\\node\\npm\\bin\\npx-cli.js", "status": {"available": true, "source": "bundled", "version": "v22.23.3", "bundled": {"available": true, "version": "v22.23.3", "blocking_reason": null, "npm_npx_available": true}, "system": {"available": true, "version": "v24.18.1", "blocking_reason": null}, "blocking_reason": null, "expected_bundled_version": "v24.21.0", "archive": "node-v24.21.0-win-x64.zip", "archive_sha256": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541"}}
+CHECK PASS node: resolver selects the configured packaged runtime :: D:\Atlas\frontend\windows-release\win-unpacked\resources\atlas\runtime\node\node.exe
+CHECK PASS node: stdio command routes through packaged node.exe :: D:\Atlas\frontend\windows-release\win-unpacked\resources\atlas\runtime\node\node.exe
+CHECK PASS node: node arguments preserved :: ['server.js']
+2026-11-19 05:14:26 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-exec05-mcp\.tmp\par09-mcp-real\data\node-bundled\config\atlas.toml
+2026-11-19 05:14:26 [info     ] mcp.starting                   count=1 names=['nodereal']
+2026-11-19 05:14:26 [info     ] mcp.server_initialized         protocol=2025-11-25 server=nodereal server_info="name='par09-packaged-node' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:14:26 [info     ] mcp.server_ready               server=nodereal tools=['node_echo']
+PHASE node_started {"available": true, "blocking_reason": null, "servers": [{"name": "nodereal", "enabled": true, "connected": true, "state": "connected", "tool_discovery": "complete", "tool_count": 1, "blocking_reason": null}]}
+CHECK PASS node: real packaged Node MCP server connects :: {'available': True, 'blocking_reason': None, 'servers': [{'name': 'nodereal', 'enabled': True, 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}]}
+CHECK PASS node: tool discovery completed :: {'name': 'nodereal', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}
+CHECK PASS node: tool index contains nodereal__node_echo :: ['nodereal__node_echo']
+2026-11-19 05:14:27 [info     ] mcp.call_tool                  args={'text': 'packaged'} tool=nodereal__node_echo
+CHECK PASS node: tool call round-trips through packaged Node :: {'content': [{'type': 'text', 'text': 'node:packaged'}], 'is_error': False}
+PHASE node_child {"pid": 64128, "alive": true, "execPath": "D:\\Atlas\\frontend\\windows-release\\win-unpacked\\resources\\atlas\\runtime\\node\\node.exe"}
+CHECK PASS node: child process spawned :: 64128
+CHECK PASS node: child actually ran the packaged node.exe :: D:\Atlas\frontend\windows-release\win-unpacked\resources\atlas\runtime\node\node.exe
+2026-11-19 05:14:27 [warning  ] mcp.owner_cancelled            server=nodereal
+2026-11-19 05:14:27 [info     ] mcp.server_stopped             server=nodereal
+PHASE node_stopped {"available": true, "blocking_reason": null, "servers": [{"name": "nodereal", "enabled": true, "connected": false, "state": "stopped", "tool_discovery": "complete", "tool_count": 0, "blocking_reason": null}]}
+CHECK PASS node: stop records stopped :: {'name': 'nodereal', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'stopped', 'tool_discovery': 'complete', 'tool_count': 0, 'blocking_reason': None}
+CHECK PASS node: child process gone after stop :: 64128
+RESULT node-bundled checks=11 failed=0

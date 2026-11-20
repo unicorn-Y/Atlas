@@ -1,0 +1,3087 @@
+diff --git a/core/atlas/engine/kernel/inbox.py b/core/atlas/engine/kernel/inbox.py
+index 12ea6ce5..99914d6c 100644
+--- a/core/atlas/engine/kernel/inbox.py
++++ b/core/atlas/engine/kernel/inbox.py
+@@ -4,7 +4,7 @@ from __future__ import annotations
+ 
+ import asyncio
+ import uuid
+-from dataclasses import dataclass
++from dataclasses import dataclass, replace
+ from pathlib import Path
+ from typing import Any, Literal
+ 
+@@ -17,6 +17,8 @@ class InboxItem:
+     lane: InboxLane
+     content: str
+     seq: int = 0
++    started_run_id: str | None = None
++    request_id: str | None = None
+ 
+ 
+ class DurableInbox:
+@@ -28,70 +30,174 @@ class DurableInbox:
+         self._pending: dict[InboxLane, list[InboxItem]] = {
+             "next-turn": [], "next-step": [],
+         }
++        self._receipts: dict[str, InboxItem] = {}
+         self._lock = asyncio.Lock()
+         self._restored = False
++        self._restore_cursor = 0
++        self._current_turn_event_id: str | None = None
++
++    def set_current_turn_event(self, event_id: str | None) -> None:
++        """Mark an item already supplied as the run's user message, avoiding a second projection."""
++        self._current_turn_event_id = str(event_id) if event_id else None
+ 
+     async def restore(self) -> None:
+-        """Rebuild pending queues from append-only inbox lifecycle events."""
++        """Restore once, then incrementally apply inbox lifecycle events from other processes."""
+         async with self._lock:
+-            if self._restored:
+-                return
+-            from atlas.engine.session_sync import read_session_events
++            if not self._restored:
++                self._pending = {"next-turn": [], "next-step": []}
++                self._receipts = {}
++                self._restore_cursor = 0
++            from atlas.engine.session_sync import read_session_inbox_events
+ 
+-            events: list[dict[str, Any]] = []
+-            cursor = 0
++            cursor = self._restore_cursor
+             while True:
+-                page = await asyncio.to_thread(
+-                    read_session_events, self.home, self.session_id,
++                page, next_cursor = await asyncio.to_thread(
++                    read_session_inbox_events, self.home, self.session_id,
+                     after_seq=cursor, limit=1000,
+                 )
+-                if not page:
+-                    break
+-                events.extend(page)
+-                cursor = int(page[-1].get("seq") or cursor)
++                for event in page:
++                    kind = str(event.get("event_type") or "")
++                    payload = event.get("payload")
++                    if not isinstance(payload, dict):
++                        continue
++                    event_id = str(payload.get("event_id") or "")
++                    if not event_id:
++                        continue
++                    if kind == "inbox.enqueued":
++                        lane, content = payload.get("lane"), payload.get("content")
++                        if lane not in self._pending or not isinstance(content, str):
++                            continue
++                        request_id = str(payload.get("request_id") or "").strip() or None
++                        item = InboxItem(
++                            event_id, lane, content, int(event.get("seq") or 0),
++                            request_id=request_id,
++                        )
++                        items = self._pending[lane]
++                        existing_index = next(
++                            (index for index, existing in enumerate(items)
++                             if existing.event_id == event_id), None,
++                        )
++                        if existing_index is None:
++                            items.append(item)
++                        else:
++                            items[existing_index] = item
++                        if request_id:
++                            previous = self._receipts.get(request_id)
++                            if previous is not None and (
++                                previous.lane != item.lane or previous.content != item.content
++                            ):
++                                raise RuntimeError("persisted inbox request id has conflicting payloads")
++                            self._receipts.setdefault(request_id, item)
++                    elif kind == "inbox.started":
++                        run_id = str(payload.get("run_id") or "").strip()
++                        if run_id:
++                            for items in self._pending.values():
++                                index = next(
++                                    (index for index, existing in enumerate(items)
++                                     if existing.event_id == event_id), None,
++                                )
++                                if index is not None:
++                                    items[index] = replace(items[index], started_run_id=run_id)
++                                    break
++                    elif kind in {"inbox.consumed", "inbox.cancelled"}:
++                        for items in self._pending.values():
++                            items[:] = [item for item in items if item.event_id != event_id]
++
++                cursor = max(cursor, next_cursor)
++                self._restore_cursor = cursor
+                 if len(page) < 1000:
+                     break
+-            pending: dict[str, InboxItem] = {}
+-            for event in events:
+-                kind = str(event.get("event_type") or "")
+-                payload = event.get("payload")
+-                if not isinstance(payload, dict):
+-                    continue
+-                event_id = str(payload.get("event_id") or "")
+-                if not event_id:
+-                    continue
+-                if kind == "inbox.enqueued":
+-                    lane, content = payload.get("lane"), payload.get("content")
+-                    if lane not in self._pending or not isinstance(content, str):
+-                        continue
+-                    pending[event_id] = InboxItem(
+-                        event_id, lane, content, int(event.get("seq") or 0),
+-                    )
+-                elif kind == "inbox.consumed":
+-                    pending.pop(event_id, None)
+-            self._pending = {"next-turn": [], "next-step": []}
+-            for item in sorted(pending.values(), key=lambda value: value.seq):
+-                self._pending[item.lane].append(item)
+             self._restored = True
+ 
+-    async def inject(self, content: str, *, lane: InboxLane = "next-step") -> str:
++    async def inject(self, content: str, *, lane: InboxLane = "next-step",
++                     request_id: str | None = None) -> str:
+         """Durably enqueue content for a later boundary without interrupting a run."""
++        event_id, _created = await self.inject_with_receipt(
++            content, lane=lane, request_id=request_id,
++        )
++        return event_id
++
++    async def inject_with_receipt(self, content: str, *, lane: InboxLane = "next-step",
++                                  request_id: str | None = None) -> tuple[str, bool]:
++        """Return the stable receipt and whether this call appended a new item."""
+         value = str(content or "").strip()
+         if lane not in self._pending:
+             raise ValueError("lane must be 'next-turn' or 'next-step'")
+         if not value:
+             raise ValueError("inbox content must not be empty")
++        request_key = str(request_id or "").strip()
++        if request_id is not None and not request_key:
++            raise ValueError("request id must not be empty")
++        if len(request_key) > 256:
++            raise ValueError("request id must be at most 256 characters")
+         await self.restore()
+-        event_id = uuid.uuid4().hex
++        refresh_after_duplicate = False
+         async with self._lock:
+-            from atlas.engine.session_sync import append_session_event
++            if request_key:
++                existing = self._receipts.get(request_key)
++                if existing is not None:
++                    if existing.lane != lane or existing.content != value:
++                        raise ValueError("request id was already used with a different payload")
++                    return existing.event_id, False
+ 
+-            seq = await asyncio.to_thread(
+-                append_session_event, self.home, self.session_id, "inbox.enqueued",
+-                {"event_id": event_id, "lane": lane, "content": value},
++            candidate_event_id = uuid.uuid4().hex
++            from atlas.engine.session_sync import append_inbox_enqueue_with_receipt
++
++            payload = {"event_id": candidate_event_id, "lane": lane, "content": value}
++            if request_key:
++                payload["request_id"] = request_key
++            event_id, seq, created = await asyncio.to_thread(
++                append_inbox_enqueue_with_receipt,
++                self.home, self.session_id, payload,
+             )
+-            self._pending[lane].append(InboxItem(event_id, lane, value, seq))
+-        return event_id
++            if created:
++                item = InboxItem(event_id, lane, value, seq, request_id=request_key or None)
++                self._pending[lane].append(item)
++                if request_key:
++                    self._receipts[request_key] = item
++            else:
++                # Another inbox instance may have committed this event while our
++                # local restore snapshot was stale. Refresh after releasing the
++                # lock so this instance can also drain the durable pending item.
++                self._restored = False
++                refresh_after_duplicate = True
++        if refresh_after_duplicate:
++            await self.restore()
++        return event_id, created
++
++    async def mark_started(self, event_id: str, *, lane: InboxLane, run_id: str) -> bool:
++        """Persist the worker run identity before execution; claimed items are not replayed."""
++        if lane not in self._pending:
++            raise ValueError("lane must be 'next-turn' or 'next-step'")
++        run_key = str(run_id or "").strip()
++        if not run_key or len(run_key) > 256:
++            raise ValueError("run id must be non-empty and at most 256 characters")
++        await self.restore()
++        refresh_snapshot = False
++        async with self._lock:
++            items = self._pending[lane]
++            index = next((i for i, item in enumerate(items)
++                          if item.event_id == str(event_id)), None)
++            if index is None:
++                return False
++            item = items[index]
++            if item.started_run_id is not None:
++                return item.started_run_id == run_key
++            from atlas.engine.session_sync import claim_inbox_start
++
++            _seq, owner_run_id, claimed = await asyncio.to_thread(
++                claim_inbox_start, self.home, self.session_id,
++                event_id=item.event_id, lane=item.lane, run_id=run_key,
++                request_id=item.request_id,
++            )
++            if owner_run_id is not None:
++                items[index] = replace(item, started_run_id=owner_run_id)
++            else:
++                self._restored = False
++                refresh_snapshot = True
++        if refresh_snapshot:
++            await self.restore()
++        return claimed
+ 
+     async def take(self, lane: InboxLane) -> InboxItem | None:
+         """Consume the oldest item in one lane and append its consumed marker."""
+@@ -107,7 +213,11 @@ class DurableInbox:
+             raise ValueError("lane must be 'next-turn' or 'next-step'")
+         await self.restore()
+         async with self._lock:
+-            return self._pending[lane][0] if self._pending[lane] else None
++            item = self._pending[lane][0] if self._pending[lane] else None
++            if (lane == "next-turn" and item is not None
++                    and item.event_id == self._current_turn_event_id):
++                return None
++            return item
+ 
+     async def ack(self, event_id: str, *, lane: InboxLane) -> bool:
+         """Append a consumed marker after the item was included in a model request."""
+@@ -123,7 +233,36 @@ class DurableInbox:
+ 
+             await asyncio.to_thread(
+                 append_session_event, self.home, self.session_id, "inbox.consumed",
+-                {"event_id": item.event_id, "lane": item.lane},
++                {"event_id": item.event_id, "lane": item.lane,
++                 "request_id": item.request_id},
+             )
+             self._pending[lane].remove(item)
+             return True
++
++    async def cancel(self, event_id: str, *, lane: InboxLane) -> bool:
++        """Cancel a queued item only while it has not crossed the durable start boundary."""
++        if lane not in self._pending:
++            raise ValueError("lane must be 'next-turn' or 'next-step'")
++        await self.restore()
++        refresh_snapshot = False
++        async with self._lock:
++            items = self._pending[lane]
++            index = next((i for i, item in enumerate(items)
++                          if item.event_id == str(event_id)), None)
++            item = items[index] if index is not None else None
++            if item is None or item.started_run_id is not None:
++                return False
++            from atlas.engine.session_sync import cancel_inbox_if_unstarted
++
++            cancelled = await asyncio.to_thread(
++                cancel_inbox_if_unstarted, self.home, self.session_id,
++                event_id=item.event_id, lane=item.lane, request_id=item.request_id,
++            )
++            if cancelled:
++                items.pop(index)
++            else:
++                self._restored = False
++                refresh_snapshot = True
++        if refresh_snapshot:
++            await self.restore()
++        return cancelled
+diff --git a/core/atlas/engine/session_sync.py b/core/atlas/engine/session_sync.py
+index cff4ee15..e1a396ee 100644
+--- a/core/atlas/engine/session_sync.py
++++ b/core/atlas/engine/session_sync.py
+@@ -24,6 +24,7 @@ import hashlib
+ import json
+ import math
+ import os
++import re
+ import sqlite3
+ import tempfile
+ import shutil
+@@ -51,7 +52,10 @@ _SESSION_SNAPSHOT_FIELDS = frozenset({
+     "source_message_count", "source_first_message_id", "source_last_message_id",
+     "summary_sha256", "summary_chars", "state",
+ })
+-_SESSION_SNAPSHOT_STATE_FIELDS = frozenset({"plan", "todo", "open_tool_call_ids"})
++_SESSION_SNAPSHOT_STATE_FIELDS = frozenset({
++    "plan", "todo", "open_tool_call_ids", "turn_context_projection",
++    "turn_context_ref_index",
++})
+ 
+ 
+ def _valid_session_snapshot_manifest(manifest: Any, summary: str) -> bool:
+@@ -104,6 +108,27 @@ def _valid_session_snapshot_manifest(manifest: Any, summary: str) -> bool:
+             or any(not isinstance(item, str) or not item for item in open_calls)
+             or len(set(open_calls)) != len(open_calls)):
+         return False
++    projection = state.get("turn_context_projection")
++    if projection is not None and (
++            not isinstance(projection, list) or len(projection) > 128
++            or any(
++                not isinstance(item, dict)
++                or not isinstance(item.get("text"), str)
++                or not item["text"].strip()
++                or len(item["text"]) > 24_000
++                or not isinstance(item.get("current_only", False), bool)
++                for item in projection
++            )
++            or sum(len(item["text"]) for item in projection if isinstance(item, dict)
++                   and isinstance(item.get("text"), str)) > 96_000):
++        return False
++    ref_index = state.get("turn_context_ref_index")
++    if ref_index is not None and (
++            not isinstance(ref_index, list) or len(ref_index) > 512
++            or any(not isinstance(item, str) or not re.fullmatch(r"\[ref:[^\]\r\n]{1,250}\]", item)
++                   for item in ref_index)
++            or len(set(ref_index)) != len(ref_index)):
++        return False
+     return True
+ 
+ 
+@@ -411,6 +436,15 @@ def compact_session_messages(
+                         and item["content"].startswith("[Conversation continuation summary]"))), None)
+     if summary is not None:
+         summary_text = str(summary.get("content") or "")
++        state = dict(snapshot_state or {})
++        ref_index = state.get("turn_context_ref_index")
++        if isinstance(ref_index, list):
++            missing_refs = [ref for ref in ref_index if isinstance(ref, str) and ref not in summary_text]
++            if missing_refs:
++                summary_text = (summary_text.rstrip() +
++                                "\n\n[Retained context refs for searchable audit]\n" +
++                                " ".join(missing_refs))
++                summary["content"] = summary_text
+         source_ids = [str(item.get("message_uid") or item.get("id") or item.get("_row_id"))
+                       for item in held_messages
+                       if item.get("message_uid") or item.get("id") or item.get("_row_id") is not None]
+@@ -425,7 +459,7 @@ def compact_session_messages(
+             "source_last_message_id": source_ids[-1] if source_ids else None,
+             "summary_sha256": hashlib.sha256(summary_text.encode("utf-8")).hexdigest(),
+             "summary_chars": len(summary_text),
+-            "state": dict(snapshot_state or {}),
++            "state": state,
+         }
+         display_metadata = dict(summary.get("display_metadata") or {})
+         display_metadata[_SESSION_SNAPSHOT_KEY] = manifest
+@@ -566,6 +600,37 @@ def append_session_event(
+         return db.append_session_event(conversation_id, event_type, payload)
+ 
+ 
++def append_inbox_enqueue_with_receipt(
++    home: str | Path, conversation_id: str, payload: dict[str, Any],
++) -> tuple[str, int, bool]:
++    """Atomically append an inbox event or return the existing request receipt."""
++    with _open_db(home) as db:
++        return db.append_inbox_enqueue_with_receipt(conversation_id, payload)
++
++
++def claim_inbox_start(
++    home: str | Path, conversation_id: str, *, event_id: str, lane: str,
++    run_id: str, request_id: str | None = None,
++) -> tuple[int | None, str | None, bool]:
++    """Atomically claim one durable inbox event for one worker run."""
++    with _open_db(home) as db:
++        return db.claim_inbox_start(
++            conversation_id, event_id=event_id, lane=lane,
++            run_id=run_id, request_id=request_id,
++        )
++
++
++def cancel_inbox_if_unstarted(
++    home: str | Path, conversation_id: str, *, event_id: str,
++    lane: str, request_id: str | None = None,
++) -> bool:
++    """Atomically cancel one queued item only while it remains unstarted."""
++    with _open_db(home) as db:
++        return db.cancel_inbox_if_unstarted(
++            conversation_id, event_id=event_id, lane=lane, request_id=request_id,
++        )
++
++
+ def read_session_events(
+     home: str | Path, conversation_id: str, *, after_seq: int = 0, limit: int = 1000,
+ ) -> list[dict[str, Any]]:
+@@ -594,6 +659,83 @@ def read_session_events(
+         return db.list_session_events(conversation_id, after_seq=after_seq, limit=limit)
+ 
+ 
++def read_session_inbox_events(
++    home: str | Path, conversation_id: str, *, after_seq: int = 0, limit: int = 1000,
++) -> tuple[list[dict[str, Any]], int]:
++    """Read the inbox event stream without scanning or repairing unrelated turn history."""
++    with _open_db(home) as db:
++        return db.list_inbox_events(conversation_id, after_seq=after_seq, limit=limit)
++
++
++def classify_retry_recovery(
++    events: list[dict[str, Any]], *, run_id: str,
++) -> dict[str, Any]:
++    """Classify the last durable model attempt without replaying uncertain work.
++
++    A started request without a terminal attempt audit has an unknown remote
++    outcome. A discarded attempt with retry=true is only scheduled; the next
++    request is known not to have started yet. This function is read-only so a
++    host can choose an explicit recovery policy before starting new work.
++    """
++    attempts = [
++        event for event in events
++        if event.get("event_type") == "model/attempt"
++        and isinstance(event.get("payload"), dict)
++        and str(event["payload"].get("run_id") or "") == str(run_id)
++    ]
++    attempts.sort(key=lambda event: int(event.get("seq") or 0))
++    if not attempts:
++        return {"state": "none", "run_id": str(run_id)}
++
++    payloads = [event["payload"] for event in attempts]
++    latest = payloads[-1]
++    status = str(latest.get("status") or "")
++    retry_decision = next((
++        payload for payload in reversed(payloads)
++        if payload.get("status") == "discarded" and payload.get("retry") is True
++    ), None)
++    budget = {}
++    if retry_decision is not None:
++        for key in (
++            "retry_budget_attempts_used_after_decision",
++            "retry_budget_attempts_remaining",
++            "retry_budget_wait_s_used_after_decision",
++            "retry_budget_wait_s_remaining",
++        ):
++            if key in retry_decision:
++                budget[key] = retry_decision[key]
++
++    if status == "started":
++        return {
++            "state": "outcome_unknown", "run_id": str(run_id),
++            "attempt_id": str(latest.get("attempt_id") or ""),
++            "attempt": int(latest.get("attempt") or 0), **budget,
++        }
++    if (status == "discarded"
++            and (latest.get("category") == "cancelled"
++                 or latest.get("retry_denied_reason") == "cancelled")):
++        # Local cancellation terminates this process's wait, but does not prove
++        # the provider did not finish or apply a non-idempotent request.
++        return {
++            "state": "outcome_unknown", "run_id": str(run_id),
++            "attempt_id": str(latest.get("attempt_id") or ""),
++            "attempt": int(latest.get("attempt") or 0),
++            "attempt_status": status, "outcome_reason": "cancelled_locally",
++            **budget,
++        }
++    if status == "discarded" and latest.get("retry") is True:
++        return {
++            "state": "retry_scheduled_not_started", "run_id": str(run_id),
++            "attempt_id": str(latest.get("attempt_id") or ""),
++            "attempt": int(latest.get("attempt") or 0), **budget,
++        }
++    return {
++        "state": "settled" if status in {"committed", "discarded"} else "state_unknown",
++        "run_id": str(run_id), "attempt_id": str(latest.get("attempt_id") or ""),
++        "attempt": int(latest.get("attempt") or 0), "attempt_status": status,
++    }
++
++
+ def _turn_process_is_alive(payload: dict[str, Any]) -> bool:
+     """Avoid repairing a live turn; PID reuse is rejected by its process creation token."""
+     pid = payload.get("process_id")
+diff --git a/core/atlas/tools/app_server.py b/core/atlas/tools/app_server.py
+index 5669c392..e16932e8 100644
+--- a/core/atlas/tools/app_server.py
++++ b/core/atlas/tools/app_server.py
+@@ -8,6 +8,7 @@ from __future__ import annotations
+ 
+ import asyncio
+ import json
++import logging
+ import os
+ import sys
+ import uuid
+@@ -55,6 +56,26 @@ def _conversation_metadata(conversation: dict[str, Any]) -> dict[str, Any]:
+     return {}
+ 
+ 
++def _resolve_session_working_directory(
++    workspace: str, value: Any, *, base_directory: str | None = None,
++) -> str:
++    """Resolve a local session cwd without allowing it to widen the trusted workspace."""
++    if workspace.strip().casefold().startswith("ssh://"):
++        raise ValueError("session working-directory changes require a local workspace")
++    root = Path(workspace).expanduser().resolve(strict=True)
++    candidate = Path(str(value or "")).expanduser()
++    if not candidate.is_absolute():
++        candidate = Path(base_directory or workspace) / candidate
++    candidate = candidate.resolve(strict=True)
++    if not root.is_dir() or not candidate.is_dir():
++        raise ValueError("working directory and workspace must be existing directories")
++    try:
++        candidate.relative_to(root)
++    except ValueError as exc:
++        raise ValueError("working directory must remain inside the trusted workspace") from exc
++    return str(candidate)
++
++
+ def _acp_config_options(permission_preset: str) -> list[dict[str, Any]]:
+     from atlas.approval_policy import PERMISSION_PRESETS
+ 
+@@ -102,19 +123,32 @@ async def serve_stdio(*, workspace: str | None = None,
+ 
+     memory = MemoryStore()
+     await memory.init()
++    local_execution = None
+     try:
+         from atlas.engine.session_migration import migrate_legacy_sessions
+ 
+         migration = await migrate_legacy_sessions(DATA_ROOT / "engine", memory)
+         if migration.status != "ready":
+             raise RuntimeError(migration.error or "Session migration is not ready")
+-        orchestrator = AgentOrchestrator(model_mgr=ModelManager(), memory=memory)
++        from atlas.tools.local_execution import LocalExecutionRuntime
++
++        local_execution = LocalExecutionRuntime()
++        orchestrator = AgentOrchestrator(
++            model_mgr=ModelManager(), memory=memory, local_execution=local_execution,
++        )
+         default_workspace = str(Path(workspace or Path.cwd()).expanduser().resolve())
+         sessions: dict[str, dict[str, Any]] = {}
+         active: dict[str, asyncio.Event] = {}
+         active_tasks: dict[str, asyncio.Task[None]] = {}
++        next_turn_workers: dict[str, asyncio.Task[None]] = {}
++        session_inboxes: dict[str, Any] = {}
+         pending_approvals: dict[str, asyncio.Future[str]] = {}
+         pending_inputs: dict[str, asyncio.Future[str]] = {}
++        app_server_instance_id = uuid.uuid4().hex
++        pending_request_meta: dict[str, dict[str, Any]] = {}
++        pending_request_by_wire_id: dict[tuple[str, str], str] = {}
++        active_task_request_ids: dict[str, str] = {}
++        task_cancel_responders: set[asyncio.Task[None]] = set()
+         pending_client_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
+         pending_acp_permissions: dict[str, asyncio.Future[dict[str, Any]]] = {}
+         # SDK session/settle barrier: `session/wait` registers one future per
+@@ -150,11 +184,241 @@ async def serve_stdio(*, workspace: str | None = None,
+         async def notify(method: str, params: dict[str, Any]) -> None:
+             await outgoing.put({"jsonrpc": "2.0", "method": method, "params": params})
+ 
++        async def record_pending_request(request_id: str, session_id: str,
++                                         kind: str, wire_id: str,
++                                         details: dict[str, Any]) -> None:
++            from atlas.engine.session_sync import append_session_event
++
++            session = sessions.get(session_id)
++            if session is None:
++                raise ValueError("unknown session")
++            conversation_id = str(session["conversation_id"])
++            await asyncio.to_thread(
++                append_session_event, DATA_ROOT / "engine", conversation_id,
++                "appserver.request", {
++                    "request_id": request_id, "session_id": session_id,
++                    "kind": kind, "state": "pending",
++                    "instance_id": app_server_instance_id,
++                },
++            )
++            pending_request_meta[request_id] = {
++                "request_id": request_id, "session_id": session_id,
++                "conversation_id": conversation_id, "kind": kind,
++                "state": "pending", "instance_id": app_server_instance_id,
++                "wire_id": wire_id, **details,
++            }
++            pending_request_by_wire_id[(kind, wire_id)] = request_id
++
++        async def set_pending_request_state(request_id: str, state: str) -> bool:
++            meta = pending_request_meta.get(request_id)
++            if meta is None or meta.get("state") != "pending":
++                return False
++            from atlas.engine.session_sync import append_session_event
++
++            await asyncio.to_thread(
++                append_session_event, DATA_ROOT / "engine", meta["conversation_id"],
++                "appserver.request", {
++                    "request_id": request_id, "session_id": meta["session_id"],
++                    "kind": meta["kind"], "state": state,
++                    "instance_id": app_server_instance_id,
++                },
++            )
++            meta["state"] = state
++            return True
++
++        async def list_pending_requests(session_id: str) -> list[dict[str, Any]]:
++            session = sessions.get(session_id)
++            if session is None:
++                raise ValueError("unknown session")
++            from atlas.engine.session_sync import append_session_event, read_session_events
++
++            conversation_id = str(session["conversation_id"])
++            rows: list[dict[str, Any]] = []
++            cursor = 0
++            for _ in range(10):
++                page = await asyncio.to_thread(
++                    read_session_events, DATA_ROOT / "engine", conversation_id,
++                    after_seq=cursor, limit=1000,
++                )
++                rows.extend(page)
++                if len(page) < 1000:
++                    break
++                cursor = int(page[-1]["seq"])
++            else:
++                raise ValueError("pending request history exceeds the bounded recovery scan")
++
++            latest: dict[str, dict[str, Any]] = {}
++            for row in rows:
++                if row.get("event_type") != "appserver.request":
++                    continue
++                payload = row.get("payload")
++                if not isinstance(payload, dict):
++                    continue
++                request_id = str(payload.get("request_id") or "")
++                if request_id:
++                    latest[request_id] = payload
++
++            result: list[dict[str, Any]] = []
++            for request_id, event in latest.items():
++                state = str(event.get("state") or "")
++                if state != "pending":
++                    if state == "invalidated":
++                        result.append({
++                            **event, "status": "invalidated",
++                        })
++                    continue
++                meta = pending_request_meta.get(request_id)
++                if (meta is None or meta.get("state") != "pending"
++                        or meta.get("instance_id") != app_server_instance_id
++                        or meta.get("session_id") != session_id):
++                    await asyncio.to_thread(
++                        append_session_event, DATA_ROOT / "engine", conversation_id,
++                        "appserver.request", {
++                            "request_id": request_id,
++                            "session_id": str(event.get("session_id") or session_id),
++                            "kind": str(event.get("kind") or "unknown"),
++                            "state": "invalidated",
++                            "instance_id": str(event.get("instance_id") or "unknown"),
++                        },
++                    )
++                    result.append({
++                        "request_id": request_id,
++                        "session_id": str(event.get("session_id") or session_id),
++                        "kind": str(event.get("kind") or "unknown"),
++                        "state": "invalidated",
++                        "status": "invalidated",
++                        "instance_id": str(event.get("instance_id") or "unknown"),
++                    })
++                else:
++                    result.append({
++                        **{
++                            key: value for key, value in meta.items()
++                            if key not in {"conversation_id", "wire_id", "instance_id", "state"}
++                        },
++                        "status": "pending",
++                    })
++            return result
++
++        async def record_task_state(session_id: str, request_id: str,
++                                    event_id: str, state: str,
++                                    run_id: str | None = None) -> None:
++            from atlas.engine.session_sync import append_session_event
++
++            session = sessions.get(session_id)
++            if session is None:
++                raise ValueError("unknown session")
++            payload: dict[str, Any] = {
++                "session_id": session_id, "request_id": request_id,
++                "event_id": event_id, "state": state,
++                "instance_id": app_server_instance_id,
++            }
++            if run_id:
++                payload["run_id"] = run_id
++            await asyncio.to_thread(
++                append_session_event, DATA_ROOT / "engine",
++                str(session["conversation_id"]), "appserver.task", payload,
++            )
++
++        async def get_task_status(session_id: str, request_id: str) -> dict[str, Any]:
++            session = sessions.get(session_id)
++            if session is None:
++                raise ValueError("unknown session")
++            from atlas.engine.session_sync import read_session_events
++
++            conversation_id = str(session["conversation_id"])
++            rows: list[dict[str, Any]] = []
++            cursor = 0
++            for _ in range(10):
++                page = await asyncio.to_thread(
++                    read_session_events, DATA_ROOT / "engine", conversation_id,
++                    after_seq=cursor, limit=1000,
++                )
++                rows.extend(page)
++                if len(page) < 1000:
++                    break
++                cursor = int(page[-1]["seq"])
++            else:
++                raise ValueError("task history exceeds the bounded recovery scan")
++
++            enqueued: dict[str, Any] | None = None
++            started: dict[str, Any] | None = None
++            consumed = False
++            inbox_cancelled = False
++            latest_state: dict[str, Any] | None = None
++            for row in rows:
++                payload = row.get("payload")
++                if not isinstance(payload, dict):
++                    continue
++                event_type = row.get("event_type")
++                if (event_type == "inbox.enqueued"
++                        and str(payload.get("request_id") or "") == request_id):
++                    enqueued = payload
++                elif (enqueued is not None
++                      and str(payload.get("event_id") or "") == str(enqueued.get("event_id") or "")):
++                    if event_type == "inbox.started":
++                        started = payload
++                    elif event_type == "inbox.consumed":
++                        consumed = True
++                    elif event_type == "inbox.cancelled":
++                        inbox_cancelled = True
++                if (event_type == "appserver.task"
++                        and str(payload.get("request_id") or "") == request_id):
++                    latest_state = payload
++            if enqueued is None:
++                raise ValueError("unknown task")
++
++            event_id = str(enqueued.get("event_id") or "")
++            run_id = str((latest_state or {}).get("run_id") or
++                         (started or {}).get("run_id") or "")
++            state = str((latest_state or {}).get("state") or "")
++            terminal = {"completed", "failed", "cancelled"}
++            if state in terminal:
++                status = state
++            elif inbox_cancelled:
++                status = "cancelled"
++            elif consumed:
++                status = "completed"
++            elif active_task_request_ids.get(session_id) == request_id:
++                status = state if state in {"running", "cancelling"} else "running"
++            elif started is not None:
++                status = "outcome_unknown"
++            else:
++                status = "queued"
++            return {
++                "session_id": session_id, "request_id": request_id,
++                "event_id": event_id, "run_id": run_id or None,
++                "status": status,
++            }
++
++        async def respond_after_task_cancel(rpc_id: Any, session_id: str,
++                                            request_id: str,
++                                            worker: asyncio.Task[None]) -> None:
++            try:
++                done, _pending = await asyncio.wait({worker}, timeout=30)
++                if done:
++                    try:
++                        worker.result()
++                    except Exception:
++                        pass
++                status = await get_task_status(session_id, request_id)
++                if not done and status["status"] not in {"cancelled", "failed", "completed"}:
++                    status["status"] = "cancelling"
++                await response(rpc_id, result=status)
++            except Exception:
++                await response(rpc_id, error={
++                    "code": -32603, "message": "task cancellation status is unavailable",
++                })
++
+         async def run_prompt(request_id: Any, session_id: str, prompt: str,
+                              session: dict[str, str], cancel: asyncio.Event,
+-                             *, acp: bool = False) -> None:
++                             *, acp: bool = False,
++                             defer_session_cleanup: bool = False,
++                             inbox_ack: tuple[Any, Any] | None = None,
++                             run_id: str | None = None) -> str:
+             text_parts: list[str] = []
++            pending_attempt_text: dict[str, list[str]] = {}
+             message_id = str(uuid.uuid4())
++            outcome = "failed"
+ 
+             async def approve(event_id: str, tool_name: str, args: dict[str, Any]) -> str:
+                 if acp:
+@@ -184,17 +448,29 @@ async def serve_stdio(*, workspace: str | None = None,
+                         pending_acp_permissions.pop(permission_id, None)
+                 future = asyncio.get_running_loop().create_future()
+                 pending_approvals[event_id] = future
+-                await notify("approval/request", {
+-                    "session_id": session_id, "event_id": event_id,
+-                    "tool_name": tool_name, "arguments": args,
+-                })
++                request_id = uuid.uuid4().hex
+                 try:
++                    await record_pending_request(
++                        request_id, session_id, "approval", event_id,
++                        {"tool_name": tool_name, "arguments": dict(args)},
++                    )
++                    await notify("approval/request", {
++                        "session_id": session_id, "event_id": event_id,
++                        "request_id": request_id,
++                        "tool_name": tool_name, "arguments": args,
++                    })
+                     result = await _wait_with_cancel(future, cancel)
+                     if cancel.is_set():
+                         return "deny"
+                     return str(result)
+                 finally:
++                    await set_pending_request_state(
++                        request_id,
++                        "invalidated" if not future.done() or cancel.is_set() else "resolved",
++                    )
+                     pending_approvals.pop(event_id, None)
++                    pending_request_meta.pop(request_id, None)
++                    pending_request_by_wire_id.pop(("approval", event_id), None)
+ 
+             async def ask_user(call_id: str, prompt_text: str,
+                                options: list[str] | None = None) -> str:
+@@ -202,21 +478,94 @@ async def serve_stdio(*, workspace: str | None = None,
+                     return "This ACP v1 adapter does not support free-text elicitation; use Atlas app-server input/request."
+                 future = asyncio.get_running_loop().create_future()
+                 pending_inputs[call_id] = future
+-                await notify("input/request", {
+-                    "session_id": session_id, "call_id": call_id,
+-                    "prompt": prompt_text, "options": options or [],
+-                })
++                request_id = uuid.uuid4().hex
+                 try:
++                    await record_pending_request(
++                        request_id, session_id, "input", call_id,
++                        {"prompt": prompt_text, "options": list(options or [])},
++                    )
++                    await notify("input/request", {
++                        "session_id": session_id, "call_id": call_id,
++                        "request_id": request_id,
++                        "prompt": prompt_text, "options": options or [],
++                    })
+                     answer = await _wait_with_cancel(future, cancel)
+                     if cancel.is_set():
+                         return ""
+                     return answer
+                 finally:
++                    await set_pending_request_state(
++                        request_id,
++                        "invalidated" if not future.done() or cancel.is_set() else "resolved",
++                    )
+                     pending_inputs.pop(call_id, None)
++                    pending_request_meta.pop(request_id, None)
++                    pending_request_by_wire_id.pop(("input", call_id), None)
++
++            async def set_working_directory_from_run(value: str | None) -> str:
++                if active.get(session_id) is not cancel or cancel.is_set():
++                    raise PermissionError("working-directory update is not owned by the active session run")
++                canonical_session = sessions.get(session_id)
++                if canonical_session is None:
++                    raise ValueError("working-directory session is no longer available")
++                workspace = str(canonical_session["workspace"])
++                previous = str(session.get("working_directory") or workspace)
++                recovered = False
++                if value is None:
++                    try:
++                        selected = _resolve_session_working_directory(
++                            workspace, previous, base_directory=previous,
++                        )
++                    except (OSError, ValueError):
++                        selected = _resolve_session_working_directory(
++                            workspace, workspace, base_directory=workspace,
++                        )
++                        recovered = selected != previous
++                else:
++                    selected = _resolve_session_working_directory(
++                        workspace, value, base_directory=previous,
++                    )
++                if selected == previous:
++                    return selected
++                conversation_id = str(canonical_session["conversation_id"])
++                conversation = await memory.get_conversation(conversation_id)
++                if conversation is None:
++                    raise ValueError("session conversation was not found")
++                metadata = _conversation_metadata(conversation)
++                app_server_metadata = metadata.get("app_server")
++                if not isinstance(app_server_metadata, dict):
++                    app_server_metadata = {}
++                app_server_metadata["workingDirectory"] = selected
++                metadata["app_server"] = app_server_metadata
++                if not await memory.update_conversation(conversation_id, metadata=metadata):
++                    raise RuntimeError("session working directory could not be persisted")
++                canonical_session["working_directory"] = selected
++                session["working_directory"] = selected
++                change = {
++                    "from": previous, "to": selected, "workspace": workspace,
++                    "applies_from_next_process": True, "recovered": recovered,
++                }
++                try:
++                    from atlas.config import DATA_ROOT
++                    from atlas.engine.session_sync import append_session_event
++
++                    append_session_event(
++                        DATA_ROOT / "engine", conversation_id,
++                        "working-directory/change", change,
++                    )
++                except Exception:
++                    pass
++                try:
++                    await notify("working-directory/change", {
++                        "session_id": session_id, **change,
++                    })
++                except Exception:
++                    pass
++                return selected
+ 
+             failure_detail = ""
+             fs_token = None
+-            if not acp:
++            if not acp and not defer_session_cleanup:
+                 # Whole-session running/idle transitions, DSH `session.status`
+                 # semantics: one notification per transition, run-scoped.
+                 await notify("session/status", {
+@@ -242,17 +591,25 @@ async def serve_stdio(*, workspace: str | None = None,
+                     ))
+                 async for event in orchestrator.run(
+                     prompt, session["conversation_id"], workspace=session["workspace"],
++                    working_directory=session.get("working_directory", session["workspace"]),
++                    working_directory_callback=set_working_directory_from_run,
++                    run_id=run_id,
+                     workspace_trusted=True, permission_mode=session.get("permission_mode", "ask_writes"),
+                     agent_preset_id=session.get("agent_preset_id", "default"),
+                     agent_preset_capabilities=session.get("agent_preset_capabilities"),
+                     permission_preset=session.get("permission_preset", "ask"),
+                     cancel_event=cancel, approval_callback=approve,
+                     input_callback=ask_user,
++                    inbox=inbox_ack[0] if inbox_ack is not None else None,
+                 ):
+                     if event.get("type") == "chunk":
+                         chunk = str(event.get("content") or "")
+-                        text_parts.append(chunk)
+-                        if acp and chunk:
++                        attempt_id = str(event.get("attempt_id") or "")
++                        if attempt_id:
++                            pending_attempt_text.setdefault(attempt_id, []).append(chunk)
++                        else:
++                            text_parts.append(chunk)
++                        if acp and chunk and not attempt_id:
+                             await notify("session/update", {
+                                 "sessionId": session_id,
+                                 "update": {
+@@ -261,6 +618,22 @@ async def serve_stdio(*, workspace: str | None = None,
+                                     "content": {"type": "text", "text": chunk},
+                                 },
+                             })
++                    elif event.get("type") == "message.rollback":
++                        pending_attempt_text.pop(str(event.get("attempt_id") or ""), None)
++                    elif event.get("type") == "model_attempt_committed":
++                        attempt_id = str(event.get("attempt_id") or "")
++                        committed_text = "".join(pending_attempt_text.pop(attempt_id, []))
++                        if committed_text:
++                            text_parts.append(committed_text)
++                            if acp:
++                                await notify("session/update", {
++                                    "sessionId": session_id,
++                                    "update": {
++                                        "sessionUpdate": "agent_message_chunk",
++                                        "messageId": message_id,
++                                        "content": {"type": "text", "text": committed_text},
++                                    },
++                                })
+                     elif acp and event.get("type") == "tool_call":
+                         await notify("session/update", {
+                             "sessionId": session_id,
+@@ -294,34 +667,160 @@ async def serve_stdio(*, workspace: str | None = None,
+                         })
+                     elif event.get("type") == "error":
+                         failure_detail = str(event.get("detail") or "Agent run failed.")
+-                    if not acp:
++                    if not acp and event.get("type") != "model_attempt_committed":
+                         await notify("session/event", {"session_id": session_id, "event": event})
++                outcome = "cancelled" if cancel.is_set() else "failed" if failure_detail else "completed"
++                if outcome == "completed" and inbox_ack is not None:
++                    inbox, inbox_item = inbox_ack
++                    try:
++                        if not await inbox.ack(inbox_item.event_id, lane=inbox_item.lane):
++                            raise RuntimeError("queued item no longer exists")
++                    except Exception:
++                        outcome = "failed"
++                        failure_detail = "Queued work finished but its durable acknowledgement could not be stored."
++                        await notify("session/event", {
++                            "session_id": session_id,
++                            "event": {"type": "error", "category": "inbox_ack_failed"},
++                        })
+                 if acp:
+                     if failure_detail:
+-                        await response(request_id, result={
+-                            "stopReason": "error",
+-                            "error": {"code": -32010, "message": failure_detail},
+-                        })
++                        if request_id is not None:
++                            await response(request_id, result={
++                                "stopReason": "error",
++                                "error": {"code": -32010, "message": failure_detail},
++                            })
+                     else:
++                        if request_id is not None:
++                            await response(request_id, result={
++                                "stopReason": "cancelled" if cancel.is_set() else "end_turn",
++                            })
++                else:
++                    if request_id is not None:
+                         await response(request_id, result={
+-                            "stopReason": "cancelled" if cancel.is_set() else "end_turn",
++                            "session_id": session_id, "text": "".join(text_parts),
++                            "status": outcome,
+                         })
++            except Exception as exc:  # keep the JSON-RPC process alive across run failures
++                outcome = "failed"
++                if request_id is not None:
++                    await response(request_id, error={"code": -32010, "message": f"{type(exc).__name__}: {exc}"})
+                 else:
+-                    await response(request_id, result={
+-                        "session_id": session_id, "text": "".join(text_parts),
+-                        "status": "cancelled" if cancel.is_set() else "failed" if failure_detail else "completed",
++                    await notify("session/event", {
++                        "session_id": session_id,
++                        "event": {"type": "error", "category": "queued_run_failed"},
+                     })
+-            except Exception as exc:  # keep the JSON-RPC process alive across run failures
+-                await response(request_id, error={"code": -32010, "message": f"{type(exc).__name__}: {exc}"})
+             finally:
+                 if fs_token is not None:
+                     reset_current(fs_token)
+-                if not acp:
++                if inbox_ack is not None:
++                    inbox_ack[0].set_current_turn_event(None)
++                if not acp and not defer_session_cleanup:
+                     await notify("session/status", {
+                         "session_id": session_id, "status": "idle",
+                     })
+-                active.pop(session_id, None)
+-                active_tasks.pop(session_id, None)
++                if not defer_session_cleanup:
++                    active.pop(session_id, None)
++                    active_tasks.pop(session_id, None)
++                    for waiter in pending_session_waits.pop(session_id, []):
++                        if not waiter.done():
++                            waiter.set_result(None)
++                    if session_id in sessions:
++                        schedule_next_turn_worker(session_id)
++
++            return outcome
++
++        def schedule_next_turn_worker(session_id: str) -> None:
++            if session_id not in sessions:
++                return
++            current = active_tasks.get(session_id)
++            if current is not None and not current.done():
++                return
++            worker = next_turn_workers.get(session_id)
++            if worker is not None and not worker.done():
++                return
++            task = asyncio.create_task(
++                drain_next_turn_inbox(session_id),
++                name=f"atlas-inbox-worker:{session_id[:12]}",
++            )
++            next_turn_workers[session_id] = task
++            active_tasks[session_id] = task
++
++        def durable_inbox_for_session(session_id: str) -> Any:
++            session = sessions.get(session_id)
++            if session is None:
++                raise ValueError("unknown session")
++            inbox = session_inboxes.get(session_id)
++            if inbox is None:
++                from atlas.engine.kernel.inbox import DurableInbox
++
++                inbox = DurableInbox(
++                    DATA_ROOT / "engine", str(session["conversation_id"]),
++                )
++                session_inboxes[session_id] = inbox
++            return inbox
++
++        async def drain_next_turn_inbox(session_id: str) -> None:
++            cancel = asyncio.Event()
++            active[session_id] = cancel
++            inbox = durable_inbox_for_session(session_id)
++            current_task = asyncio.current_task()
++            worker_running = False
++            try:
++                while session_id in sessions and not cancel.is_set():
++                    item = await inbox.peek("next-turn")
++                    if item is None:
++                        break
++                    if item.started_run_id:
++                        await notify("session/event", {
++                            "session_id": session_id,
++                            "event": {
++                                "type": "queue.recovery_required",
++                                "event_id": item.event_id,
++                                "run_id": item.started_run_id,
++                            },
++                        })
++                        break
++                    run_id = uuid.uuid4().hex
++                    if not await inbox.mark_started(
++                        item.event_id, lane="next-turn", run_id=run_id,
++                    ):
++                        break
++                    if item.request_id:
++                        active_task_request_ids[session_id] = item.request_id
++                        await record_task_state(
++                            session_id, item.request_id, item.event_id,
++                            "running", run_id,
++                        )
++                    if not worker_running:
++                        await notify("session/status", {
++                            "session_id": session_id, "status": "running",
++                        })
++                        worker_running = True
++                    inbox.set_current_turn_event(item.event_id)
++                    outcome = await run_prompt(
++                        None, session_id, item.content, dict(sessions[session_id]), cancel,
++                        inbox_ack=(inbox, item), run_id=run_id,
++                        defer_session_cleanup=True,
++                    )
++                    if item.request_id:
++                        await record_task_state(
++                            session_id, item.request_id, item.event_id,
++                            outcome, run_id,
++                        )
++                    if outcome != "completed":
++                        break
++            finally:
++                if worker_running:
++                    await notify("session/status", {
++                        "session_id": session_id, "status": "idle",
++                    })
++                if active.get(session_id) is cancel:
++                    active.pop(session_id, None)
++                if active_tasks.get(session_id) is current_task:
++                    active_tasks.pop(session_id, None)
++                if next_turn_workers.get(session_id) is current_task:
++                    next_turn_workers.pop(session_id, None)
++                active_task_request_ids.pop(session_id, None)
+                 for waiter in pending_session_waits.pop(session_id, []):
+                     if not waiter.done():
+                         waiter.set_result(None)
+@@ -342,9 +841,14 @@ async def serve_stdio(*, workspace: str | None = None,
+                     method in {"session/prompt", "session/cancel", "session/close"}
+                     and "sessionId" in params
+                 )
+-                if method in {"session/start", "session/new", "session/list", "session/resume",
++                if method in {"session/start", "session/new", "session/list", "session/resume", "session/enqueue",
++                              "session/retry_recovery",
++                              "session/events",
++                              "session/pending_requests",
++                              "session/task_status", "session/task_cancel",
+                               "session/set_config_option", "session/prompt", "session/cancel",
+-                              "session/close", "session/wait", "shutdown"}:
++                              "session/close", "session/wait", "session/working-directory/get",
++                              "session/working-directory/set", "shutdown"}:
+                     if (protocol == "acp") != acp_wire:
+                         await response(request_id, error={
+                             "code": -32601,
+@@ -436,8 +940,45 @@ async def serve_stdio(*, workspace: str | None = None,
+                     )
+                     session_id = conversation_id if acp else str(uuid.uuid4())
+                     await memory.save_conversation_metadata(conversation_id, title_hint="Atlas app-server")
++                    conversation = await memory.get_conversation(conversation_id)
++                    metadata = _conversation_metadata(conversation or {})
++                    working_directory = cwd
++                    if not acp:
++                        stored_workspace = str((conversation or {}).get("workspace") or "")
++                        if stored_workspace:
++                            try:
++                                stored_root = str(Path(stored_workspace).expanduser().resolve(strict=True))
++                            except OSError:
++                                stored_root = ""
++                            if (not stored_root or not Path(stored_root).is_dir()
++                                    or os.path.normcase(stored_root) != os.path.normcase(cwd)):
++                                await response(request_id, error={
++                                    "code": -32602,
++                                    "message": "session/start workspace must match the existing trusted workspace",
++                                })
++                                continue
++                        app_server_metadata = metadata.get("app_server")
++                        if isinstance(app_server_metadata, dict):
++                            try:
++                                working_directory = _resolve_session_working_directory(
++                                    cwd, app_server_metadata.get("workingDirectory"),
++                                )
++                            except (OSError, ValueError, TypeError):
++                                working_directory = cwd
++                        if not isinstance(app_server_metadata, dict):
++                            app_server_metadata = {}
++                        app_server_metadata["workingDirectory"] = working_directory
++                        metadata["app_server"] = app_server_metadata
++                        if not await memory.update_conversation(
++                            conversation_id, workspace=cwd, metadata=metadata,
++                        ):
++                            await response(request_id, error={
++                                "code": -32603, "message": "session working directory could not be persisted",
++                            })
++                            continue
+                     sessions[session_id] = {
+                         "workspace": cwd, "conversation_id": conversation_id,
++                        "working_directory": working_directory,
+                         "agent_preset_id": agent_preset_id,
+                         "agent_preset_capabilities": preset_capabilities,
+                         "permission_preset": permission_preset,
+@@ -445,7 +986,6 @@ async def serve_stdio(*, workspace: str | None = None,
+                     }
+                     session_fs[session_id] = dict(session_fs.get("__initialize__", {})) if acp else {}
+                     if acp:
+-                        conversation = await memory.get_conversation(conversation_id)
+                         metadata = _conversation_metadata(conversation or {})
+                         metadata["acp"] = {
+                             "agentPresetId": agent_preset_id,
+@@ -464,6 +1004,311 @@ async def serve_stdio(*, workspace: str | None = None,
+                         await response(request_id, result={
+                             "session_id": session_id, "conversation_id": conversation_id, "workspace": cwd,
+                         })
++                elif method == "session/working-directory/get":
++                    session_id = str(params.get("session_id") or "")
++                    session = sessions.get(session_id)
++                    if session is None:
++                        await response(request_id, error={
++                            "code": -32002, "message": "unknown session",
++                        })
++                    else:
++                        await response(request_id, result={
++                            "working_directory": str(session.get("working_directory") or session["workspace"]),
++                            "workspace": str(session["workspace"]),
++                        })
++                elif method == "session/working-directory/set":
++                    session_id = str(params.get("session_id") or "")
++                    session = sessions.get(session_id)
++                    if session is None:
++                        await response(request_id, error={
++                            "code": -32002, "message": "unknown session",
++                        })
++                        continue
++                    task = active_tasks.get(session_id)
++                    if (session_id in active or (task is not None and not task.done())
++                            or session_id in next_turn_workers):
++                        await response(request_id, error={
++                            "code": -32011, "message": "working directory cannot change during an active session run",
++                        })
++                        continue
++                    try:
++                        selected = _resolve_session_working_directory(
++                            str(session["workspace"]), params.get("working_directory"),
++                            base_directory=str(session.get("working_directory") or session["workspace"]),
++                        )
++                    except (OSError, ValueError, TypeError) as exc:
++                        await response(request_id, error={"code": -32602, "message": str(exc)})
++                        continue
++                    conversation = await memory.get_conversation(str(session["conversation_id"]))
++                    if conversation is None:
++                        await response(request_id, error={
++                            "code": -32002, "message": "session conversation was not found",
++                        })
++                        continue
++                    metadata = _conversation_metadata(conversation)
++                    app_server_metadata = metadata.get("app_server")
++                    if not isinstance(app_server_metadata, dict):
++                        app_server_metadata = {}
++                    previous = str(session.get("working_directory") or session["workspace"])
++                    app_server_metadata["workingDirectory"] = selected
++                    metadata["app_server"] = app_server_metadata
++                    if not await memory.update_conversation(
++                        str(session["conversation_id"]), metadata=metadata,
++                    ):
++                        await response(request_id, error={
++                            "code": -32603, "message": "session working directory could not be persisted",
++                        })
++                        continue
++                    session["working_directory"] = selected
++                    event_mirror_error = ""
++                    try:
++                        from atlas.config import DATA_ROOT
++                        from atlas.engine.session_sync import append_session_event
++
++                        append_session_event(DATA_ROOT / "engine", str(session["conversation_id"]),
++                                             "working-directory/change", {
++                            "from": previous, "to": selected,
++                            "workspace": str(session["workspace"]),
++                            "applies_from_next_run": True,
++                        })
++                    except Exception as exc:
++                        event_mirror_error = str(exc)
++                    result = {
++                        "working_directory": selected,
++                        "workspace": str(session["workspace"]),
++                    }
++                    if event_mirror_error:
++                        result["event_mirror_error"] = event_mirror_error
++                    await response(request_id, result=result)
++                elif method == "session/enqueue":
++                    session_id = str(params.get("session_id") or "")
++                    request_id_value = str(params.get("request_id") or "").strip()
++                    prompt = params.get("prompt")
++                    if session_id not in sessions or not isinstance(prompt, str) or not prompt.strip():
++                        await response(request_id, error={
++                            "code": -32602, "message": "session_id and non-empty prompt are required",
++                        })
++                        continue
++                    if not request_id_value or len(request_id_value) > 256:
++                        await response(request_id, error={
++                            "code": -32602, "message": "request_id must be non-empty and at most 256 characters",
++                        })
++                        continue
++                    conversation_id = str(sessions[session_id]["conversation_id"])
++                    try:
++                        inbox = durable_inbox_for_session(session_id)
++                        event_id, _created = await inbox.inject_with_receipt(
++                            prompt, lane="next-turn", request_id=request_id_value,
++                        )
++                    except ValueError as exc:
++                        await response(request_id, error={"code": -32012, "message": str(exc)})
++                        continue
++                    except Exception:
++                        # Do not acknowledge an enqueue whose durable receipt could not
++                        # be written, but keep the JSON-RPC process available for a
++                        # retry with the same request id.
++                        await response(request_id, error={
++                            "code": -32603, "message": "enqueue could not be durably recorded",
++                        })
++                        continue
++                    try:
++                        task = await get_task_status(session_id, request_id_value)
++                        if task["status"] == "queued":
++                            await record_task_state(
++                                session_id, request_id_value, event_id, "queued",
++                            )
++                    except Exception:
++                        logging.getLogger(__name__).exception(
++                            "app-server failed to persist queued task state",
++                        )
++                        await response(request_id, error={
++                            "code": -32603, "message": "queued task state could not be durably recorded",
++                        })
++                        continue
++                    await response(request_id, result={
++                        "session_id": session_id,
++                        "conversation_id": conversation_id,
++                        "request_id": request_id_value,
++                        "event_id": event_id,
++                        "status": "queued",
++                    })
++                    if task["status"] == "queued":
++                        schedule_next_turn_worker(session_id)
++                elif method == "session/retry_recovery":
++                    session_id = str(params.get("session_id") or "")
++                    session = sessions.get(session_id)
++                    if session is None:
++                        await response(request_id, error={
++                            "code": -32002, "message": "unknown session",
++                        })
++                        continue
++                    from atlas.engine.session_sync import (
++                        classify_retry_recovery, read_session_events,
++                    )
++
++                    conversation_id = str(session["conversation_id"])
++                    rows: list[dict[str, Any]] = []
++                    cursor = 0
++                    while True:
++                        page = await asyncio.to_thread(
++                            read_session_events, DATA_ROOT / "engine", conversation_id,
++                            after_seq=cursor, limit=1000,
++                        )
++                        if not page:
++                            break
++                        rows.extend(page)
++                        cursor = int(page[-1].get("seq") or cursor)
++                        if len(page) < 1000:
++                            break
++                    attempt_rows = [
++                        row for row in rows
++                        if row.get("event_type") == "model/attempt"
++                        and isinstance(row.get("payload"), dict)
++                    ]
++                    latest_run_id = next((
++                        str(row["payload"].get("run_id") or "")
++                        for row in reversed(attempt_rows)
++                        if str(row["payload"].get("run_id") or "")
++                    ), "")
++                    recovery = (
++                        classify_retry_recovery(rows, run_id=latest_run_id)
++                        if latest_run_id else {"state": "none", "run_id": ""}
++                    )
++                    recommended_action = {
++                        "none": "none",
++                        "settled": "none",
++                        "retry_scheduled_not_started": "explicit_resume_required",
++                        "outcome_unknown": "do_not_replay",
++                        "state_unknown": "manual_review",
++                    }.get(str(recovery.get("state")), "manual_review")
++                    await response(request_id, result={
++                        "session_id": session_id,
++                        "conversation_id": conversation_id,
++                        **recovery,
++                        "recommended_action": recommended_action,
++                    })
++                elif method == "session/events":
++                    session_id = str(params.get("session_id") or "")
++                    session = sessions.get(session_id)
++                    if session is None:
++                        await response(request_id, error={
++                            "code": -32002, "message": "unknown session",
++                        })
++                        continue
++                    after_seq = params.get("after_seq", 0)
++                    limit = params.get("limit", 100)
++                    if (type(after_seq) is not int or after_seq < 0
++                            or type(limit) is not int or not 1 <= limit <= 1000):
++                        await response(request_id, error={
++                            "code": -32602,
++                            "message": "session/events after_seq or limit is invalid",
++                        })
++                        continue
++                    from atlas.engine.session_sync import read_session_events
++
++                    conversation_id = str(session["conversation_id"])
++                    rows = await asyncio.to_thread(
++                        read_session_events, DATA_ROOT / "engine", conversation_id,
++                        after_seq=after_seq, limit=limit + 1,
++                    )
++                    has_more = len(rows) > limit
++                    page = rows[:limit]
++                    next_cursor = int(page[-1]["seq"]) if has_more and page else None
++                    await response(request_id, result={
++                        "session_id": session_id,
++                        "conversation_id": conversation_id,
++                        "after_seq": after_seq,
++                        "events": page,
++                        "next_cursor": next_cursor,
++                    })
++                elif method == "session/pending_requests":
++                    session_id = str(params.get("session_id") or "")
++                    try:
++                        requests = await list_pending_requests(session_id)
++                    except ValueError as exc:
++                        await response(request_id, error={
++                            "code": -32002 if str(exc) == "unknown session" else -32003,
++                            "message": str(exc),
++                        })
++                        continue
++                    await response(request_id, result={
++                        "session_id": session_id, "requests": requests,
++                    })
++                elif method == "session/task_status":
++                    session_id = str(params.get("session_id") or "")
++                    task_id = str(params.get("request_id") or "").strip()
++                    if not task_id:
++                        await response(request_id, error={
++                            "code": -32602, "message": "request_id must be non-empty",
++                        })
++                        continue
++                    try:
++                        task = await get_task_status(session_id, task_id)
++                    except ValueError as exc:
++                        await response(request_id, error={"code": -32002, "message": str(exc)})
++                        continue
++                    await response(request_id, result=task)
++                elif method == "session/task_cancel":
++                    session_id = str(params.get("session_id") or "")
++                    task_id = str(params.get("request_id") or "").strip()
++                    if not task_id:
++                        await response(request_id, error={
++                            "code": -32602, "message": "request_id must be non-empty",
++                        })
++                        continue
++                    try:
++                        task = await get_task_status(session_id, task_id)
++                    except ValueError as exc:
++                        await response(request_id, error={"code": -32002, "message": str(exc)})
++                        continue
++                    if task["status"] == "completed":
++                        await response(request_id, result={**task, "status": "too_late"})
++                        continue
++                    if task["status"] in {"failed", "cancelled", "outcome_unknown"}:
++                        await response(request_id, result=task)
++                        continue
++                    if task["status"] == "queued":
++                        inbox = durable_inbox_for_session(session_id)
++                        if await inbox.cancel(task["event_id"], lane="next-turn"):
++                            await record_task_state(
++                                session_id, task_id, task["event_id"], "cancelled",
++                            )
++                            await response(request_id, result={**task, "status": "cancelled"})
++                            continue
++                        task = await get_task_status(session_id, task_id)
++                        if task["status"] in {"failed", "cancelled", "completed", "outcome_unknown"}:
++                            if task["status"] == "completed":
++                                task["status"] = "too_late"
++                            await response(request_id, result=task)
++                            continue
++                    cancel_event = active.get(session_id)
++                    worker = next_turn_workers.get(session_id)
++                    if (active_task_request_ids.get(session_id) != task_id
++                            or cancel_event is None or worker is None):
++                        task = await get_task_status(session_id, task_id)
++                        if task["status"] == "completed":
++                            task["status"] = "too_late"
++                        elif task["status"] in {"running", "cancelling"}:
++                            task["status"] = "outcome_unknown"
++                        await response(request_id, result=task)
++                        continue
++                    try:
++                        await record_task_state(
++                            session_id, task_id, task["event_id"],
++                            "cancelling", task.get("run_id"),
++                        )
++                    except Exception:
++                        await response(request_id, error={
++                            "code": -32603, "message": "task cancellation intent could not be persisted",
++                        })
++                        continue
++                    cancel_event.set()
++                    responder = asyncio.create_task(
++                        respond_after_task_cancel(request_id, session_id, task_id, worker),
++                        name=f"atlas-task-cancel-wait:{task_id[:12]}",
++                    )
++                    task_cancel_responders.add(responder)
++                    responder.add_done_callback(task_cancel_responders.discard)
+                 elif method == "session/list":
+                     try:
+                         limit = max(1, min(100, int(params.get("limit", 50))))
+@@ -619,20 +1464,46 @@ async def serve_stdio(*, workspace: str | None = None,
+                         if request_id is not None:
+                             await response(request_id, result={"cancelled": True})
+                 elif method == "approval/response":
+-                    event_id = str(params.get("event_id") or "")
++                    request_id_value = str(params.get("request_id") or "")
++                    meta = pending_request_meta.get(request_id_value)
++                    event_id = str(meta.get("wire_id") or "") if (
++                        meta and meta.get("kind") == "approval"
++                    ) else str(params.get("event_id") or "")
+                     future = pending_approvals.get(event_id)
+                     choice = "allow" if params.get("choice") == "allow" else "deny"
+                     if future is None or future.done():
+                         await response(request_id, error={"code": -32602, "message": "approval request is no longer pending"})
+                     else:
++                        durable_id = request_id_value or pending_request_by_wire_id.get(("approval", event_id), "")
++                        try:
++                            if durable_id:
++                                await set_pending_request_state(durable_id, "resolved")
++                        except Exception:
++                            await response(request_id, error={
++                                "code": -32603, "message": "approval request could not be durably recorded",
++                            })
++                            continue
+                         future.set_result(choice)
+                         await response(request_id, result={"accepted": True})
+                 elif method == "input/response":
+-                    call_id = str(params.get("call_id") or "")
++                    request_id_value = str(params.get("request_id") or "")
++                    meta = pending_request_meta.get(request_id_value)
++                    call_id = str(meta.get("wire_id") or "") if (
++                        meta and meta.get("kind") == "input"
++                    ) else str(params.get("call_id") or "")
+                     future = pending_inputs.get(call_id)
+                     if future is None or future.done():
+                         await response(request_id, error={"code": -32602, "message": "input request is no longer pending"})
+                     else:
++                        durable_id = request_id_value or pending_request_by_wire_id.get(("input", call_id), "")
++                        try:
++                            if durable_id:
++                                await set_pending_request_state(durable_id, "resolved")
++                        except Exception:
++                            await response(request_id, error={
++                                "code": -32603, "message": "input request could not be durably recorded",
++                            })
++                            continue
+                         future.set_result(str(params.get("value") or ""))
+                         await response(request_id, result={"accepted": True})
+                 elif method == "session/wait":
+@@ -693,6 +1564,7 @@ async def serve_stdio(*, workspace: str | None = None,
+                         event.set()
+                     sessions.pop(session_id, None)
+                     session_fs.pop(session_id, None)
++                    session_inboxes.pop(session_id, None)
+                     await response(request_id, result={} if acp else {"closed": True})
+                 else:
+                     await response(request_id, error={"code": -32601, "message": f"method not found: {method}"})
+@@ -701,6 +1573,11 @@ async def serve_stdio(*, workspace: str | None = None,
+ 
+         for event in active.values():
+             event.set()
++        for pending_id, meta in list(pending_request_meta.items()):
++            try:
++                await set_pending_request_state(pending_id, "invalidated")
++            except Exception:
++                pass
+         for future in pending_approvals.values():
+             if not future.done():
+                 future.set_result("deny")
+@@ -719,9 +1596,15 @@ async def serve_stdio(*, workspace: str | None = None,
+                     future.set_result(None)
+         if active_tasks:
+             await asyncio.gather(*list(active_tasks.values()), return_exceptions=True)
++        if task_cancel_responders:
++            await asyncio.gather(*list(task_cancel_responders), return_exceptions=True)
+         if wait_responders:
+             await asyncio.gather(*list(wait_responders), return_exceptions=True)
+         await outgoing.put(None)
+         await writer
+     finally:
+-        await memory.close()
++        try:
++            if local_execution is not None:
++                await local_execution.shutdown()
++        finally:
++            await memory.close()
+diff --git a/core/tests/fakes/fake_llm_provider.py b/core/tests/fakes/fake_llm_provider.py
+index 348e1ebe..ce5ed483 100644
+--- a/core/tests/fakes/fake_llm_provider.py
++++ b/core/tests/fakes/fake_llm_provider.py
+@@ -92,6 +92,7 @@ class DropMidStream:
+ 
+     text: str = "partial answer that never finishes"
+     after_chars: int = 12
++    partial_tool_calls: list[dict[str, str]] = field(default_factory=list)
+ 
+ 
+ @dataclass
+@@ -102,6 +103,7 @@ class StallMidStream:
+     text: str = "partial answer that stalls"
+     after_chars: int = 8
+     seconds: float = 3600.0
++    text_chunk_sent: threading.Event | None = None
+ 
+ 
+ @dataclass
+@@ -389,6 +391,8 @@ def _handler_for(server: FakeLLMServer) -> type[BaseHTTPRequestHandler]:
+                 self._start_sse()
+                 self._sse(_chunk({"role": "assistant", "content": ""}))
+                 self._sse(_chunk({"content": resp.text[: resp.after_chars]}))
++                if resp.text_chunk_sent is not None:
++                    resp.text_chunk_sent.set()
+                 server._stop.wait(resp.seconds)
+                 self.close_connection = True
+                 return
+@@ -396,6 +400,17 @@ def _handler_for(server: FakeLLMServer) -> type[BaseHTTPRequestHandler]:
+                 self._start_sse()
+                 self._sse(_chunk({"role": "assistant", "content": ""}))
+                 self._sse(_chunk({"content": resp.text[: resp.after_chars]}))
++                for index, call in enumerate(resp.partial_tool_calls):
++                    self._sse(_chunk({"tool_calls": [{
++                        "index": index,
++                        "id": str(call.get("id") or f"partial-{index}"),
++                        "type": "function",
++                        "function": {"name": str(call.get("name") or ""), "arguments": ""},
++                    }]}))
++                    self._sse(_chunk({"tool_calls": [{
++                        "index": index,
++                        "function": {"arguments": str(call.get("arguments") or "")},
++                    }]}))
+                 self.wfile.flush()
+                 self.close_connection = True
+                 return
+diff --git a/core/tests/test_app_server_acp.py b/core/tests/test_app_server_acp.py
+index 11bf945c..5c2d14fc 100644
+--- a/core/tests/test_app_server_acp.py
++++ b/core/tests/test_app_server_acp.py
+@@ -2,17 +2,177 @@
+ 
+ import io
+ import json
++import hashlib
+ import queue
++import subprocess
++import sys
++import tempfile
++import threading
++import time
++from pathlib import Path
+ from types import SimpleNamespace
++from unittest.mock import AsyncMock
+ 
+ import pytest
+ 
+ from atlas.tools import app_server
++import atlas.tools.local_execution as _local_execution
++from tests.fakes.fake_llm_provider import (
++    DropMidStream, FakeLLMServer, StallMidStream, Text, ToolCall, write_atlas_home,
++)
++from tests.test_engine_model_wiring import _ProviderKeyManager
+ 
+ 
+ pytestmark = pytest.mark.unit
+ 
+ 
++def test_real_acp_subprocess_cancel_discards_partial_attempt_and_persists_audit(tmp_path):
++    from tests.test_app_server_sdk_subprocess_attempts import _isolated_app_server_env
++
++    old_sent = threading.Event()
++    with FakeLLMServer([
++        StallMidStream("OLD answer", after_chars=3, seconds=30, text_chunk_sent=old_sent),
++    ]) as fake:
++        env = _isolated_app_server_env(tmp_path, fake)
++        tokenizer_cache = Path(tempfile.gettempdir()) / "data-gym-cache"
++        tokenizer_asset = tokenizer_cache / hashlib.sha1(
++            b"https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken",
++        ).hexdigest()
++        if not tokenizer_asset.is_file():
++            pytest.skip("offline ACP cancellation probe requires the pre-cached public cl100k tokenizer asset")
++        env["TIKTOKEN_CACHE_DIR"] = str(tokenizer_cache)
++
++        workspace = tmp_path / "workspace"
++        workspace.mkdir()
++        process = subprocess.Popen(
++            [sys.executable, "-m", "atlas.cli", "acp", "--workspace", str(workspace)],
++            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
++            text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
++        )
++        messages: list[dict] = []
++        messages_lock = threading.Lock()
++        received: queue.Queue[dict | None] = queue.Queue()
++        stderr_tail: list[str] = []
++
++        def read_stdout():
++            assert process.stdout is not None
++            for line in process.stdout:
++                try:
++                    message = json.loads(line)
++                except json.JSONDecodeError:
++                    continue
++                with messages_lock:
++                    messages.append(message)
++                received.put(message)
++            received.put(None)
++
++        def read_stderr():
++            assert process.stderr is not None
++            for line in process.stderr:
++                stderr_tail.append(line.rstrip())
++                del stderr_tail[:-40]
++
++        stdout_thread = threading.Thread(target=read_stdout, name="acp-test-stdout", daemon=True)
++        stderr_thread = threading.Thread(target=read_stderr, name="acp-test-stderr", daemon=True)
++        stdout_thread.start()
++        stderr_thread.start()
++
++        def send(message):
++            assert process.stdin is not None
++            process.stdin.write(json.dumps(message) + "\n")
++            process.stdin.flush()
++
++        def wait_for_response(request_id: int, timeout: float = 30) -> dict:
++            deadline = time.monotonic() + timeout
++            while time.monotonic() < deadline:
++                try:
++                    message = received.get(timeout=max(0.01, deadline - time.monotonic()))
++                except queue.Empty:
++                    break
++                if message is None:
++                    break
++                if message.get("id") == request_id:
++                    return message
++            raise AssertionError({
++                "missing_response_id": request_id,
++                "messages": messages[-30:],
++                "stderr_tail": stderr_tail[-20:],
++                "process_exit": process.poll(),
++            })
++
++        session_id = None
++        natural_exit = False
++        try:
++            send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": 1}})
++            assert "result" in wait_for_response(1)
++            send({"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {"cwd": str(workspace)}})
++            session_result = wait_for_response(2)["result"]
++            session_id = session_result["sessionId"]
++            send({
++                "jsonrpc": "2.0", "id": 3, "method": "session/prompt",
++                "params": {"sessionId": session_id, "prompt": [{"type": "text", "text": "cancel after OLD starts"}]},
++            })
++            assert old_sent.wait(timeout=20), {
++                "provider_requests": len(fake.main_requests()),
++                "process_exit": process.poll(),
++                "stderr_tail": stderr_tail[-20:],
++            }
++            assert len(fake.main_requests()) == 1
++            # The fixture signal means the provider flushed the SSE bytes. Give the
++            # real HTTP consumer one bounded scheduler turn to deliver that chunk
++            # into the model attempt; the persisted partial_text assertion below is
++            # the authoritative check that it was actually consumed before cancel.
++            threading.Event().wait(0.1)
++            send({"jsonrpc": "2.0", "id": 4, "method": "session/cancel", "params": {"sessionId": session_id}})
++            cancel_response = wait_for_response(4)
++            assert cancel_response.get("result", {}).get("cancelled") is True
++            prompt_response = wait_for_response(3)
++            assert prompt_response["result"]["stopReason"] == "cancelled"
++            process.stdin.close()
++            assert process.wait(timeout=15) == 0
++            natural_exit = True
++        finally:
++            if process.poll() is None:
++                if process.stdin and not process.stdin.closed:
++                    process.stdin.close()
++                try:
++                    process.terminate()
++                    process.wait(timeout=3)
++                except subprocess.TimeoutExpired:
++                    process.kill()
++                    process.wait(timeout=3)
++            stdout_thread.join(timeout=2)
++            stderr_thread.join(timeout=2)
++
++        assert natural_exit, "ACP subprocess did not exit naturally after stdin EOF"
++        with messages_lock:
++            observed = list(messages)
++        old_updates = [
++            message for message in observed
++            if message.get("method") == "session/update"
++            and "OLD" in str(((message.get("params") or {}).get("update") or {}).get("content") or "")
++        ]
++        assert old_updates == []
++        assert len(fake.main_requests()) == 1
++
++        from hermes_state import SessionDB
++
++        with SessionDB(db_path=tmp_path / "atlas" / "engine" / "state.db") as db:
++            transcript = db.get_messages_as_conversation(session_id)
++            audit = db.list_session_events(session_id, after_seq=0, limit=1000)
++        assistant_text = [str(row.get("content") or "") for row in transcript if row.get("role") == "assistant"]
++        attempt_rows = [row for row in audit if row.get("event_type") == "model/attempt"]
++        assert all("OLD" not in text for text in assistant_text)
++        assert any(
++            row["payload"].get("status") == "discarded"
++            and row["payload"].get("category") == "cancelled"
++            and str(row["payload"].get("partial_text") or "").startswith("OLD")
++            for row in attempt_rows
++        ), [{key: (row.get("payload") or {}).get(key) for key in
++             ("status", "category", "partial_text", "text", "output", "attempt_id")}
++            for row in attempt_rows]
++
++
+ @pytest.mark.parametrize(
+     ("result", "expected"),
+     [
+@@ -74,6 +234,30 @@ class _Orchestrator:
+         yield {"type": "chunk", "content": "done"}
+ 
+ 
++class _ACPAskUserOrchestrator:
++    last_answer = None
++
++    def __init__(self, **_kwargs):
++        pass
++
++    async def run(self, _prompt, _conversation_id, **kwargs):
++        type(self).last_answer = await kwargs["input_callback"](
++            "input:tool-1", "What should I enter?", ["one", "two"],
++        )
++        yield {"type": "chunk", "content": type(self).last_answer}
++
++
++class _AttemptRollbackOrchestrator:
++    def __init__(self, **_kwargs):
++        pass
++
++    async def run(self, _prompt, _conversation_id, **_kwargs):
++        yield {"type": "chunk", "content": "OLD", "attempt": 1, "attempt_id": "attempt-old"}
++        yield {"type": "message.rollback", "attempt": 1, "attempt_id": "attempt-old"}
++        yield {"type": "chunk", "content": "NEW", "attempt": 2, "attempt_id": "attempt-new"}
++        yield {"type": "model_attempt_committed", "attempt": 2, "attempt_id": "attempt-new"}
++
++
+ class _ModelManager:
+     pass
+ 
+@@ -86,6 +270,18 @@ class _PresetStore:
+         return {"preset": preset_id}
+ 
+ 
++class _KernelPresetStore:
++    def __init__(self, _path):
++        pass
++
++    def resolve(self, _preset_id):
++        return {
++            "tools": {"allow_all": True, "allow": [], "deny": []},
++            "skills": [], "mcp_servers": [], "plugins": [], "plugin_allow_all": False,
++            "mode": "act", "model": "fake-model",
++        }
++
++
+ class _QueueInput:
+     def __init__(self, lines):
+         self.lines = queue.Queue()
+@@ -118,8 +314,23 @@ class _PermissionOutput:
+         pass
+ 
+ 
++class _ACPAttemptOutput(_PermissionOutput):
++    def write(self, line):
++        result = super().write(line)
++        message = json.loads(line)
++        if message.get("id") == 2 and isinstance(message.get("result"), dict):
++            self.input.lines.put(json.dumps({
++                "jsonrpc": "2.0", "id": 3, "method": "session/prompt",
++                "params": {
++                    "sessionId": message["result"]["sessionId"],
++                    "prompt": [{"type": "text", "text": "retry"}],
++                },
++            }) + "\n")
++        return result
++
++
+ class _FakeUuid:
+-    hex = "fake-id"
++    hex = "0123456789abcdef0123456789abcdef"
+ 
+     def __str__(self):
+         return "conv-acp-test"
+@@ -154,13 +365,15 @@ async def test_acp_session_list_resume_and_permission_config_round_trip(tmp_path
+         "id": "ordinary-conversation", "title": "private", "workspace": cwd,
+         "metadata": "{}", "updated_at": "2026-11-14T00:00:00Z",
+     }
+-    monkeypatch.setattr(app_server.uuid, "uuid4", lambda: "conv-acp-test")
++    monkeypatch.setattr(app_server.uuid, "uuid4", _FakeUuid)
+     monkeypatch.setattr(app_server, "_claim_stdio_channel", lambda: (stdin, stdout))
+     monkeypatch.setattr("atlas.memory.MemoryStore", lambda: memory)
+     monkeypatch.setattr("atlas.agent.AgentOrchestrator", _Orchestrator)
+     monkeypatch.setattr("atlas.models.ModelManager", _ModelManager)
+     monkeypatch.setattr("atlas.task_artifacts.AgentPresetStore", _PresetStore)
+-    monkeypatch.setattr("atlas.config.get_config", lambda: SimpleNamespace(db_path=tmp_path / "atlas.db"))
++    monkeypatch.setattr("atlas.config.get_config", lambda: SimpleNamespace(
++        db_path=tmp_path / "atlas.db", local_execution_permission_mode="full_access",
++    ))
+     async def migrate(*_args):
+         return _migration_ready()
+ 
+@@ -226,7 +439,9 @@ async def test_acp_approval_waits_for_client_and_rejects_reject_once(tmp_path, m
+     monkeypatch.setattr("atlas.agent.AgentOrchestrator", _Orchestrator)
+     monkeypatch.setattr("atlas.models.ModelManager", _ModelManager)
+     monkeypatch.setattr("atlas.task_artifacts.AgentPresetStore", _PresetStore)
+-    monkeypatch.setattr("atlas.config.get_config", lambda: SimpleNamespace(db_path=tmp_path / "atlas.db"))
++    monkeypatch.setattr("atlas.config.get_config", lambda: SimpleNamespace(
++        db_path=tmp_path / "atlas.db", local_execution_permission_mode="full_access",
++    ))
+ 
+     async def migrate(*_args):
+         return _migration_ready()
+@@ -246,5 +461,288 @@ async def test_acp_approval_waits_for_client_and_rejects_reject_once(tmp_path, m
+     assert next(item for item in messages if item.get("id") == 3)["result"]["stopReason"] == "end_turn"
+ 
+ 
++@pytest.mark.asyncio
++async def test_acp_free_text_input_fails_explicitly_without_waiting_or_permission(tmp_path, monkeypatch):
++    cwd = str(tmp_path.resolve())
++    lines = [
++        {"jsonrpc": "2.0", "id": 1, "method": "initialize",
++         "params": {"protocolVersion": 1}},
++        {"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {"cwd": cwd}},
++        {"jsonrpc": "2.0", "id": 3, "method": "session/prompt",
++         "params": {"sessionId": "conv-acp-test", "prompt": [{"type": "text", "text": "ask"}]}},
++    ]
++    rpc_in = _QueueInput([json.dumps(item) for item in lines])
++    rpc_out = _PermissionOutput(rpc_in, selected="allow_once")
++    memory = _Memory()
++    monkeypatch.setattr(app_server.uuid, "uuid4", _FakeUuid)
++    monkeypatch.setattr(app_server, "_claim_stdio_channel", lambda: (rpc_in, rpc_out))
++    monkeypatch.setattr("atlas.memory.MemoryStore", lambda: memory)
++    monkeypatch.setattr("atlas.agent.AgentOrchestrator", _ACPAskUserOrchestrator)
++    monkeypatch.setattr("atlas.models.ModelManager", _ModelManager)
++    monkeypatch.setattr("atlas.task_artifacts.AgentPresetStore", _PresetStore)
++    monkeypatch.setattr("atlas.config.get_config", lambda: SimpleNamespace(
++        db_path=tmp_path / "atlas.db", local_execution_permission_mode="full_access",
++    ))
++
++    async def migrate(*_args):
++        return _migration_ready()
++
++    monkeypatch.setattr("atlas.engine.session_migration.migrate_legacy_sessions", migrate)
++    await app_server.serve_stdio(protocol="acp")
++
++    messages = [json.loads(line) for line in rpc_out.lines if line.strip()]
++    assert _ACPAskUserOrchestrator.last_answer == (
++        "This ACP v1 adapter does not support free-text elicitation; use Atlas app-server input/request."
++    )
++    assert not any(item.get("method") in {"input/request", "session/request_permission"}
++                   for item in messages)
++    assert next(item for item in messages if item.get("id") == 3)["result"]["stopReason"] == "end_turn"
++
++
++@pytest.mark.asyncio
++async def test_acp_does_not_stream_discarded_attempt_text(tmp_path, monkeypatch):
++    cwd = str(tmp_path.resolve())
++    rpc_in = _QueueInput([json.dumps(item) for item in [
++        {"jsonrpc": "2.0", "id": 1, "method": "initialize",
++         "params": {"protocolVersion": 1}},
++        {"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {"cwd": cwd}},
++        {"jsonrpc": "2.0", "id": 3, "method": "session/prompt",
++         "params": {"sessionId": "conv-acp-test", "prompt": [{"type": "text", "text": "retry"}]}},
++    ]])
++    rpc_out = _PermissionOutput(rpc_in, selected="reject_once")
++    memory = _Memory()
++    monkeypatch.setattr(app_server.uuid, "uuid4", _FakeUuid)
++    monkeypatch.setattr(app_server, "_claim_stdio_channel", lambda: (rpc_in, rpc_out))
++    monkeypatch.setattr("atlas.memory.MemoryStore", lambda: memory)
++    monkeypatch.setattr("atlas.agent.AgentOrchestrator", _AttemptRollbackOrchestrator)
++    monkeypatch.setattr("atlas.models.ModelManager", _ModelManager)
++    monkeypatch.setattr("atlas.task_artifacts.AgentPresetStore", _PresetStore)
++    monkeypatch.setattr("atlas.config.get_config", lambda: SimpleNamespace(
++        db_path=tmp_path / "atlas.db", local_execution_permission_mode="full_access",
++    ))
++
++    async def migrate(*_args):
++        return _migration_ready()
++
++    monkeypatch.setattr("atlas.engine.session_migration.migrate_legacy_sessions", migrate)
++    await app_server.serve_stdio(protocol="acp")
++
++    messages = [json.loads(line) for line in rpc_out.lines if line.strip()]
++    chunks = [item["params"]["update"]["content"]["text"] for item in messages
++              if item.get("method") == "session/update"
++              and item["params"]["update"].get("sessionUpdate") == "agent_message_chunk"]
++    assert chunks == ["NEW"]
++    assert next(item for item in messages if item.get("id") == 3)["result"]["stopReason"] == "end_turn"
++
++
++@pytest.mark.asyncio
++async def test_acp_kernel_attempt_stream_returns_only_committed_attempt(tmp_path, monkeypatch):
++    from atlas.models import ModelManager as AtlasModelManager
++
++    monkeypatch.setenv("HERMES_STREAM_RETRIES", "1")
++    monkeypatch.setenv("ATLAS_MODEL_RETRY_BUDGET_ATTEMPTS", "2")
++    monkeypatch.setenv("ATLAS_MODEL_RETRY_BUDGET_SECONDS", "30")
++    monkeypatch.setattr("atlas.engine.kernel.model_call.asyncio.sleep", AsyncMock())
++
++    with FakeLLMServer([
++        DropMidStream("OLD answer", after_chars=3),
++        Text("NEW answer", chunk_chars=4),
++    ]) as fake:
++        home = tmp_path / "hermes"
++        write_atlas_home(home, fake.base_url)
++        monkeypatch.setenv("HERMES_HOME", str(home))
++        provider = _ProviderKeyManager(fake.base_url, current="fake-model")
++
++        class FixtureModelManager(AtlasModelManager):
++            def __init__(self):
++                super().__init__(default_model="fake-model")
++                self._models = [{
++                    "id": "fake-model", "name": "fake-model", "provider": "atlas-fixture",
++                    "atlas_provider": "atlas-fixture", "litellm_model": "openai/fake-model",
++                    "native_model": "fake-model", "max_output_tokens": 256,
++                }]
++                self._current = "fake-model"
++
++            def provider_config(self, provider_id):
++                return provider.provider_config(provider_id)
++
++            def resolve_api_key(self, provider_id):
++                return provider.resolve_api_key(provider_id)
++
++            def credential_pool(self, provider_id):
++                return provider.credential_pool(provider_id)
++
++            def get_api_mode_override(self, provider_id):
++                return provider.get_api_mode_override(provider_id)
++
++            def get_api_mode_probe(self, provider_id):
++                return provider.get_api_mode_probe(provider_id)
++
++            def model_availability(self, _model_id):
++                return {"available": True}
++
++        cwd = str(tmp_path.resolve())
++        rpc_in = _QueueInput([json.dumps(item) for item in [
++            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": 1}},
++            {"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {"cwd": cwd}},
++        ]])
++        rpc_out = _ACPAttemptOutput(rpc_in, selected="reject_once")
++        memory = _Memory()
++        monkeypatch.setattr(app_server, "_claim_stdio_channel", lambda: (rpc_in, rpc_out))
++        monkeypatch.setattr("atlas.memory.MemoryStore", lambda: memory)
++        monkeypatch.setattr("atlas.models.ModelManager", FixtureModelManager)
++        monkeypatch.setattr("atlas.task_artifacts.AgentPresetStore", _KernelPresetStore)
++        monkeypatch.setattr("atlas.config.DATA_ROOT", tmp_path / "data")
++
++        async def migrate(*_args):
++            return _migration_ready()
++
++        monkeypatch.setattr("atlas.engine.session_migration.migrate_legacy_sessions", migrate)
++        await app_server.serve_stdio(protocol="acp")
++
++        messages = [json.loads(line) for line in rpc_out.lines if line.strip()]
++        chunks = [item["params"]["update"]["content"]["text"] for item in messages
++                  if item.get("method") == "session/update"
++                  and item["params"]["update"].get("sessionUpdate") == "agent_message_chunk"]
++        prompt_responses = [item for item in messages if item.get("id") == 3]
++        assert prompt_responses and "result" in prompt_responses[-1], {
++            "prompt_response": prompt_responses[-1] if prompt_responses else None,
++            "updates": [item.get("params", {}).get("update", {}).get("sessionUpdate")
++                        for item in messages if item.get("method") == "session/update"],
++        }
++        prompt_result = prompt_responses[-1]["result"]
++        assert len(fake.main_requests()) == 2, {"prompt_result": prompt_result}
++        assert chunks and "".join(chunks) == "NEW answer"
++        assert "OLD" not in "".join(chunks)
++        assert prompt_result["stopReason"] == "end_turn"
++
++        from atlas.engine.session_sync import read_session_model_messages
++        from hermes_state import SessionDB
++
++        conversation_id = next(item["result"]["sessionId"] for item in messages if item.get("id") == 2)
++        rows = read_session_model_messages(tmp_path / "data" / "engine", conversation_id)
++        with SessionDB(db_path=tmp_path / "data" / "engine" / "state.db") as db:
++            audit = db.list_session_events(conversation_id, after_seq=0, limit=1000)
++        assistant_text = "".join(
++            str(row.get("content") or "") for row in rows if row.get("role") == "assistant"
++        )
++        assert "NEW answer" in assistant_text
++        assert "OLD answer" not in assistant_text
++        assert any(
++            row.get("event_type") == "model/attempt"
++            and row["payload"].get("status") == "discarded"
++            and str(row["payload"].get("partial_text") or "").startswith("OLD")
++            for row in audit
++        )
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize(("selected", "should_write"), [
++    ("reject_once", False),
++    ("allow_once", True),
++])
++async def test_acp_kernel_permission_decision_controls_real_tool_side_effect(
++    tmp_path, monkeypatch, selected, should_write,
++):
++    from atlas.models import ModelManager as AtlasModelManager
++
++    target = tmp_path / "must-not-be-created.txt"
++    data_root = tmp_path / "data"
++    data_root.mkdir()
++    with FakeLLMServer([
++        ToolCall("local_file", {
++            "action": "write", "path": str(target), "content": "ACP_REJECTED_WRITE",
++        }),
++        Text("ACP_REJECTION_HANDLED"),
++    ]) as fake:
++        home = tmp_path / "hermes"
++        write_atlas_home(home, fake.base_url)
++        monkeypatch.setenv("HERMES_HOME", str(home))
++        provider = _ProviderKeyManager(fake.base_url, current="fake-model")
++
++        class FixtureModelManager(AtlasModelManager):
++            def __init__(self):
++                super().__init__(default_model="fake-model")
++                self._models = [{
++                    "id": "fake-model", "name": "fake-model", "provider": "atlas-fixture",
++                    "atlas_provider": "atlas-fixture", "litellm_model": "openai/fake-model",
++                    "native_model": "fake-model", "max_output_tokens": 256,
++                }]
++                self._current = "fake-model"
++
++            def provider_config(self, provider_id):
++                return provider.provider_config(provider_id)
++
++            def resolve_api_key(self, provider_id):
++                return provider.resolve_api_key(provider_id)
++
++            def credential_pool(self, provider_id):
++                return provider.credential_pool(provider_id)
++
++            def get_api_mode_override(self, provider_id):
++                return provider.get_api_mode_override(provider_id)
++
++            def get_api_mode_probe(self, provider_id):
++                return provider.get_api_mode_probe(provider_id)
++
++            def model_availability(self, _model_id):
++                return {"available": True}
++
++        cwd = str(tmp_path.resolve())
++        rpc_in = _QueueInput([json.dumps(item) for item in [
++            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": 1}},
++            {"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {"cwd": cwd}},
++            {"jsonrpc": "2.0", "id": 3, "method": "session/prompt",
++             "params": {"sessionId": "conv-acp-test", "prompt": [{"type": "text", "text": "write file"}]}},
++        ]])
++        rpc_out = _PermissionOutput(rpc_in, selected=selected)
++        memory = _Memory()
++        class StableSessionUuid:
++            hex = "0123456789abcdef0123456789abcdef"
++
++            def __str__(self):
++                return "conv-acp-test"
++
++        monkeypatch.setattr(app_server.uuid, "uuid4", StableSessionUuid)
++        monkeypatch.setattr(app_server, "_claim_stdio_channel", lambda: (rpc_in, rpc_out))
++        monkeypatch.setattr("atlas.memory.MemoryStore", lambda: memory)
++        monkeypatch.setattr("atlas.models.ModelManager", FixtureModelManager)
++        monkeypatch.setattr("atlas.task_artifacts.AgentPresetStore", _KernelPresetStore)
++        monkeypatch.setattr("atlas.config.DATA_ROOT", data_root)
++
++        async def migrate(*_args):
++            return _migration_ready()
++
++        monkeypatch.setattr("atlas.engine.session_migration.migrate_legacy_sessions", migrate)
++        await app_server.serve_stdio(protocol="acp")
++
++        messages = [json.loads(line) for line in rpc_out.lines if line.strip()]
++        permissions = [item for item in messages if item.get("method") == "session/request_permission"]
++        assert len(permissions) == 1, {
++            "outgoing": [(item.get("method"), item.get("id")) for item in messages],
++            "provider_requests": len(fake.main_requests()),
++            "provider_tool_names": [
++                call.get("function", {}).get("name")
++                for request in fake.main_requests()
++                for call in request.get("tool_calls", [])
++            ],
++            "prompt_stop_reason": next((item.get("result", {}).get("stopReason")
++                                        for item in messages if item.get("id") == 3), None),
++            "prompt_error": next((item.get("error") for item in messages if item.get("id") == 3), None),
++        }
++        permission = permissions[0]
++        assert permission["id"].startswith("acp-permission-")
++        assert permission["params"]["sessionId"] == "conv-acp-test"
++        prompt_result = next(item for item in messages if item.get("id") == 3 and "result" in item)
++        assert prompt_result["result"]["stopReason"] == "end_turn"
++        assert target.exists() is should_write
++        if should_write:
++            assert target.read_text(encoding="utf-8") == "ACP_REJECTED_WRITE"
++        requests = fake.main_requests()
++        assert len(requests) == 2
++        tool_messages = [row for row in requests[1]["messages"] if row.get("role") == "tool"]
++        assert tool_messages and str(tool_messages[-1].get("content", "")).strip()
++
++
+ def _migration_ready():
+     return SimpleNamespace(status="ready", error=None)
+diff --git a/core/tests/test_app_server_sdk_lifecycle.py b/core/tests/test_app_server_sdk_lifecycle.py
+index 50962449..cdbdbb1b 100644
+--- a/core/tests/test_app_server_sdk_lifecycle.py
++++ b/core/tests/test_app_server_sdk_lifecycle.py
+@@ -8,7 +8,10 @@ from types import SimpleNamespace
+ 
+ import pytest
+ 
++# Import before the tests monkeypatch atlas.config.get_config so the lazily used
++# LocalExecutionRuntime cannot retain a per-test config lambda across cases.
+ from atlas.tools import app_server
++import atlas.tools.local_execution as _local_execution
+ 
+ 
+ pytestmark = pytest.mark.unit
+@@ -78,10 +81,28 @@ class _GatedOrchestrator:
+         yield {"type": "chunk", "content": "settled"}
+ 
+ 
++class _AttemptRollbackOrchestrator:
++    def __init__(self, **_kwargs):
++        pass
++
++    async def run(self, _prompt, _conversation_id, **_kwargs):
++        yield {"type": "chunk", "content": "OLD", "attempt": 1, "attempt_id": "attempt-old"}
++        yield {"type": "message.rollback", "attempt": 1, "attempt_id": "attempt-old"}
++        yield {"type": "chunk", "content": "NEW", "attempt": 2, "attempt_id": "attempt-new"}
++        yield {"type": "model_attempt_committed", "attempt": 2, "attempt_id": "attempt-new"}
++
++
+ class _ModelManager:
+     pass
+ 
+ 
++class _FixedUuid:
++    hex = "sid"
++
++    def __str__(self):
++        return "sid"
++
++
+ class _PresetStore:
+     def __init__(self, _path):
+         pass
+@@ -122,15 +143,17 @@ async def _migration_ready(*_args):
+ 
+ def _install_harness(monkeypatch, tmp_path, stdin, stdout, orchestrator):
+     memory = _Memory()
++    config = SimpleNamespace(
++        db_path=tmp_path / "atlas.db",
++        local_execution_permission_mode="full_access",
++    )
+     monkeypatch.setattr(app_server, "_claim_stdio_channel", lambda: (stdin, stdout))
+     monkeypatch.setattr("atlas.memory.MemoryStore", lambda: memory)
+     monkeypatch.setattr("atlas.agent.AgentOrchestrator", orchestrator)
+     monkeypatch.setattr("atlas.models.ModelManager", _ModelManager)
+     monkeypatch.setattr("atlas.task_artifacts.AgentPresetStore", _PresetStore)
+-    monkeypatch.setattr(
+-        "atlas.config.get_config",
+-        lambda: SimpleNamespace(db_path=tmp_path / "atlas.db"),
+-    )
++    config_provider = lambda: config
++    monkeypatch.setattr("atlas.config.get_config", config_provider)
+     monkeypatch.setattr(
+         "atlas.engine.session_migration.migrate_legacy_sessions", _migration_ready,
+     )
+@@ -169,6 +192,33 @@ async def test_session_wait_unknown_session_is_rejected(tmp_path, monkeypatch):
+     assert by_id[2]["error"]["code"] == -32002
+ 
+ 
++@pytest.mark.asyncio
++async def test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event(
++    tmp_path, monkeypatch,
++):
++    cwd = str(tmp_path.resolve())
++    wire = [
++        _rpc(id=1, method="initialize", params={"protocolVersion": 1}),
++        _rpc(id=2, method="session/start", params={"workspace": cwd}),
++        _rpc(id=3, method="session/prompt", params={"session_id": "sid", "prompt": "retry"}),
++    ]
++    stdin, stdout = _BlockingInput(wire), _CollectingOutput()
++    _install_harness(monkeypatch, tmp_path, stdin, stdout, _AttemptRollbackOrchestrator)
++    monkeypatch.setattr(app_server.uuid, "uuid4", _FixedUuid)
++    server = asyncio.create_task(app_server.serve_stdio(protocol="app-server"))
++    messages = await _collect_until(stdout, lambda items: any(item.get("id") == 3 for item in items))
++    stdin.lines.put("")
++    await asyncio.wait_for(server, 10)
++
++    result = next(item["result"] for item in messages if item.get("id") == 3)
++    events = [item["params"]["event"] for item in messages if item.get("method") == "session/event"]
++    rollback = next(index for index, item in enumerate(events) if item.get("type") == "message.rollback")
++    successful_chunk = next(index for index, item in enumerate(events)
++                            if item.get("type") == "chunk" and item.get("attempt_id") == "attempt-new")
++    assert result["text"] == "NEW"
++    assert rollback < successful_chunk
++
++
+ @pytest.mark.asyncio
+ async def test_session_wait_on_idle_session_returns_immediately(tmp_path, monkeypatch):
+     cwd = str(tmp_path.resolve())
+@@ -180,7 +230,7 @@ async def test_session_wait_on_idle_session_returns_immediately(tmp_path, monkey
+     ]
+     stdin, stdout = _BlockingInput(wire), _CollectingOutput()
+     _install_harness(monkeypatch, tmp_path, stdin, stdout, _GatedOrchestrator)
+-    monkeypatch.setattr(app_server.uuid, "uuid4", lambda: "sid")
++    monkeypatch.setattr(app_server.uuid, "uuid4", _FixedUuid)
+     await asyncio.wait_for(app_server.serve_stdio(protocol="app-server"), 10)
+ 
+     messages = [json.loads(line) for line in stdout.lines if line.strip()]
+@@ -205,7 +255,7 @@ async def test_session_wait_blocks_until_run_settles_with_status_notifications(
+     stdin, stdout = _BlockingInput(wire), _CollectingOutput()
+     _install_harness(monkeypatch, tmp_path, stdin, stdout, _GatedOrchestrator)
+     _GatedOrchestrator.gate = asyncio.Event()
+-    monkeypatch.setattr(app_server.uuid, "uuid4", lambda: "sid")
++    monkeypatch.setattr(app_server.uuid, "uuid4", _FixedUuid)
+ 
+     server = asyncio.create_task(app_server.serve_stdio(protocol="app-server"))
+     # The reader consumed prompt + wait and both are pending on the gate.
+@@ -242,7 +292,7 @@ async def test_shutdown_acknowledges_and_drains_active_run(tmp_path, monkeypatch
+     stdin, stdout = _BlockingInput(wire), _CollectingOutput()
+     _install_harness(monkeypatch, tmp_path, stdin, stdout, _GatedOrchestrator)
+     _GatedOrchestrator.hold = True  # run only finishes via cancel
+-    monkeypatch.setattr(app_server.uuid, "uuid4", lambda: "sid")
++    monkeypatch.setattr(app_server.uuid, "uuid4", _FixedUuid)
+ 
+     await asyncio.wait_for(app_server.serve_stdio(protocol="app-server"), 10)
+ 
+diff --git a/sdk/python/atlas_sdk/app_server.py b/sdk/python/atlas_sdk/app_server.py
+index fce4cd16..465aece1 100644
+--- a/sdk/python/atlas_sdk/app_server.py
++++ b/sdk/python/atlas_sdk/app_server.py
+@@ -2,10 +2,14 @@
+ from __future__ import annotations
+ 
+ from dataclasses import dataclass
++from collections import deque
+ import json
+ import os
+ from pathlib import Path
++import queue
+ import subprocess
++import threading
++import time
+ from typing import Any, Callable, Literal, Sequence
+ 
+ 
+@@ -23,6 +27,72 @@ class AppServerResult:
+     status: Literal["completed", "failed", "cancelled"]
+ 
+ 
++@dataclass(frozen=True)
++class AppServerEnqueueReceipt:
++    session_id: str
++    conversation_id: str
++    request_id: str
++    event_id: str
++    status: Literal["queued"]
++
++
++@dataclass(frozen=True)
++class AppServerRetryRecovery:
++    session_id: str
++    conversation_id: str
++    state: Literal[
++        "none", "retry_scheduled_not_started", "outcome_unknown", "settled", "state_unknown",
++    ]
++    run_id: str | None
++    attempt_id: str | None
++    attempt: int | None
++    retry_budget_attempts_remaining: int | None
++    retry_budget_wait_s_remaining: float | None
++    recommended_action: Literal[
++        "none", "explicit_resume_required", "do_not_replay", "manual_review",
++    ]
++
++
++@dataclass(frozen=True)
++class AppServerSessionEvent:
++    seq: int
++    event_type: str
++    payload: dict[str, Any]
++
++
++@dataclass(frozen=True)
++class AppServerEventPage:
++    session_id: str
++    conversation_id: str
++    after_seq: int
++    events: tuple[AppServerSessionEvent, ...]
++    next_cursor: int | None
++
++
++@dataclass(frozen=True)
++class AppServerPendingRequest:
++    request_id: str
++    session_id: str
++    kind: Literal["input", "approval", "unknown"]
++    status: Literal["pending", "invalidated"]
++    prompt: str | None = None
++    options: tuple[str, ...] = ()
++    tool_name: str | None = None
++    arguments: dict[str, Any] | None = None
++
++
++@dataclass(frozen=True)
++class AppServerTaskStatus:
++    request_id: str
++    session_id: str
++    status: Literal[
++        "queued", "running", "cancelling", "completed", "failed", "cancelled",
++        "outcome_unknown", "too_late",
++    ]
++    event_id: str | None = None
++    run_id: str | None = None
++
++
+ class AppServerError(RuntimeError):
+     def __init__(self, code: int, message: str):
+         super().__init__(message)
+@@ -35,15 +105,26 @@ class AppServer:
+     protocol_version = 1
+ 
+     def __init__(self, executable: str | Sequence[str] = "atlas", *, workspace: str | os.PathLike[str] | None = None,
+-                 env: dict[str, str] | None = None):
++                 env: dict[str, str] | None = None, request_timeout: float | None = None):
+         self.command = [executable] if isinstance(executable, str) else list(executable)
+         if not self.command:
+             raise ValueError("executable command must not be empty")
+         self.workspace = str(Path(workspace).resolve()) if workspace is not None else str(Path.cwd())
+         self.env = {**os.environ, **(env or {})}
++        if request_timeout is not None and request_timeout <= 0:
++            raise ValueError("request_timeout must be positive or None")
++        self.request_timeout = request_timeout
+         self._process: subprocess.Popen[str] | None = None
+         self._next_id = 0
+         self._session_ids: set[str] = set()
++        self._state_lock = threading.RLock()
++        self._write_lock = threading.Lock()
++        self._pending: dict[int, dict[str, Any]] = {}
++        self._session_notifications: dict[str, queue.Queue[dict[str, Any]]] = {}
++        self._reader_thread: threading.Thread | None = None
++        self._stderr_thread: threading.Thread | None = None
++        self._stderr_tail: deque[str] = deque(maxlen=200)
++        self._reader_error: BaseException | None = None
+ 
+     def start(self) -> "AppServer":
+         if self._process is not None and self._process.poll() is None:
+@@ -53,25 +134,55 @@ class AppServer:
+             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+             text=True, encoding="utf-8", errors="replace", env=self.env, bufsize=1,
+         )
+-        result = self._request("initialize", {"protocolVersion": self.protocol_version})
+-        version = result.get("protocolVersion")
+-        if version != self.protocol_version:
++        self._reader_error = None
++        self._reader_thread = threading.Thread(
++            target=self._read_dispatch_loop, name="atlas-sdk-app-server-reader", daemon=True,
++        )
++        self._reader_thread.start()
++        self._stderr_tail.clear()
++        self._stderr_thread = threading.Thread(
++            target=self._drain_stderr, name="atlas-sdk-app-server-stderr", daemon=True,
++        )
++        self._stderr_thread.start()
++        try:
++            result = self._request("initialize", {"protocolVersion": self.protocol_version})
++            version = result.get("protocolVersion")
++            if version != self.protocol_version:
++                raise AppServerError(-32002, f"Atlas app-server protocol mismatch: expected {self.protocol_version}, got {version!r}")
++        except BaseException:
+             self.close()
+-            raise AppServerError(-32002, f"Atlas app-server protocol mismatch: expected {self.protocol_version}, got {version!r}")
++            raise
+         return self
+ 
++    def _drain_stderr(self) -> None:
++        process = self._process
++        stream = process.stderr if process is not None else None
++        if stream is None:
++            return
++        try:
++            for line in stream:
++                self._stderr_tail.append(line.rstrip("\r\n"))
++        except (OSError, ValueError):
++            return
++
+     def _write(self, message: dict[str, Any]) -> None:
+         if not self._process or not self._process.stdin:
+             raise RuntimeError("AppServer.start() must be called first")
+-        self._process.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
+-        self._process.stdin.flush()
++        with self._write_lock:
++            self._process.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
++            self._process.stdin.flush()
++
++    def _next_request_id(self) -> int:
++        with self._state_lock:
++            self._next_id += 1
++            return self._next_id
+ 
+     def _read(self) -> dict[str, Any]:
+         if not self._process or not self._process.stdout:
+             raise RuntimeError("AppServer.start() must be called first")
+         line = self._process.stdout.readline()
+         if not line:
+-            error = self._process.stderr.read() if self._process.stderr else ""
++            error = "\n".join(self._stderr_tail)
+             raise RuntimeError(f"Atlas app-server exited: {error.strip() or self._process.poll()}")
+         value = json.loads(line)
+         if not isinstance(value, dict) or value.get("jsonrpc") != "2.0":
+@@ -82,22 +193,81 @@ class AppServer:
+         self._write({"jsonrpc": "2.0", "method": method, "params": params})
+ 
+     def _request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+-        self._next_id += 1
+-        request_id = self._next_id
+-        self._write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+-        while True:
+-            message = self._read()
+-            if message.get("id") != request_id:
+-                continue
+-            if isinstance(message.get("error"), dict):
+-                error = message["error"]
+-                raise AppServerError(int(error.get("code", -32603)), str(error.get("message", "JSON-RPC error")))
+-            result = message.get("result")
+-            return result if isinstance(result, dict) else {}
++        request_id, pending = self._begin_request(method, params)
++        if self._reader_thread is None:
++            try:
++                while True:
++                    message = self._read()
++                    if message.get("id") == request_id:
++                        pending["message"] = message
++                        pending["event"].set()
++                        break
++            except BaseException:
++                with self._state_lock:
++                    self._pending.pop(request_id, None)
++                raise
++        if not pending["event"].wait(timeout=self.request_timeout):
++            with self._state_lock:
++                self._pending.pop(request_id, None)
++            raise TimeoutError(f"Atlas app-server {method} request timed out")
++        with self._state_lock:
++            self._pending.pop(request_id, None)
++        if pending.get("error") is not None:
++            raise RuntimeError(f"Atlas app-server reader failed: {pending['error']}")
++        message = pending.get("message") or {}
++        if isinstance(message.get("error"), dict):
++            error = message["error"]
++            raise AppServerError(int(error.get("code", -32603)), str(error.get("message", "JSON-RPC error")))
++        result = message.get("result")
++        return result if isinstance(result, dict) else {}
++
++    def _begin_request(self, method: str, params: dict[str, Any]) -> tuple[int, dict[str, Any]]:
++        request_id = self._next_request_id()
++        pending: dict[str, Any] = {"event": threading.Event(), "message": None, "error": None}
++        with self._state_lock:
++            self._pending[request_id] = pending
++        try:
++            self._write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
++        except BaseException:
++            with self._state_lock:
++                self._pending.pop(request_id, None)
++            raise
++        return request_id, pending
++
++    def _read_dispatch_loop(self) -> None:
++        error: BaseException | None = None
++        try:
++            while True:
++                message = self._read()
++                method = message.get("method")
++                if isinstance(method, str):
++                    params = message.get("params") if isinstance(message.get("params"), dict) else {}
++                    session_id = str(params.get("session_id") or params.get("sessionId") or "")
++                    with self._state_lock:
++                        notifications = self._session_notifications.get(session_id)
++                    if notifications is not None:
++                        notifications.put(message)
++                    continue
++                request_id = message.get("id")
++                if isinstance(request_id, int):
++                    with self._state_lock:
++                        pending = self._pending.get(request_id)
++                    if pending is not None:
++                        pending["message"] = message
++                        pending["event"].set()
++        except BaseException as exc:
++            error = exc
++        finally:
++            with self._state_lock:
++                self._reader_error = error or RuntimeError("app-server output closed")
++                pending_requests = list(self._pending.values())
++                for pending in pending_requests:
++                    if not pending["event"].is_set():
++                        pending["error"] = self._reader_error
++                        pending["event"].set()
+ 
+     def _send_request(self, method: str, params: dict[str, Any]) -> int:
+-        self._next_id += 1
+-        request_id = self._next_id
++        request_id = self._next_request_id()
+         self._write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+         return request_id
+ 
+@@ -114,37 +284,341 @@ class AppServer:
+         self._session_ids.add(session_id)
+         return AppServerSession(session_id, str(result["conversation_id"]), str(result["workspace"]))
+ 
++    def get_working_directory(self, session_id: str) -> str:
++        """Return the session's effective local execution directory."""
++        value = str(session_id or "").strip()
++        if not value:
++            raise ValueError("session_id must not be empty")
++        result = self._request("session/working-directory/get", {"session_id": value})
++        directory = str(result.get("working_directory") or "")
++        if not directory:
++            raise RuntimeError("Atlas app-server returned an empty working directory")
++        return directory
++
++    def set_working_directory(
++        self, session_id: str, working_directory: str | os.PathLike[str],
++    ) -> str:
++        """Set an existing directory within the session's trusted local workspace."""
++        value = str(session_id or "").strip()
++        if not value:
++            raise ValueError("session_id must not be empty")
++        result = self._request("session/working-directory/set", {
++            "session_id": value,
++            "working_directory": str(Path(working_directory).expanduser().resolve()),
++        })
++        directory = str(result.get("working_directory") or "")
++        if not directory:
++            raise RuntimeError("Atlas app-server returned an empty working directory")
++        return directory
++
++    def enqueue(self, session_id: str, prompt: str, *, request_id: str) -> AppServerEnqueueReceipt:
++        """Persist a next-turn user prompt and return its idempotent receipt."""
++        value = str(prompt or "").strip()
++        key = str(request_id or "").strip()
++        if not value:
++            raise ValueError("prompt must not be empty")
++        if not key or len(key) > 256:
++            raise ValueError("request_id must be non-empty and at most 256 characters")
++        result = self._request("session/enqueue", {
++            "session_id": str(session_id), "prompt": value, "request_id": key,
++        })
++        if (str(result.get("session_id") or "") != str(session_id)
++                or str(result.get("request_id") or "") != key
++                or str(result.get("status") or "") != "queued"
++                or not result.get("conversation_id") or not result.get("event_id")):
++            raise RuntimeError("Atlas app-server returned an invalid enqueue receipt")
++        return AppServerEnqueueReceipt(
++            session_id=str(result["session_id"]),
++            conversation_id=str(result["conversation_id"]),
++            request_id=str(result["request_id"]),
++            event_id=str(result["event_id"]),
++            status="queued",
++        )
++
++    def wait(self, session_id: str) -> None:
++        """Wait until the app-server reports this session's active worker settled."""
++        value = str(session_id or "").strip()
++        if not value:
++            raise ValueError("session_id must not be empty")
++        self._request("session/wait", {"session_id": value})
++
++    def session_events(self, session_id: str, *, after_seq: int = 0,
++                       limit: int = 100) -> AppServerEventPage:
++        """Read a bounded, replayable page of this session's durable events."""
++        value = str(session_id or "").strip()
++        if not value:
++            raise ValueError("session_id must not be empty")
++        if type(after_seq) is not int or after_seq < 0:
++            raise ValueError("after_seq must be a non-negative integer")
++        if type(limit) is not int or not 1 <= limit <= 1000:
++            raise ValueError("limit must be between 1 and 1000")
++        result = self._request("session/events", {
++            "session_id": value, "after_seq": after_seq, "limit": limit,
++        })
++        if str(result.get("session_id") or "") != value:
++            raise RuntimeError("Atlas app-server returned events for another session")
++        conversation_id = str(result.get("conversation_id") or "")
++        if not conversation_id:
++            raise RuntimeError("Atlas app-server returned events without a conversation id")
++        echoed_cursor = result.get("after_seq")
++        if type(echoed_cursor) is not int or echoed_cursor != after_seq:
++            raise RuntimeError("Atlas app-server returned an invalid event cursor")
++        raw_events = result.get("events")
++        if not isinstance(raw_events, list) or len(raw_events) > limit:
++            raise RuntimeError("Atlas app-server returned an invalid event page")
++        events: list[AppServerSessionEvent] = []
++        previous_seq = after_seq
++        for row in raw_events:
++            if not isinstance(row, dict):
++                raise RuntimeError("Atlas app-server returned a malformed session event")
++            seq = row.get("seq")
++            event_type = row.get("event_type")
++            payload = row.get("payload")
++            if (type(seq) is not int or seq <= previous_seq
++                    or not isinstance(event_type, str) or not event_type
++                    or not isinstance(payload, dict)):
++                raise RuntimeError("Atlas app-server returned an invalid session event")
++            events.append(AppServerSessionEvent(seq, event_type, dict(payload)))
++            previous_seq = seq
++        next_cursor = result.get("next_cursor")
++        if next_cursor is not None:
++            if (type(next_cursor) is not int or not events
++                    or next_cursor != events[-1].seq or len(events) != limit):
++                raise RuntimeError("Atlas app-server returned an invalid next event cursor")
++        return AppServerEventPage(
++            session_id=value, conversation_id=conversation_id,
++            after_seq=after_seq, events=tuple(events), next_cursor=next_cursor,
++        )
++
++    def pending_requests(self, session_id: str) -> tuple[AppServerPendingRequest, ...]:
++        """Discover live requests for this process and invalidated requests from prior processes."""
++        value = str(session_id or "").strip()
++        if not value:
++            raise ValueError("session_id must not be empty")
++        result = self._request("session/pending_requests", {"session_id": value})
++        if str(result.get("session_id") or "") != value:
++            raise RuntimeError("Atlas app-server returned pending requests for another session")
++        raw = result.get("requests")
++        if not isinstance(raw, list):
++            raise RuntimeError("Atlas app-server returned an invalid pending request list")
++        requests: list[AppServerPendingRequest] = []
++        seen: set[str] = set()
++        for row in raw:
++            if not isinstance(row, dict):
++                raise RuntimeError("Atlas app-server returned a malformed pending request")
++            request_id = str(row.get("request_id") or "")
++            row_session = str(row.get("session_id") or "")
++            kind = str(row.get("kind") or "")
++            status = str(row.get("status") or "")
++            if (not request_id or request_id in seen
++                    or (status == "pending" and row_session != value)
++                    or kind not in {"input", "approval", "unknown"}
++                    or status not in {"pending", "invalidated"}):
++                raise RuntimeError("Atlas app-server returned an invalid pending request identity/state")
++            seen.add(request_id)
++            options = row.get("options", [])
++            arguments = row.get("arguments")
++            if not isinstance(options, list) or not all(isinstance(item, str) for item in options):
++                raise RuntimeError("Atlas app-server returned invalid pending request options")
++            if arguments is not None and not isinstance(arguments, dict):
++                raise RuntimeError("Atlas app-server returned invalid pending approval arguments")
++            prompt = row.get("prompt")
++            tool_name = row.get("tool_name")
++            if prompt is not None and not isinstance(prompt, str):
++                raise RuntimeError("Atlas app-server returned an invalid pending input prompt")
++            if tool_name is not None and not isinstance(tool_name, str):
++                raise RuntimeError("Atlas app-server returned an invalid pending tool name")
++            requests.append(AppServerPendingRequest(
++                request_id=request_id, session_id=row_session,
++                kind=kind, status=status, prompt=prompt,
++                options=tuple(options), tool_name=tool_name,
++                arguments=dict(arguments) if arguments is not None else None,
++            ))
++        return tuple(requests)
++
++    def respond_approval(self, request_id: str, choice: Literal["allow", "deny"]) -> None:
++        value = str(request_id or "").strip()
++        if not value:
++            raise ValueError("request_id must not be empty")
++        if choice not in {"allow", "deny"}:
++            raise ValueError("choice must be 'allow' or 'deny'")
++        self._request("approval/response", {"request_id": value, "choice": choice})
++
++    def respond_input(self, request_id: str, value: str) -> None:
++        request_key = str(request_id or "").strip()
++        if not request_key:
++            raise ValueError("request_id must not be empty")
++        if not isinstance(value, str):
++            raise ValueError("input response value must be a string")
++        self._request("input/response", {"request_id": request_key, "value": value})
++
++    def task_status(self, session_id: str, request_id: str) -> AppServerTaskStatus:
++        return self._task_request("session/task_status", session_id, request_id)
++
++    def cancel_task(self, session_id: str, request_id: str) -> AppServerTaskStatus:
++        """Cancel one enqueued task and wait for the worker's bounded cleanup response."""
++        return self._task_request("session/task_cancel", session_id, request_id)
++
++    def _task_request(self, method: str, session_id: str,
++                      request_id: str) -> AppServerTaskStatus:
++        session = str(session_id or "").strip()
++        task = str(request_id or "").strip()
++        if not session:
++            raise ValueError("session_id must not be empty")
++        if not task:
++            raise ValueError("request_id must not be empty")
++        result = self._request(method, {"session_id": session, "request_id": task})
++        if (str(result.get("session_id") or "") != session
++                or str(result.get("request_id") or "") != task):
++            raise RuntimeError("Atlas app-server returned a task status for another request")
++        status = str(result.get("status") or "")
++        if status not in {
++            "queued", "running", "cancelling", "completed", "failed", "cancelled",
++            "outcome_unknown", "too_late",
++        }:
++            raise RuntimeError(f"Atlas app-server returned an unknown task status: {status}")
++        event_id = str(result.get("event_id") or "")
++        run_id = str(result.get("run_id") or "")
++        return AppServerTaskStatus(
++            request_id=task, session_id=session, status=status,  # type: ignore[arg-type]
++            event_id=event_id or None, run_id=run_id or None,
++        )
++
++    def retry_recovery(self, session_id: str) -> AppServerRetryRecovery:
++        """Read durable retry state without replaying a model request."""
++        value = str(session_id)
++        result = self._request("session/retry_recovery", {"session_id": value})
++        if str(result.get("session_id") or "") != value:
++            raise RuntimeError("Atlas app-server returned a retry recovery for another session")
++        conversation_id = str(result.get("conversation_id") or "")
++        if not conversation_id:
++            raise RuntimeError("Atlas app-server returned retry recovery without a conversation id")
++        state = str(result.get("state") or "")
++        if state not in {
++            "none", "retry_scheduled_not_started", "outcome_unknown", "settled", "state_unknown",
++        }:
++            raise RuntimeError(f"Atlas app-server returned an unknown retry recovery state: {state}")
++        recommended_action = str(result.get("recommended_action") or "")
++        if recommended_action not in {
++            "none", "explicit_resume_required", "do_not_replay", "manual_review",
++        }:
++            raise RuntimeError("Atlas app-server returned an unknown retry recovery action")
++        attempt = result.get("attempt")
++        attempts_remaining = result.get("retry_budget_attempts_remaining")
++        wait_remaining = result.get("retry_budget_wait_s_remaining")
++        if attempt is not None and (type(attempt) is not int or attempt < 0):
++            raise RuntimeError("Atlas app-server returned an invalid recovery attempt number")
++        if attempts_remaining is not None and (
++            type(attempts_remaining) is not int or attempts_remaining < 0
++        ):
++            raise RuntimeError("Atlas app-server returned an invalid retry budget remainder")
++        if wait_remaining is not None and (
++            type(wait_remaining) not in {int, float} or wait_remaining < 0
++        ):
++            raise RuntimeError("Atlas app-server returned an invalid retry wait remainder")
++        run_id = str(result.get("run_id") or "")
++        attempt_id = str(result.get("attempt_id") or "")
++        return AppServerRetryRecovery(
++            session_id=value,
++            conversation_id=conversation_id,
++            state=state,  # type: ignore[arg-type]
++            run_id=run_id or None,
++            attempt_id=attempt_id or None,
++            attempt=attempt,
++            retry_budget_attempts_remaining=attempts_remaining,
++            retry_budget_wait_s_remaining=float(wait_remaining) if wait_remaining is not None else None,
++            recommended_action=recommended_action,  # type: ignore[arg-type]
++        )
++
+     def prompt(self, session_id: str, prompt: str, *,
+                on_event: Callable[[dict[str, Any]], None] | None = None,
+                approve: Callable[[dict[str, Any]], bool] | None = None,
+                answer: Callable[[dict[str, Any]], str] | None = None) -> AppServerResult:
+         if not prompt.strip():
+             raise ValueError("prompt must not be empty")
+-        self._next_id += 1
+-        request_id = self._next_id
+-        self._write({"jsonrpc": "2.0", "id": request_id, "method": "session/prompt",
+-                     "params": {"session_id": session_id, "prompt": prompt}})
+-        events: list[dict[str, Any]] = []
+-        while True:
+-            message = self._read()
+-            method = message.get("method")
+-            if isinstance(method, str):
+-                params = message.get("params") if isinstance(message.get("params"), dict) else {}
+-                if method == "approval/request":
+-                    self._send_request("approval/response", {"event_id": params.get("event_id"),
+-                                                               "choice": "allow" if approve and approve(params) else "deny"})
+-                elif method == "input/request":
+-                    self._send_request("input/response", {"call_id": params.get("call_id"),
+-                                                            "value": answer(params) if answer else ""})
+-                elif method == "session/event":
+-                    item = params.get("event")
+-                    if isinstance(item, dict):
+-                        events.append(item)
+-                        if on_event:
+-                            on_event(item)
+-                continue
+-            if message.get("id") != request_id:
+-                continue
++        notifications: queue.Queue[dict[str, Any]] = queue.Queue()
++        with self._state_lock:
++            if session_id in self._session_notifications:
++                raise RuntimeError(f"Atlas app-server session already has a local prompt consumer: {session_id}")
++            self._session_notifications[session_id] = notifications
++        request_id: int | None = None
++        deadline = time.monotonic() + self.request_timeout if self.request_timeout is not None else None
++        callback_error: Exception | None = None
++
++        def cancel_after_callback_failure(error: Exception) -> None:
++            nonlocal callback_error
++            if callback_error is not None:
++                return
++            callback_error = error
++            # Keep consuming the original prompt request until the server has
++            # completed its cooperative cleanup. Returning from this method
++            # while ask_user/approval is still waiting would strand the run.
++            self._request("session/cancel", {"session_id": session_id})
++
++        try:
++            request_id, pending = self._begin_request(
++                "session/prompt", {"session_id": session_id, "prompt": prompt},
++            )
++            while True:
++                try:
++                    wait_for = 0.02
++                    if deadline is not None:
++                        remaining = deadline - time.monotonic()
++                        if remaining <= 0 and not pending["event"].is_set():
++                            raise TimeoutError("Atlas app-server session/prompt request timed out")
++                        wait_for = min(wait_for, max(remaining, 0.001))
++                    message = notifications.get(timeout=wait_for)
++                except queue.Empty:
++                    message = None
++                if message is not None:
++                    method = message.get("method")
++                    params = message.get("params") if isinstance(message.get("params"), dict) else {}
++                    if method == "approval/request":
++                        try:
++                            allowed = bool(approve and approve(params)) if callback_error is None else False
++                        except Exception as exc:
++                            cancel_after_callback_failure(exc)
++                            allowed = False
++                        if callback_error is None:
++                            self._send_request("approval/response", {
++                                "request_id": params.get("request_id"),
++                                "event_id": params.get("event_id"),
++                                "choice": "allow" if allowed else "deny",
++                            })
++                    elif method == "input/request":
++                        try:
++                            value = answer(params) if answer and callback_error is None else ""
++                        except Exception as exc:
++                            cancel_after_callback_failure(exc)
++                            value = ""
++                        if callback_error is None:
++                            self._send_request("input/response", {
++                                "request_id": params.get("request_id"),
++                                "call_id": params.get("call_id"),
++                                "value": value,
++                            })
++                    elif method == "session/event":
++                        item = params.get("event")
++                        if isinstance(item, dict) and on_event:
++                            try:
++                                on_event(item)
++                            except Exception as exc:
++                                cancel_after_callback_failure(exc)
++                if pending["event"].is_set() and notifications.empty():
++                    break
++            if pending.get("error") is not None:
++                raise RuntimeError(f"Atlas app-server reader failed: {pending['error']}")
++            message = pending.get("message") or {}
++            result = message.get("result") if isinstance(message, dict) else None
++            if isinstance(result, dict) and result.get("status") in {
++                "completed", "failed", "cancelled",
++            }:
++                # session/prompt responds just before run_prompt's finally
++                # clears its active-session entry. Use the server's settle
++                # barrier before exposing a reusable session to the caller.
++                self._request("session/wait", {"session_id": session_id})
++            if callback_error is not None:
++                raise callback_error
+             if isinstance(message.get("error"), dict):
+                 error = message["error"]
+                 raise AppServerError(int(error.get("code", -32603)), str(error.get("message", "JSON-RPC error")))
+@@ -153,6 +627,11 @@ class AppServer:
+             if status not in {"completed", "failed", "cancelled"}:
+                 raise RuntimeError(f"Atlas app-server returned an unknown prompt status: {status}")
+             return AppServerResult(session_id, str(result.get("text", "")), status)  # type: ignore[arg-type]
++        finally:
++            with self._state_lock:
++                self._session_notifications.pop(session_id, None)
++                if request_id is not None:
++                    self._pending.pop(request_id, None)
+ 
+     def close_session(self, session_id: str) -> None:
+         self._request("session/close", {"session_id": session_id})
+@@ -170,6 +649,12 @@ class AppServer:
+                 if process.stdin:
+                     process.stdin.close()
+                 process.wait(timeout=5)
++                reader = self._reader_thread
++                if reader is not None:
++                    reader.join(timeout=5)
++                stderr_reader = self._stderr_thread
++                if stderr_reader is not None:
++                    stderr_reader.join(timeout=5)
+             except subprocess.TimeoutExpired:
+                 process.kill()
+                 process.wait()
+@@ -177,11 +662,33 @@ class AppServer:
+                 process.terminate()
+                 process.wait(timeout=5)
+             finally:
++                reader = self._reader_thread
++                if reader is not None and reader.is_alive():
++                    reader.join(timeout=1)
++                stderr_reader = self._stderr_thread
++                if stderr_reader is not None and stderr_reader.is_alive():
++                    stderr_reader.join(timeout=1)
+                 self._process = None
+                 self._session_ids.clear()
++                self._reader_thread = None
++                self._stderr_thread = None
++                with self._state_lock:
++                    self._session_notifications.clear()
++                    self._pending.clear()
+         else:
++            reader = self._reader_thread
++            if reader is not None:
++                reader.join(timeout=5)
++            stderr_reader = self._stderr_thread
++            if stderr_reader is not None:
++                stderr_reader.join(timeout=5)
+             self._process = None
+             self._session_ids.clear()
++            self._reader_thread = None
++            self._stderr_thread = None
++            with self._state_lock:
++                self._session_notifications.clear()
++                self._pending.clear()
+ 
+     def __enter__(self) -> "AppServer":
+         return self.start()

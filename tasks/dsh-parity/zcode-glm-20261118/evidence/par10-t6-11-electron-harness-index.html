@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atlas T6-11 shortcut reference renderer probe</title>
+  <link rel="stylesheet" href="/app.css">
+  <style>
+    /* The prebuilt main-tree CSS predates these arbitrary-value utilities.
+       Provide their exact Tailwind semantics so the probe screenshots show the
+       real layout; product code keeps its normal utility classes. */
+    [data-shortcut-reference] { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(0,0,0,.45); padding: 1rem; }
+    [data-shortcut-reference][data-shortcut-reference-variant="embedded"] { position: absolute; inset: 0; z-index: 60; }
+    [data-shortcut-reference] > section { width: 100%; max-width: 720px; max-height: min(78vh, 720px); }
+    [data-reference-blocked] { position: fixed; left: 50%; top: 1rem; transform: translateX(-50%); z-index: 300; width: min(560px, calc(100vw - 2rem)); pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="/bundle.js"></script>
+</body>
+</html>

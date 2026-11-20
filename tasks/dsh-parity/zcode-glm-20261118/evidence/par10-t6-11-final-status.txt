@@ -1,0 +1,30 @@
+HEAD: 060071ab2ecf86d41cab90e98160183ce126bc69
+BRANCH: zcode/par10-shortcut-reference
+--- git status --short ---
+ M core/atlas/api/u6_router.py
+ M frontend/src/renderer/main.tsx
+ M frontend/src/renderer/pages/ShortcutsPanel.tsx
+ M frontend/src/renderer/services/shortcuts.test.ts
+?? core/tests/test_u6_keybindings.py
+?? frontend/src/renderer/pages/ShortcutsPanel.test.tsx
+?? frontend/src/renderer/services/keybindings.test.ts
+?? frontend/src/renderer/services/keybindings.ts
+?? frontend/src/renderer/shortcuts/
+--- git diff --numstat (tracked) ---
+94	15	core/atlas/api/u6_router.py
+7	1	frontend/src/renderer/main.tsx
+50	19	frontend/src/renderer/pages/ShortcutsPanel.tsx
+17	1	frontend/src/renderer/services/shortcuts.test.ts
+--- untracked line counts/sha256 ---
+133 7e9953eb50215e4f192b72d5f56596923629f71d53474f94d9817f339d362d70 core/tests/test_u6_keybindings.py
+272 0b9a70c43aa7d26e9b79b13321223e1c9d36036be42fb2b0143a5c22bc29b918 frontend/src/renderer/pages/ShortcutsPanel.test.tsx
+522 5a315dbd59c62d2d047d1cab473d9626281bd3e822447197c5f25b759eb43a0c frontend/src/renderer/services/keybindings.test.ts
+366 78941bb80c7f4cd2fb93a928624d8da0cb0bc545e6f8a538ea744284939b5727 frontend/src/renderer/services/keybindings.ts
+77 bea6c06bc7d6ea182980db12e9cc6112b47290dd8334c13ee685688ae32b191a frontend/src/renderer/shortcuts/KeybindingsConflictNotice.tsx
+257 99fe635d53b59b44c7ae7bcc6375da2ff9ceb78615a915eb0e232693f34369d0 frontend/src/renderer/shortcuts/ShortcutReference.test.tsx
+292 43e00e61b44b1b0d9b0c801159359c88f3e20c6651d141ccfbf0b7cc07f71a35 frontend/src/renderer/shortcuts/ShortcutReference.tsx
+163 3050435216777d88b148eb14dff67986c354d042fe88d178edeaf54eb06c5254 frontend/src/renderer/shortcuts/ShortcutReferenceHost.test.tsx
+166 de7d05106791d77bf65ee6e6f4cd015612bb4b367e85fd94e82cf088c10358d2 frontend/src/renderer/shortcuts/ShortcutReferenceHost.tsx
+23 101c2ba14b094cdac970fe18ad07491e3619821568db66502d0cf7b4c0d1082a frontend/src/renderer/shortcuts/referenceKeys.test.ts
+26 af4f62f46b4c8115f9f904cbadb5e185e3b08467b30a5c21f65c816fcf370ee2 frontend/src/renderer/shortcuts/referenceKeys.ts
+246 a286492b7e35827101136c2a3ee219d111300f699dced658aa477492bb762bcf frontend/src/renderer/shortcuts/useKeybindings.tsx

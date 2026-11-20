@@ -1,0 +1,10 @@
+{
+  "duration_seconds": 94.73400000002584,
+  "leftover_processes": [],
+  "returncode": 1,
+  "signals": [],
+  "status": "FAIL",
+  "stderr_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-INDEX-SYNC-080-scan\\stderr.log",
+  "stdout_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-INDEX-SYNC-080-scan\\stdout.log",
+  "timed_out": false
+}

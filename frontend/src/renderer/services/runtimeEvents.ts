@@ -24,7 +24,7 @@ const DOCUMENT_KIND: Record<string, string> = { document: '生成了 Word 文档
 
 export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEvent | null {
   // 已知事件才会被渲染；新的 wire 事件（如 lsp.diagnostics、review.findings、X2 的 computer.* / browser.*）加入这里即可显示。
-  const known = new Set(['run.started', 'run.status', 'run.phase', 'run.background', 'message.delta', 'message.completed', 'tool.preparing', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'run.todos', 'rules.loaded', 'run.context.sources', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'subtask.background_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.model_switched', 'run.verify_nudge', 'session.title', 'process.completed', 'run.compaction.progress', 'run.recovery.notice', 'context.window.switched', 'chapter.marked', 'lsp.diagnostics', 'review.findings', 'run.completed', 'run.failed', 'run.cancelled',
+  const known = new Set(['run.started', 'run.status', 'run.phase', 'run.background', 'message.delta', 'message.rollback', 'message.completed', 'tool.preparing', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'run.todos', 'rules.loaded', 'run.context.sources', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'subtask.background_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.model_switched', 'run.verify_nudge', 'session.title', 'process.completed', 'run.compaction.progress', 'run.recovery.notice', 'context.window.switched', 'chapter.marked', 'lsp.diagnostics', 'review.findings', 'run.completed', 'run.failed', 'run.cancelled',
     // X2 电脑操控：前台确认、恢复与每一步动作（供 ForegroundConfirmCard / ComputerEdgeBar / ComputerReplayPanel）。
     'computer.foreground_required', 'computer.foreground_resumed', 'computer.foreground_denied', 'computer.step', 'computer.frame',
     // X2 浏览器代理：交接确认与结果、面板地址同步、录制中的每一步（供 BrowserHandoffCard / BrowserRecorderPanel）。
@@ -51,6 +51,32 @@ export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEven
   }
   if (!known.has(envelope.event)) return null;
   return { ...base, type: envelope.event as AgentEvent['type'], data: envelope.data ?? {} };
+}
+
+export interface AttemptTextState { text: string; attemptChunks?: Record<string, string> }
+
+export function reduceAttemptText(
+  state: AttemptTextState,
+  event: string,
+  data: Record<string, unknown> = {},
+): AttemptTextState {
+  if (event === 'message.rollback') {
+    const attemptId = String(data.attempt_id ?? '');
+    if (!attemptId || !state.attemptChunks || !(attemptId in state.attemptChunks)) return state;
+    const attemptChunks = { ...state.attemptChunks };
+    delete attemptChunks[attemptId];
+    return { text: Object.values(attemptChunks).join(''), attemptChunks };
+  }
+  if (event === 'message.completed') {
+    return typeof data.content === 'string' ? { text: data.content, attemptChunks: {} } : state;
+  }
+  if (event !== 'message.delta') return state;
+  const content = String(data.content ?? '');
+  const attemptId = String(data.attempt_id ?? '');
+  const attemptChunks = { ...(state.attemptChunks ?? {}) };
+  const key = attemptId || '';
+  attemptChunks[key] = (attemptChunks[key] ?? '') + content;
+  return { text: Object.values(attemptChunks).join(''), attemptChunks };
 }
 
 export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {

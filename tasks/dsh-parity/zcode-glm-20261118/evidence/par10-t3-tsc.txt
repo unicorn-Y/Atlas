@@ -1,0 +1,3 @@
+npm notice run atlas@0.1.0 npx
+npm notice run tsc -p ../.tmp/tsconfig.par10.json --noEmit
+TSC_EXIT:0

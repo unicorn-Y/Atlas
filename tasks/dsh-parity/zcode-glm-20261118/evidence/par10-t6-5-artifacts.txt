@@ -1,0 +1,42 @@
+PAR-10-T6-5 artifacts and hashes
+2026-11-18T22:47:14Z
+
+== output files ==
+total 715608
+drwxr-xr-x 1 25011 197609         0 Nov 19 06:46 .
+drwxr-xr-x 1 25011 197609         0 Nov 19 06:35 ..
+-rwxr-xr-x 1 25011 197609 731988013 Nov 19 06:43 Atlas-0.1.1-Setup.exe
+-rw-r--r-- 1 25011 197609    761744 Nov 19 06:44 Atlas-0.1.1-Setup.exe.blockmap
+-rw-r--r-- 1 25011 197609      7483 Nov 19 06:44 builder-debug.yml
+-rw-r--r-- 1 25011 197609      1231 Nov 19 06:46 release-manifest.json
+drwxr-xr-x 1 25011 197609         0 Nov 19 06:40 win-unpacked
+
+== sizes ==
+3.0G	windows-release
+
+== checked file SHA-256 ==
+92d002d1119fc12227953991b4e8368b46ae5391493cc52fd054636ef951e90f *windows-release/win-unpacked/Atlas.exe
+13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76 *windows-release/win-unpacked/resources/atlas/backend/atlas_backend.exe
+5ca6a16bdd2c5a5037b1e3a942d9ac1c66efe2def902b202d44774680a8a4656 *windows-release/win-unpacked/resources/atlas/backend/_internal/sqlite3.dll
+6daf68bc1d5f011ddc52ddf2c6db7d913a897b3492ebb802a6b1a701149531f1 *windows-release/win-unpacked/resources/atlas/release-manifest.json
+9a9e20c1f0c0cc0c86269413c931f68ed461d152467554bfd4eb02e4c498d538 *windows-release/release-manifest.json
+94e71e0125e7d84e0321f5afdb57ef1b9519014c9ff3e43ad8bbba192e40c3ee *windows-release/Atlas-0.1.1-Setup.exe
+616ae22f346c0215497d93c44262cd7b17d54d1078de06627ea7b351822b8664 *windows-release/Atlas-0.1.1-Setup.exe.blockmap
+13aea58b9c3a28aeeade74105c87666e263a6da889f97eb379df622645e2c024 *windows-release/win-unpacked/resources/app.asar
+
+== versions ==
+Electron runtime marker: 44.7.0Bundled Node: v24.21.0
+Bundled npm: 11.19.0
+Backend release version(source): __version__ = "0.1.0"
+Frontend package version: 0.1.1
+Git commit: 060071ab2ecf86d41cab90e98160183ce126bc69
+
+== app.asar integrity module ==
+\dist-electron\main\electron.js
+\dist-electron\main\releaseIntegrity.js
+\dist-electron\main\releaseIntegrity.test.js
+
+== embedded vs release manifest field check ==
+fields_checked=19 drift=0
+embedded_installer_field=false
+installer_sha_matches_actual=true

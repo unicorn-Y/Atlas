@@ -1,0 +1,17 @@
+全表自动复验(ZC-DSH-EXEC-03 A)
+
+BEHAVIORS rows: 368
+INTERFACES rows: 260
+ATLAS-MAP rows: 368
+BEHAVIORS without ATLAS-MAP row: 0
+ATLAS-MAP states: {'对齐已验': 82, '部分': 205, '缺失': 81}
+SOURCE-INVENTORY entries: 36536
+SOURCE-INVENTORY files: 35631
+SOURCE-INVENTORY directories: 905
+source_ids dangling UNRESOLVED: 0
+QUEUE rows: 48
+BEHAVIORS 锚点: 有效=770/目录=32/待修=0/无效=0
+INTERFACES 锚点: 有效=472/目录=16/待修=0/无效=0
+interface→capability→Atlas 断链: 0
+
+failures: 0

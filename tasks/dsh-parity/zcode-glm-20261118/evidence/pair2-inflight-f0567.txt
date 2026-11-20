@@ -1,0 +1,120 @@
+2026-11-18 08:34:56 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-f90wldh_\atlas\config\atlas.toml
+FFFFFFF.......FFFFFFFF.F......FF.....FF..........................        [100%]
+================================== FAILURES ===================================
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+E   TimeoutError
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\tasks.py:502: TimeoutError
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+E   TimeoutError
+----------------------------- Captured log setup ------------------------------
+ERROR    asyncio:base_events.py:1785 Task exception was never retrieved
+future: <Task finished name='Task-6' coro=<serve_stdio() done, defined at D:\Atlas\core\atlas\tools\app_server.py:113> exception=AttributeError("'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'")>
+Traceback (most recent call last):
+  File "D:\Atlas\core\atlas\tools\app_server.py", line 134, in serve_stdio
+    local_execution = LocalExecutionRuntime()
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\atlas\tools\local_execution.py", line 833, in __init__
+    self.permission_mode = get_config().local_execution_permission_mode
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\tasks.py:502: TimeoutError
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   NameError: name 'time' is not defined
+D:\Atlas\core\tests\test_app_server_acp.py:84: NameError: name 'time' is not defined
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   ValueError: Cannot fork a session through an open turn
+D:\Atlas\core\atlas\engine\session_sync.py:1306: ValueError: Cannot fork a session through an open turn
+E   ValueError: Cannot fork a session through an open turn
+D:\Atlas\core\atlas\engine\session_sync.py:1306: ValueError: Cannot fork a session through an open turn
+E   KeyError: 'missing_in_hermes'
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 08:35:11 [info     ] memory.init                    db=D:\ENGINE-V3-UPSTREAM-20261118\tmp\pytest-pair2-inflight\test_history_mutations_keep_do0\data\atlas.db
+D:\Atlas\core\tests\test_atlas_session_sync.py:245: KeyError: 'missing_in_hermes'
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+---------------------------- Captured stderr call -----------------------------
+2026-11-18 08:35:11 [info     ] memory.init                    db=D:\ENGINE-V3-UPSTREAM-20261118\tmp\pytest-pair2-inflight\test_child_directory_instructi0\kernel-project-instructions.sqlite3
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+E   AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+---------------------------- Captured stderr call -----------------------------
+2026-11-18 08:35:12 [info     ] memory.init                    db=D:\ENGINE-V3-UPSTREAM-20261118\tmp\pytest-pair2-inflight\test_kernel_instruction_bootst0\kernel-workspace-mismatch.sqlite3
+D:\Atlas\core\atlas\tools\local_execution.py:833: AttributeError: 'types.SimpleNamespace' object has no attribute 'local_execution_permission_mode'
+============================== warnings summary ===============================
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+FAILED tests/test_app_server_sdk_lifecycle.py::test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event
+FAILED tests/test_app_server_sdk_lifecycle.py::test_session_wait_on_idle_session_returns_immediately
+FAILED tests/test_app_server_sdk_lifecycle.py::test_session_wait_blocks_until_run_settles_with_status_notifications
+FAILED tests/test_app_server_sdk_lifecycle.py::test_shutdown_acknowledges_and_drains_active_run
+FAILED tests/test_app_server_sdk_lifecycle.py::test_acp_protocol_rejects_app_server_lifecycle_methods
+FAILED tests/test_app_server_acp.py::test_real_acp_subprocess_cancel_discards_partial_attempt_and_persists_audit
+FAILED tests/test_app_server_acp.py::test_acp_session_list_resume_and_permission_config_round_trip
+FAILED tests/test_app_server_acp.py::test_app_server_rejects_acp_session_list_method
+FAILED tests/test_app_server_acp.py::test_acp_approval_waits_for_client_and_rejects_reject_once
+FAILED tests/test_app_server_acp.py::test_acp_free_text_input_fails_explicitly_without_waiting_or_permission
+FAILED tests/test_app_server_acp.py::test_acp_does_not_stream_discarded_attempt_text
+FAILED tests/test_app_server_acp.py::test_acp_kernel_attempt_stream_returns_only_committed_attempt
+FAILED tests/test_app_server_acp.py::test_acp_kernel_permission_decision_controls_real_tool_side_effect[reject_once-False]
+FAILED tests/test_app_server_acp.py::test_acp_kernel_permission_decision_controls_real_tool_side_effect[allow_once-True]
+FAILED tests/test_atlas_session_sync.py::test_fork_copies_selected_turn_and_delete_removes_atlas_history
+FAILED tests/test_atlas_session_sync.py::test_fork_session_through_turn_direct_cuts_from_sessiondb_transcript
+FAILED tests/test_atlas_session_sync.py::test_history_mutations_keep_doctor_sessions_consistent
+FAILED tests/test_projects.py::test_child_directory_instruction_update_reaches_next_kernel_model_request
+FAILED tests/test_projects.py::test_kernel_instruction_bootstrap_requires_matching_trusted_workspace
+20 failed, 45 passed, 5 warnings in 24.26s

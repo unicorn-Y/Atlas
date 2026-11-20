@@ -18,6 +18,14 @@ class DockerSandboxManager:
         self._containers: dict[str, tuple[str, str]] = {}
         self._roots: dict[str, str] = {}
 
+    @staticmethod
+    def _require_local_workspace(workspace: str) -> None:
+        if workspace.strip().casefold().startswith("ssh://"):
+            raise RuntimeError(
+                "Remote SSH sandbox requires a target-native confinement runner; "
+                "local Docker/Job execution is not permitted."
+            )
+
     async def status(self) -> dict[str, Any]:
         now = time.monotonic()
         if self._status and now - self._status[0] < 60:
@@ -50,6 +58,7 @@ class DockerSandboxManager:
         return dict(result)
 
     async def start(self, run_id: str, workspace: str, sandbox: dict[str, Any]) -> dict[str, str]:
+        self._require_local_workspace(str(workspace))
         existing = self._containers.get(run_id)
         if existing:
             return {"container_id": existing[0], "image": existing[1]}
@@ -88,24 +97,77 @@ class DockerSandboxManager:
 
     async def _host_job_fallback(self, run_id: str, name: str,
                                  args: dict[str, Any]) -> dict[str, Any] | None:
-        """Run a local execution tool inside a Job Object when no container exists.
+        """Run a local execution tool inside the tightest host boundary available.
 
-        Returns ``None`` when this host cannot contain anything, so the caller
-        keeps its original error instead of silently running unsandboxed.
+        Order of preference: a write-restricted token with a capability SID (a
+        real filesystem write boundary) and, when that is unavailable, a Job
+        Object (process-tree containment only). ``sandbox_backend`` names the one
+        that ran, and ``read-only`` is refused only when neither can enforce a
+        write boundary — a host without Docker no longer has to pretend.
         """
         from atlas.windows_job_sandbox import (
             JobSandboxUnavailable,
             run_in_job,
             sandbox_capabilities,
         )
+        from atlas.windows_acl_sandbox import (
+            AclSandboxUnavailable,
+            acl_available,
+            run_in_acl_sandbox,
+        )
+
+        mode = str(args.get("sandbox_permissions") or "workspace-write")
+        workspace = Path(self._roots.get(run_id) or args.get("cwd") or ".").resolve()
+        cwd = Path(str(args.get("cwd") or workspace)).expanduser().resolve()
+        if not cwd.is_relative_to(workspace):
+            raise PermissionError("沙箱命令的工作目录必须位于工作目录内。")
+
+        shell_command: str | None = None
+        argv: list[str] = []
+        if name == "local_shell":
+            shell_command = str(args.get("command", ""))
+        elif name == "local_exec":
+            argv = [str(args.get("executable", "")), *[str(a) for a in args.get("args", [])]]
+        elif name == "local_git":
+            action = str(args.get("action", "status"))
+            parts = {"status": "--short --branch", "diff": "diff"}.get(action, action)
+            argv = ["git", *parts.split()]
+        else:
+            return None
+        timeout = float(args.get("timeout") or 120)
+
+        if mode in ("read-only", "workspace-write") and acl_available():
+            try:
+                acl_result = await asyncio.to_thread(
+                    run_in_acl_sandbox,
+                    argv,
+                    mode=mode,
+                    workspace_roots=[str(workspace)],
+                    cwd=str(cwd),
+                    timeout=timeout,
+                    command=shell_command,
+                )
+            except AclSandboxUnavailable:
+                acl_result = None
+            if acl_result is not None:
+                payload = acl_result.as_payload()
+                payload["sandbox_backend"] = "win32acl"
+                payload["sandbox_permissions"] = mode
+                text = payload["stdout"] or payload["stderr"] or f"exit {payload['exit_code']}"
+                return {
+                    "data": payload,
+                    "content": [{"type": "text", "text": text}],
+                    "is_error": bool(payload["exit_code"]) or payload["timed_out"],
+                    "sandbox_enforced": payload["enforced"],
+                }
 
         caps = sandbox_capabilities()
         if not caps.get("available"):
             return None
-        mode = str(args.get("sandbox_permissions") or "workspace-write")
         if mode == "read-only":
-            # A Job Object cannot enforce a filesystem ACL. Refuse rather than
-            # run a "read-only" command that is free to write.
+            # Without the ACL layer a Job Object cannot enforce a filesystem
+            # boundary. Refuse rather than run a "read-only" command that is
+            # free to write.
             return {
                 "data": {"error": "read-only is not enforceable by the host job backend",
                          "sandbox_enforced": False, "sandbox_backend": "win32job"},
@@ -115,25 +177,11 @@ class DockerSandboxManager:
                 "is_error": True,
             }
 
-        workspace = Path(self._roots.get(run_id) or args.get("cwd") or ".").resolve()
-        cwd = Path(str(args.get("cwd") or workspace)).expanduser().resolve()
-        if not cwd.is_relative_to(workspace):
-            raise PermissionError("沙箱命令的工作目录必须位于工作目录内。")
-
-        if name == "local_shell":
-            argv = ["cmd", "/c", str(args.get("command", ""))]
-        elif name == "local_exec":
-            argv = [str(args.get("executable", "")), *[str(a) for a in args.get("args", [])]]
-        elif name == "local_git":
-            action = str(args.get("action", "status"))
-            argv = ["git", {"status": "--short --branch", "diff": "diff"}.get(action, action)]
-            argv = [p for part in argv for p in part.split()]
-        else:
-            return None
+        if shell_command is not None:
+            argv = ["cmd", "/c", shell_command]
 
         try:
-            result = await run_in_job(argv, mode=mode, cwd=cwd,
-                                      timeout=float(args.get("timeout") or 120))
+            result = await run_in_job(argv, mode=mode, cwd=cwd, timeout=timeout)
         except JobSandboxUnavailable:
             return None
 
@@ -148,6 +196,8 @@ class DockerSandboxManager:
         }
 
     async def call_tool(self, run_id: str, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        requested_cwd = str(args.get("cwd") or self._roots.get(run_id) or "")
+        self._require_local_workspace(requested_cwd)
         entry = self._containers.get(run_id)
         if not entry:
             # No container for this run. On a host where Docker is absent or not

@@ -1,0 +1,76 @@
+--- a/core/atlas/plugins/runtime.py
++++ b/core/atlas/plugins/runtime.py
+@@ -29,6 +29,7 @@
+ 
+ from atlas.agent.enrichment import HOOK_POINTS
+ from atlas.plugins import patch_layer
++from atlas.plugins.registry_plan import RegistryConfig, registry_plan
+ from atlas.plugins.compatibility import ATLAS_VERSION, evaluate_plugin_compatibility
+ 
+ log = structlog.get_logger(__name__)
+@@ -368,7 +369,8 @@
+         return "approved" if expiry > current else "expired"
+ 
+     async def start_install_operation(
+-        self, source: str, *, ref: str | None = None, registry: str | None = None, request_id: str | None = None,
++        self, source: str, *, ref: str | None = None, registry: str | None = None,
++        fallback_registries: list[str] | None = None, request_id: str | None = None,
+         on_complete: Any = None, source_type: str | None = None, marketplace: str | None = None,
+         plugin_name: str | None = None,
+     ) -> dict[str, Any]:
+@@ -376,7 +378,24 @@
+         if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", request_id):
+             raise ValueError("requestId is invalid")
+         source_type = source_type or self._infer_install_source_type(source)
++        fallbacks = tuple(
++            item for item in (fallback_registries or ()) if isinstance(item, str) and item
++        ) if isinstance(fallback_registries, list) else ()
++        try:
++            plan_payload: dict[str, Any] | None = registry_plan(
++                registry,
++                configured=RegistryConfig(registry=registry, fallback_registries=fallbacks),
++                spec=source,
++            ).to_dict()
++        except ValueError as exc:
++            # The plan is recorded for consumers; the existing single-registry
++            # path below still decides the run until retries are integrated.
++            plan_payload = {"error": str(exc)}
+         args = (source, ref, registry, source_type, marketplace, plugin_name)
++        if fallbacks:
++            # Fallbacks are a new request shape; calls without them keep the
++            # digest earlier runtimes recorded for the same request.
++            args = (*args, fallbacks)
+         previous = self._install_request_args.get(request_id)
+         if previous is not None:
+             if previous != args:
+@@ -397,7 +416,7 @@
+         self._install_operations[request_id] = {
+             "requestId": request_id, "source": source, "status": "queued",
+             "createdAt": datetime.now(timezone.utc).isoformat(), "updatedAt": datetime.now(timezone.utc).isoformat(),
+-            "approvalRequired": [],
++            "approvalRequired": [], "registryPlan": plan_payload,
+         }
+         self._install_cancel_events[request_id] = asyncio.Event()
+         self._install_done_events[request_id] = asyncio.Event()
+--- a/core/atlas/api/plugins_router.py
++++ b/core/atlas/api/plugins_router.py
+@@ -155,7 +155,8 @@
+             if not validation["valid"]:
+                 raise HTTPException(status_code=422, detail={"message": "插件清单校验未通过", "validation": validation})
+         return await plugin_runtime.start_install_operation(
+-            source, ref=req.get("ref"), registry=req.get("registry"), request_id=req.get("requestId"),
++            source, ref=req.get("ref"), registry=req.get("registry"),
++            fallback_registries=req.get("fallbackRegistries"), request_id=req.get("requestId"),
+             on_complete=_server()._reload_extensions, source_type=source_type,
+         )
+     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+@@ -443,7 +444,8 @@
+         result = await plugin_runtime.start_install_operation(
+             f"marketplace:{name}/{plugin_name}", request_id=req.get("requestId"),
+             source_type="marketplace", marketplace=name, plugin_name=plugin_name,
+-            registry=req.get("registry"), on_complete=_server()._reload_extensions,
++            registry=req.get("registry"), fallback_registries=req.get("fallbackRegistries"),
++            on_complete=_server()._reload_extensions,
+         )
+     except KeyError as exc:
+         raise HTTPException(status_code=404, detail=str(exc.args[0] if exc.args else exc)) from exc

@@ -1,0 +1,8 @@
+carrier	rows	command
+source-git	21071	git ls-tree -r -z --name-only 3f321d32bfe3
+npm-dsh-cli	534	tar -tzf downloads/dsh-cli-0.2.2-rc.4.tgz(registry fileCount=534)
+desktop-installer	10	7z l downloads/dsh-latest-windows-x64.exe(Type=PE 容器内的 NSIS/7zip 成员)
+desktop-installer-inner	8785	7z l installer-extract/$PLUGINSDIR/app-64.7z(离线列出,未解包)
+desktop-runtime	6136	find resources/runtime -type f(本机安装 0.2.2-rc.2)
+TOTAL	36536	SUM
+upstream-delta rows	11777	git -c diff.renameLimit=0 diff --name-status --find-renames d74326738864..3f321d32bfe3

@@ -280,7 +280,11 @@ class AgentRunContext:
     inbox: DurableInbox | None = None
     input_callback: Callable[[str, str, list[str] | None], Any] | None = None
     workspace: str | None = None
+    working_directory: str | None = None
+    working_directory_callback: Callable[[str | None], Any] | None = None
     workspace_trusted: bool = False
+    project_instruction_root: str | None = None
+    project_instruction_snapshot: dict[str, dict[str, Any]] = field(default_factory=dict)
     agent_role: str = "general"
     agent_depth: int = 0
     agent_type: str = "general"
@@ -302,7 +306,7 @@ class AgentRunContext:
     process_notifications: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
     parent_process_event_callback: Callable[..., Any] | None = None
     user_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None
-    ssh_tool_callback: Callable[[str, dict[str, Any]], Any] | None = None
+    ssh_tool_callback: Callable[..., Any] | None = None
     ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None
     sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None
     sandbox_enabled: bool = False
@@ -492,13 +496,13 @@ class AgentOrchestrator:
 
     async def _project_context_block(
         self, conversation_id: str, message: str,
-    ) -> str:
-        """Assemble the active project's context for automatic injection."""
+    ) -> tuple[str, str]:
+        """Return refreshed project state separately from durable project knowledge."""
         if self._projects is None:
-            return ""
+            return "", ""
         project = await self._projects.find_by_conversation(conversation_id)
         if project is None:
-            return ""
+            return "", ""
         conversation_ids = await self._projects.list_conversations(project.project_id)
         query = (message or project.current_goal or "").strip()
         hits: list[dict[str, Any]] = []
@@ -511,18 +515,19 @@ class AgentOrchestrator:
             except Exception:
                 log.debug("agent.project_session_search_failed", exc_info=True)
                 hits = []
-        parts = [
+        state_parts = [
             f"Active project: {project.name} (status: {project.status})",
         ]
         if project.current_goal:
-            parts.append(f"Project goal: {project.current_goal}")
+            state_parts.append(f"Project goal: {project.current_goal}")
         if project.current_state:
-            parts.append(f"Last known state: {project.current_state}")
+            state_parts.append(f"Last known state: {project.current_state}")
         if project.workspace_path:
-            parts.append(f"Workspace: {project.workspace_path}")
-        parts.append(f"Project conversations: {len(conversation_ids)}")
+            state_parts.append(f"Workspace: {project.workspace_path}")
+        state_parts.append(f"Project conversations: {len(conversation_ids)}")
+        knowledge_parts: list[str] = []
         if hits:
-            parts.append("Relevant prior sessions (raw recall):\n" + json.dumps([
+            knowledge_parts.append("Relevant prior sessions (raw recall):\n" + json.dumps([
                 {
                     "title": hit.get("conversation_title"),
                     "snippet": str(hit.get("snippet", ""))[:200],
@@ -557,7 +562,7 @@ class AgentOrchestrator:
                 except (OSError, UnicodeError, ValueError) as exc:
                     from atlas.diagnostic_alerts import record_alert
                     detail = f"{source_path}: {exc}"
-                    parts.append(f"Project knowledge index error: {detail}")
+                    state_parts.append(f"Project knowledge index error: {detail}")
                     record_alert("project-index", "项目知识索引失败", detail, target="project-sources", dedupe_key=f"project-index:{project.project_id}:{source_path}")
         # Search errors stay actionable in both this context and the persistent alerts view.
         if query:
@@ -569,7 +574,7 @@ class AgentOrchestrator:
             except Exception as exc:
                 from atlas.diagnostic_alerts import record_alert
                 record_alert("project-index", "项目资料索引查询失败", str(exc), target="project-sources", dedupe_key=f"project-search:{project.project_id}")
-                parts.append(f"Project knowledge index error: {exc}")
+                state_parts.append(f"Project knowledge index error: {exc}")
                 source_hits = []
         # Find same-key assertions with different values and preserve both source labels.
         claims: dict[str, list[tuple[str, str]]] = {}
@@ -582,7 +587,7 @@ class AgentOrchestrator:
                     claims.setdefault(key, []).append((label, value))
         conflicts = [(key, entries) for key, entries in claims.items() if len({value for _, value in entries}) > 1]
         if conflicts:
-            parts.append("SOURCE CONFLICTS — do not silently choose one; ask the user which source is current:\n" + "\n".join(
+            knowledge_parts.append("SOURCE CONFLICTS — do not silently choose one; ask the user which source is current:\n" + "\n".join(
                 f"- {key}: " + " | ".join(f"{source} says {value}" for source, value in entries) for key, entries in conflicts[:20]
             ))
         rendered: list[str] = []
@@ -597,12 +602,12 @@ class AgentOrchestrator:
             remaining_chars -= len(kept)
             kept_chars += len(kept)
         if rendered:
-            parts.append("Relevant shared project knowledge (source-labelled; priority: project instructions, NOTES.md, AGENTS/CLAUDE rules, then indexed matches):\n" + "\n".join(rendered))
+            knowledge_parts.append("Relevant shared project knowledge (source-labelled; priority: project instructions, NOTES.md, AGENTS/CLAUDE rules, then indexed matches):\n" + "\n".join(rendered))
         total_tokens = (total_chars + 3) // 4
         kept_tokens = (kept_chars + 3) // 4
         if total_tokens > kept_tokens:
-            parts.append(f"Shared knowledge budget truncated: kept {kept_tokens} / {total_tokens} estimated tokens; priority order is project instructions → NOTES.md → AGENTS/CLAUDE → indexed source matches.")
-        return "\n".join(parts)
+            knowledge_parts.append(f"Shared knowledge budget truncated: kept {kept_tokens} / {total_tokens} estimated tokens; priority order is project instructions → NOTES.md → AGENTS/CLAUDE → indexed source matches.")
+        return "\n".join(state_parts), "\n".join(knowledge_parts)
 
     async def _use_skill_result(self, raw_name: str) -> dict[str, Any]:
         """Activate a skill and wrap its instructions as a tool result."""
@@ -728,6 +733,7 @@ class AgentOrchestrator:
         status = "completed"
         prompt = worker_prompt
         stop_continuations = 0
+        child_events = None
         parent_approval = options.get("approval_callback")
         child_role = str(options.get("agent_role", "leaf"))
         child_depth = int(options.get("depth", 0))
@@ -758,7 +764,7 @@ class AgentOrchestrator:
             while True:
                 stop_outcome: dict[str, Any] = {}
                 try:
-                    async for event in self.run(
+                    child_events = self.run(
                         prompt, conversation_id=conversation_id,
                         model=options.get("model"), cancel_event=cancel_event,
                         reasoning_effort=options.get("reasoning_effort"),
@@ -787,7 +793,8 @@ class AgentOrchestrator:
                         subtask_completed=options.get("subtask_completed"),
                         subtask_group_completed=options.get("subtask_group_completed"),
                         run_id=subtask_id, worker=True,
-                    ):
+                    )
+                    async for event in child_events:
                         kind = event.get("type")
                         if kind == "chunk":
                             text = str(event.get("content", ""))
@@ -843,9 +850,13 @@ class AgentOrchestrator:
                 "evidence": usage, "session_id": conversation_id,
             }
         finally:
-            await run_user_hook(options.get("user_hook_callback"), "SessionEnd", {
-                "conversation_id": conversation_id, "reason": status,
-            })
+            try:
+                if child_events is not None:
+                    await child_events.aclose()
+            finally:
+                await run_user_hook(options.get("user_hook_callback"), "SessionEnd", {
+                    "conversation_id": conversation_id, "reason": status,
+                })
 
     async def _summarize_parallel_results(self, results: list[dict[str, Any]]) -> str:
         result = await self._model_router.complete_for(
@@ -971,6 +982,8 @@ class AgentOrchestrator:
         input_callback: Callable[[str, str, list[str] | None], Any] | None = None,
         runtime_event_callback: Callable[[dict[str, Any]], Any] | None = None,
         workspace: str | None = None,
+        working_directory: str | None = None,
+        working_directory_callback: Callable[[str | None], Any] | None = None,
         workspace_trusted: bool = False,
         agent_role: str = "general",
         agent_depth: int = 0,
@@ -990,7 +1003,7 @@ class AgentOrchestrator:
         permission_mode: str = "full_access",
         allowed_paths: list[str] | None = None,
         user_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None,
-        ssh_tool_callback: Callable[[str, dict[str, Any]], Any] | None = None,
+        ssh_tool_callback: Callable[..., Any] | None = None,
         ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None,
         sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None,
         sandbox_enabled: bool = False,
@@ -1038,7 +1051,9 @@ class AgentOrchestrator:
             plan_state=plan_state, force_plan=force_plan, evaluate_goal=evaluate_goal,
             source_run_id=source_run_id, image_attachments=image_attachments,
             active_skill_instructions=active_skill_instructions, run_id=run_id,
-            workspace=workspace, workspace_trusted=workspace_trusted,
+            workspace=workspace, working_directory=working_directory,
+            working_directory_callback=working_directory_callback,
+            workspace_trusted=workspace_trusted,
             agent_role=agent_role, agent_depth=agent_depth, agent_type=agent_type,
             agent_preset_id=agent_preset_id,
             agent_preset_capabilities=agent_preset_capabilities,

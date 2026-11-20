@@ -1,0 +1,85 @@
+PAR-10-T6-5 legacy-manifest migration matrix (fresh build + real 0.1.0 tree)
+2026-11-18T22:55:00Z
+module=/d/Atlas/.worktrees/zcode-par10-win-release-repro/frontend/dist-electron/main/releaseIntegrity.js
+
+== A: fresh payload, embedded manifest ==
+{
+  "ok": true,
+  "manifestPath": "D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro\\.par10-t6-5-sandbox\\pkg-migration\\resources\\atlas\\release-manifest.json",
+  "manifest_app_version": "0.1.1",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "92d002d1119fc12227953991b4e8368b46ae5391493cc52fd054636ef951e90f"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "5ca6a16bdd2c5a5037b1e3a942d9ac1c66efe2def902b202d44774680a8a4656"
+    }
+  ],
+  "issues": []
+}
+A_EXIT=0
+
+== B: fresh payload + old 0.1.0 release-side manifest at install root ==
+old root manifest app_version=0.1.0
+{
+  "ok": true,
+  "manifestPath": "D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro\\.par10-t6-5-sandbox\\pkg-migration\\resources\\atlas\\release-manifest.json",
+  "manifest_app_version": "0.1.1",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "92d002d1119fc12227953991b4e8368b46ae5391493cc52fd054636ef951e90f"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "5ca6a16bdd2c5a5037b1e3a942d9ac1c66efe2def902b202d44774680a8a4656"
+    }
+  ],
+  "issues": []
+}
+B_EXIT=0
+
+== C: embedded manifest removed, old 0.1.0 manifest remains at root ==
+{
+  "ok": false,
+  "manifestPath": "D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro\\.par10-t6-5-sandbox\\pkg-migration\\release-manifest.json",
+  "manifest_has_installer": null,
+  "verifiedArtifacts": [],
+  "issues": [
+    {
+      "code": "manifest_invalid",
+      "field": "sqlite_runtime.version"
+    },
+    {
+      "code": "manifest_invalid",
+      "field": "sqlite_runtime.source"
+    },
+    {
+      "code": "manifest_invalid",
+      "field": "sqlite_runtime.archive_sha3_256"
+    },
+    {
+      "code": "manifest_invalid",
+      "field": "sqlite_runtime.dll_sha256"
+    }
+  ]
+}
+C_EXIT=1

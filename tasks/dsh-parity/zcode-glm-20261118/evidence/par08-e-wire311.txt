@@ -1,0 +1,14 @@
+engine.home_legacy_env path=C:\Users\25011\AppData\Local\hermes ATLAS_HOME is unset, so HERMES_HOME is still redirecting Atlas engine data into a legacy Hermes install. Set ATLAS_HOME to an Atlas-owned directory to stop depending on it.
+input/request {"call_id": "call_fake_1", "options": ["yes", "no"], "prompt": "Continue?", "request_id": "9a7bd9fceb3a4db4a859d89f6673a237", "session_id": "7b8895fd-f12d-4ea6-bc7d-3a755ba60367"}
+cancel_session -> True
+user-question.cancelled {"requestId": "9a7bd9fceb3a4db4a859d89f6673a237", "sessionId": "7b8895fd-f12d-4ea6-bc7d-3a755ba60367"}
+prompt.result cancelled ''
+cancellations [{"requestId": "9a7bd9fceb3a4db4a859d89f6673a237", "sessionId": "7b8895fd-f12d-4ea6-bc7d-3a755ba60367"}]
+late.answer AppServerError(-32602)
+model.requests 1
+first.process.rc 0
+durable.states ['pending', 'invalidated']
+restart.same.conversation True
+restart.late.answer AppServerError(-32602)
+restart.pending [('9a7bd9fceb3a4db4a859d89f6673a237', 'invalidated')]
+second.process.rc 0

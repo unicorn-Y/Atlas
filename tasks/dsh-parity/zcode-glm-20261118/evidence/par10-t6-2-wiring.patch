@@ -1,0 +1,159 @@
+diff --git a/core/atlas/api/plugins_router.py b/core/atlas/api/plugins_router.py
+index 278a754d..3491646d 100644
+--- a/core/atlas/api/plugins_router.py
++++ b/core/atlas/api/plugins_router.py
+@@ -11,11 +11,22 @@ from typing import Annotated, Any
+ from fastapi import APIRouter, Depends, HTTPException
+ 
+ import asyncio
++import json
++import re
+ import subprocess
++import urllib.error
++import urllib.parse
++import urllib.request
+ from pathlib import Path
+ 
+ from atlas.api.app_services import AppServices
+ from atlas.api.dependencies import get_app_services
++from atlas.plugins.version_facts import (
++    is_valid_version,
++    newer_versions,
++    select_version,
++    version_facts,
++)
+ 
+ router = APIRouter()
+ 
+@@ -93,6 +104,131 @@ async def check_plugin_updates(
+     return {"updates": updates, "plugins": plugin_runtime.discover()}
+ 
+ 
++#: Registry reads are bounded: an oversized answer is refused rather than
++#: parsed, and a slow registry cannot hold the request open forever.
++_REGISTRY_TIMEOUT_SECONDS = 15
++_REGISTRY_MAX_BYTES = 8 * 1024 * 1024
++_PACKAGE_NAME_RE = re.compile(
++    r"^(?:@[A-Za-z0-9][A-Za-z0-9._~-]*/)?[A-Za-z0-9][A-Za-z0-9._~-]*$"
++)
++
++
++class _RegistryNotFound(Exception):
++    """The registry answered 404 for the package."""
++
++
++class _RegistryUpstreamError(Exception):
++    """The registry could not be read (HTTP error, timeout, malformed JSON)."""
++
++
++def _normalize_registry(registry: str) -> str:
++    """Accept only a credential-free http(s) registry base with a trailing slash."""
++    value = registry.strip()
++    if not value or any(ord(char) < 32 or char == " " for char in value):
++        raise ValueError("registry must be a non-empty http(s) URL")
++    parsed = urllib.parse.urlsplit(value)
++    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
++        raise ValueError("registry must be an http(s) URL")
++    if parsed.username is not None or parsed.password is not None or "@" in parsed.netloc:
++        raise ValueError("registry URL must not contain credentials")
++    if parsed.query or parsed.fragment:
++        raise ValueError("registry URL must not contain a query or fragment")
++    try:
++        parsed.port
++    except ValueError as exc:
++        raise ValueError("registry URL has an invalid port") from exc
++    path = parsed.path or "/"
++    if not path.endswith("/"):
++        path += "/"
++    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
++
++
++def _packument_url(registry: str, name: str) -> str:
++    """The packument URL for a package name; scoped names are percent-encoded."""
++    if len(name) > 214 or not _PACKAGE_NAME_RE.fullmatch(name):
++        raise ValueError("invalid package name")
++    return registry + urllib.parse.quote(name, safe="@")
++
++
++def _fetch_packument(registry: str, name: str) -> dict[str, Any]:
++    """Fetch one packument with a timeout and size cap; no credentials are sent."""
++    request = urllib.request.Request(
++        _packument_url(registry, name),
++        headers={"Accept": "application/json", "User-Agent": "atlas-plugin-registry/1.0"},
++    )
++    try:
++        with urllib.request.urlopen(request, timeout=_REGISTRY_TIMEOUT_SECONDS) as response:
++            body = response.read(_REGISTRY_MAX_BYTES + 1)
++    except urllib.error.HTTPError as exc:
++        if exc.code == 404:
++            raise _RegistryNotFound(name) from exc
++        raise _RegistryUpstreamError(f"registry answered HTTP {exc.code}") from exc
++    except (OSError, ValueError) as exc:
++        raise _RegistryUpstreamError(f"registry request failed: {exc}") from exc
++    if len(body) > _REGISTRY_MAX_BYTES:
++        raise _RegistryUpstreamError("registry answer is too large")
++    try:
++        answer = json.loads(body.decode("utf-8"))
++    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
++        raise _RegistryUpstreamError("registry answered invalid JSON") from exc
++    if not isinstance(answer, dict):
++        raise _RegistryUpstreamError("registry answered a non-object packument")
++    return answer
++
++
++@router.get("/api/plugins/registry/versions")
++async def list_registry_versions(
++    name: str,
++    registry: str,
++    installed: str,
++    version: str | None = None,
++) -> dict[str, Any]:
++    """Read a registry packument: newer versions plus the facts that gate updates.
++
++    Read-only and network-bounded. It is deliberately not gated on
++    ``plugin_runtime``: version facts do not need an installed plugin, and the
++    route must stay usable while the plugin installer is unavailable.
++    """
++    name = name.strip()
++    if len(name) > 214 or not _PACKAGE_NAME_RE.fullmatch(name):
++        raise HTTPException(status_code=400, detail="invalid package name")
++    try:
++        base = _normalize_registry(registry)
++    except ValueError as exc:
++        raise HTTPException(status_code=400, detail=str(exc)) from exc
++    installed = installed.strip()
++    if not is_valid_version(installed):
++        raise HTTPException(status_code=422, detail="installed must be a semver version")
++    if version is not None:
++        version = version.strip()
++        if not is_valid_version(version):
++            raise HTTPException(status_code=422, detail="version must be a semver version")
++    try:
++        packument = await asyncio.to_thread(_fetch_packument, base, name)
++    except _RegistryNotFound as exc:
++        raise HTTPException(status_code=404, detail=f"包不存在：{name}") from exc
++    except _RegistryUpstreamError as exc:
++        raise HTTPException(status_code=502, detail=f"注册表读取失败：{exc}") from exc
++    versions = packument.get("versions")
++    if not isinstance(versions, dict) or not versions:
++        raise HTTPException(status_code=502, detail="注册表未返回任何版本")
++    try:
++        target = select_version(packument, version=version)
++        facts = version_facts(packument, version=target)
++    except ValueError as exc:
++        if version is not None:
++            raise HTTPException(status_code=404, detail=f"版本不存在：{version}") from exc
++        raise HTTPException(status_code=502, detail=f"注册表版本数据不可用：{exc}") from exc
++    return {
++        "name": name,
++        "registry": base,
++        "installed": installed,
++        "target_version": target,
++        "newer_versions": newer_versions(installed, list(versions)),
++        "facts": facts,
++    }
++
++
+ @router.post("/api/plugins/validate")
+ async def validate_plugin_manifest(
+     services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any],

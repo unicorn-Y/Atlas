@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import hashlib
 import json
 import re
 import tempfile
@@ -109,6 +110,30 @@ def _tool_family(name: str) -> str:
     return name.split("_", 1)[0][:80] if "_" in name else name[:80]
 
 
+def _resolve_local_working_directory(
+    workspace: str, current_directory: str | None, requested: str | None,
+) -> str:
+    root = Path(workspace).expanduser().resolve(strict=True)
+    try:
+        current = Path(current_directory or workspace).expanduser().resolve(strict=True)
+    except OSError:
+        current = root
+    if requested is None:
+        candidate = current if current.is_dir() else root
+    else:
+        candidate = Path(requested).expanduser()
+        if not candidate.is_absolute():
+            candidate = current / candidate
+        candidate = candidate.resolve(strict=True)
+    if not root.is_dir() or not candidate.is_dir():
+        raise ValueError("working_directory requires an existing directory")
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("working_directory must remain inside the trusted workspace") from exc
+    return str(candidate)
+
+
 def _approval_denial_reason(choice: Any, fallback: str) -> str:
     """Read an optional denial reason encoded by the runtime approval bridge."""
     value = str(choice)
@@ -117,6 +142,42 @@ def _approval_denial_reason(choice: Any, fallback: str) -> str:
         if reason:
             return reason[:1000]
     return fallback
+
+
+def _project_instruction_touched_paths(name: str, arguments: dict[str, Any]) -> list[str]:
+    if name == "local_file":
+        if arguments.get("action") not in {"read", "write", "append", "delete", "move", "copy"}:
+            return []
+        return [str(arguments[key]) for key in ("path", "destination")
+                if isinstance(arguments.get(key), str) and arguments[key].strip()]
+    if name == "local_edit":
+        path = arguments.get("path")
+        return [path] if isinstance(path, str) and path.strip() else []
+    if name == "local_edit_batch":
+        return [str(edit["path"]) for edit in arguments.get("edits", [])
+                if isinstance(edit, dict) and isinstance(edit.get("path"), str)
+                and edit["path"].strip()]
+    return []
+
+
+def _project_instruction_update_text(updates: list[dict[str, Any]]) -> str:
+    blocks = ["Current project instructions updated from trusted workspace files."]
+    for update in updates:
+        state = str(update.get("state") or "changed")
+        source = str(update.get("path") or "unknown source")
+        identity = str(update.get("change_id") or update.get("revision") or "unknown")
+        if state in {"added", "changed"}:
+            blocks.append(
+                f"[source={source}; state={state}; revision={identity}]\n"
+                f"{str(update.get('content') or '')}"
+                + ("\n[truncated]" if update.get("truncated") else "")
+            )
+        else:
+            blocks.append(
+                f"[source={source}; state={state}; change_id={identity}] "
+                "This source is no longer active for the touched workspace scope."
+            )
+    return "\n\n".join(blocks)
 
 async def execute_tools_node(
     agent, state: "ToolExecutionState",
@@ -232,8 +293,10 @@ async def execute_tools_node(
                 await ctx.event_queue.put(cancelled_event)
             continue
         if workspace and workspace.startswith("ssh://") and fn_name == "local_process":
-            fn_args.setdefault("cwd", str(Path.cwd()))
-        elif workspace and fn_name.startswith("local_"):
+            fn_args.setdefault("cwd", workspace)
+        elif workspace and fn_name.startswith("local_") and fn_name not in {
+            "local_shell", "local_exec", "local_process",
+        }:
             fn_args.setdefault("cwd", workspace)
 
 
@@ -366,6 +429,8 @@ async def execute_tools_node(
                         "write", "append", "mkdir", "copy", "move", "delete",
                     })
                     or fn_name.startswith("custom_")
+                    or fn_name in {"terminal_open", "terminal_send", "terminal_signal", "terminal_close"}
+                    or (fn_name == "working_directory" and fn_args.get("cd") is not None)
                     or (fn_name.startswith("local_process") and fn_args.get("action") in {
                         "start", "write_stdin", "submit_stdin", "close_stdin",
                         "handoff", "terminate",
@@ -548,7 +613,8 @@ async def execute_tools_node(
                 refs.append(reference)
 
         # Approval gate for sensitive tools
-        if (fn_name in agent.APPROVAL_REQUIRED_TOOLS
+        if ((fn_name in agent.APPROVAL_REQUIRED_TOOLS
+                or (fn_name == "working_directory" and fn_args.get("cd") is not None))
                 and permission_mode != "ask_writes" and ctx.approval_callback):
             hook_permission = await run_user_hook(
                 user_hook_callback, "PermissionRequest",
@@ -637,7 +703,27 @@ async def execute_tools_node(
                 })
 
         try:
-            if fn_name in {"ide_get_selection", "ide_get_diagnostics", "ide_open_diff"}:
+            if fn_name == "working_directory":
+                if not workspace or workspace.startswith("ssh://"):
+                    raise ValueError("working_directory requires a local workspace")
+                requested = fn_args.get("cd") if "cd" in fn_args else None
+                if requested is not None and (not isinstance(requested, str) or not requested):
+                    raise ValueError("working_directory cd must be a non-empty path")
+                callback = getattr(ctx, "working_directory_callback", None)
+                if callable(callback):
+                    selected = callback(requested)
+                    if hasattr(selected, "__await__"):
+                        selected = await selected
+                else:
+                    selected = _resolve_local_working_directory(
+                        str(workspace), getattr(ctx, "working_directory", None), requested,
+                    )
+                ctx.working_directory = str(selected)
+                value = {"cwd": str(selected)}
+                result = {"data": value, "content": [{
+                    "type": "text", "text": json.dumps(value, ensure_ascii=False),
+                }], "is_error": False}
+            elif fn_name in {"ide_get_selection", "ide_get_diagnostics", "ide_open_diff"}:
                 from atlas.tools.ide_bridge import request as ide_request
 
                 method = {
@@ -981,17 +1067,15 @@ async def execute_tools_node(
                         max_tokens=900, temperature=0.2,
                     )
                     result = {"content": [{"type": "text", "text": answer.text}], "is_error": False}
-            elif fn_name in {"session_event_search", "session_trace", "session_event_trace", "session_event_read"}:
-                from atlas.agent.session_queries import execute_query, reference_snapshot
+            elif fn_name in {"session_event_search", "session_trace", "session_event_trace",
+                             "session_event_read", "session_context_search", "session_context_read"}:
+                from atlas.agent.session_queries import dispatch_session_query, reference_snapshot
                 from atlas.config import DATA_ROOT
-                from atlas.engine.session_sync import _open_db
 
-                def _query_session():
-                    with _open_db(DATA_ROOT / "engine") as db:
-                        return execute_query(db, fn_name, fn_args, workspace=workspace,
-                                             current_session=str(ctx.conversation_id or ""))
-
-                payload = await asyncio.to_thread(_query_session)
+                payload = await asyncio.to_thread(
+                    dispatch_session_query, DATA_ROOT / "engine", fn_name, fn_args,
+                    workspace=workspace, current_session=str(ctx.conversation_id or ""),
+                )
                 result = {"data": payload, "content": [{"type": "text", "text": reference_snapshot(payload)}],
                           "is_error": False}
             elif fn_name == "read_session":
@@ -1624,8 +1708,15 @@ async def execute_tools_node(
                 "local_shell", "local_exec", "local_git",
             }):
                 result = await ctx.sandbox_tool_callback(ctx.run_id or "", fn_name, fn_args)
+            elif (getattr(ctx, "sandbox_enabled", False) and fn_name == "local_process"
+                  and (workspace or "").startswith("ssh://")):
+                if ssh_tool_callback is None:
+                    raise PermissionError("Remote sandbox has no authority-bound SSH process runner.")
+                result = await ssh_tool_callback(fn_name, fn_args, ctx.run_id)
             elif getattr(ctx, "sandbox_enabled", False) and fn_name == "local_process":
                 raise PermissionError("Docker 沙箱模式下不支持后台本机进程工具。")
+            elif getattr(ctx, "sandbox_enabled", False) and fn_name.startswith("terminal_"):
+                raise PermissionError("Native PTY terminals cannot run inside the configured sandbox.")
             elif fn_name in edit_tool_names and getattr(ctx, "kernel_edit", None) is not None:
                 final_targets = ctx.kernel_edit.target_paths(fn_name, fn_args)
                 if final_targets != edit_targets:
@@ -1681,7 +1772,7 @@ async def execute_tools_node(
                         replace_all=bool(fn_args.get("replace_all")))
                 else:
                     result = await ctx.kernel_edit.execute(fn_name, fn_args)
-            elif fn_name.startswith("local_") and agent._local_execution:
+            elif fn_name.startswith(("local_", "terminal_")) and agent._local_execution:
                 if ctx.session_env and fn_name in {"local_process", "local_exec", "local_shell"}:
                     explicit_env = fn_args.get("env") if isinstance(fn_args.get("env"), dict) else {}
                     fn_args["env"] = {**ctx.session_env, **explicit_env}
@@ -1695,10 +1786,13 @@ async def execute_tools_node(
                     workspace_bound = (
                         fn_name in {"local_shell", "local_exec"}
                         or (fn_name == "local_process" and fn_args.get("action") == "start")
+                        or fn_name == "terminal_open"
                     )
                     if (workspace_bound and not workspace.startswith("ssh://")
                             and not str(fn_args.get("cwd") or "").strip()):
-                        fn_args["cwd"] = workspace
+                        fn_args["cwd"] = str(
+                            getattr(ctx, "working_directory", None) or workspace
+                        )
                     else:
                         fn_args.setdefault("cwd", workspace)
                 if fn_name == "local_edit_batch":
@@ -1750,14 +1844,23 @@ async def execute_tools_node(
                             "type": "checkpoint_error", "tool": fn_name,
                             "detail": str(exc),
                         })
-                if (ssh_tool_callback and (workspace or "").startswith("ssh://")
-                        and fn_name in {"local_file", "local_edit", "local_git", "local_shell", "local_exec"}):
-                    result = await ssh_tool_callback(fn_name, fn_args)
-                elif getattr(ctx, "exec_manager", None) is not None and fn_name in {
+                if getattr(ctx, "exec_manager", None) is not None and fn_name in {
                     "local_shell", "local_exec", "local_process",
                     "job_list", "job_output", "job_kill",
                 }:
                     result = await ctx.exec_manager.execute(fn_name, fn_args)
+                elif (ssh_tool_callback and (workspace or "").startswith("ssh://")
+                        and fn_name in {
+                            "local_file", "local_edit", "local_git", "local_shell", "local_exec",
+                            "local_process",
+                        }):
+                    if fn_name == "local_process":
+                        # A delegated run inherits the parent's callback object, but
+                        # its remote process ownership and cancellation belong to the
+                        # child run currently executing this tool.
+                        result = await ssh_tool_callback(fn_name, fn_args, ctx.run_id)
+                    else:
+                        result = await ssh_tool_callback(fn_name, fn_args)
                 elif (getattr(ctx, "acp_filesystem", None) is not None
                       and fn_name == "local_file" and not fn_args.get("binary")
                       and ((fn_args.get("action") == "read" and ctx.acp_filesystem.read_enabled)
@@ -1773,8 +1876,21 @@ async def execute_tools_node(
                         fn_args.setdefault("_atlas_workspace", workspace)
                     if fn_name in {"local_shell", "local_exec", "local_process"} and getattr(ctx, "project_id", None):
                         fn_args["_atlas_project_id"] = ctx.project_id
+                    terminal_owner_id = None
+                    if fn_name.startswith("terminal_"):
+                        conversation_id = str(getattr(ctx, "conversation_id", "") or "").strip()
+                        if not conversation_id:
+                            raise PermissionError("Terminal tools require an active conversation identity.")
+                        owner_material = "\x1f".join((
+                            conversation_id,
+                            str(getattr(ctx, "agent_type", "general") or "general"),
+                            str(getattr(ctx, "agent_role", "leaf") or "leaf"),
+                            str(getattr(ctx, "agent_depth", 0) or 0),
+                        ))
+                        terminal_owner_id = hashlib.sha256(owner_material.encode("utf-8")).hexdigest()
                     result = await agent._local_execution.call_tool(
                         fn_name, fn_args, run_id=ctx.run_id,
+                        terminal_owner_id=terminal_owner_id,
                         output_callback=report_process_output,
                         cancel_event=ctx.cancel_event,
                         event_callback=(ctx.parent_process_event_callback or process_event)
@@ -1922,12 +2038,49 @@ async def execute_tools_node(
             }]
         result["is_error"] = bool(result.get("is_error", False))
 
-        if ctx.conversation_id and ctx.run_id:
+        instruction_root = getattr(ctx, "project_instruction_root", None)
+        if (not result["is_error"] and getattr(ctx, "workspace_trusted", False)
+                and workspace and instruction_root
+                and not str(workspace).strip().casefold().startswith("ssh://")):
+            touched_instruction_paths = _project_instruction_touched_paths(fn_name, fn_args)
+            if touched_instruction_paths:
+                try:
+                    from atlas.agent.project_instructions import refresh_project_instructions
+
+                    updates, snapshot = refresh_project_instructions(
+                        workspace, touched_instruction_paths,
+                        project_root=instruction_root,
+                        previous=getattr(ctx, "project_instruction_snapshot", {}),
+                    )
+                    previous_snapshot = getattr(ctx, "project_instruction_snapshot", None)
+                    if isinstance(previous_snapshot, dict):
+                        previous_snapshot.clear()
+                        previous_snapshot.update(snapshot)
+                    else:
+                        ctx.project_instruction_snapshot = snapshot
+                    if updates:
+                        data = result.get("data")
+                        if not isinstance(data, dict):
+                            data = {}
+                            result["data"] = data
+                        data["project_instruction_updates"] = updates
+                        result["content"].append({
+                            "type": "text", "text": _project_instruction_update_text(updates),
+                        })
+                except Exception:  # noqa: BLE001 — optional guidance cannot fail a successful tool
+                    log.debug("agent.project_instruction_refresh_failed", exc_info=True)
+
+        # Read through getattr: ctx is a proxy in the kernel path and a plain
+        # namespace in tests, and a missing attribute here must degrade to
+        # "no workspace-change record" rather than aborting the whole turn.
+        conversation_id = getattr(ctx, "conversation_id", None)
+        run_id = getattr(ctx, "run_id", None)
+        if conversation_id and run_id:
             from atlas.agent.presentation import record_workspace_changes
             from atlas.config import DATA_ROOT
             try:
                 await asyncio.to_thread(
-                    record_workspace_changes, DATA_ROOT / "engine", str(ctx.conversation_id), str(ctx.run_id),
+                    record_workspace_changes, DATA_ROOT / "engine", str(conversation_id), str(run_id),
                     workspace=workspace, tool=fn_name, args=fn_args, result=result,
                 )
             except (OSError, ValueError, RuntimeError):
@@ -1962,8 +2115,9 @@ async def execute_tools_node(
                 except (OSError, UnicodeError, ValueError, PermissionError) as exc:
                     log.info("agent.kernel_edit_read_snapshot_skipped", error=str(exc))
 
-        if ((workspace or "").startswith("ssh://")
-                and (fn_name == "local_process" or fn_name.startswith("computer_"))):
+        if (workspace or "").startswith("ssh://") and fn_name == "local_process":
+            result.setdefault("content", []).append({"type": "text", "text": "在 SSH 远端执行"})
+        elif (workspace or "").startswith("ssh://") and fn_name.startswith("computer_"):
             result.setdefault("content", []).append({"type": "text", "text": "在本机执行"})
 
         await agent._emit_hook(ctx, "after_tool", name=fn_name, arguments=fn_args, result=result)

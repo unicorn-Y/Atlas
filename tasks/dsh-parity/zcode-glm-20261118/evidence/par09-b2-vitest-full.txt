@@ -1,0 +1,338 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.4 [39m[90mD:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend[39m
+
+ [32m✓[39m src/main/releaseUpdate.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 200[2mms[22m[39m
+ [32m✓[39m src/main/backendProcess.lifecycle.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 179[2mms[22m[39m
+ [32m✓[39m src/renderer/components/x2/x2.test.tsx [2m([22m[2m23 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m src/main/electron.navigation.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 261[2mms[22m[39m
+ [32m✓[39m src/main/electron.backendLifecycle.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 473[2mms[22m[39m
+ [32m✓[39m src/renderer/services/attachmentStaging.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m src/preload/index.lifecycle.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 232[2mms[22m[39m
+ [32m✓[39m src/renderer/components/timelineProjection.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m src/renderer/pages/ShortcutsPanel.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 282[2mms[22m[39m
+ [32m✓[39m src/main/backendProcess.python.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 90[2mms[22m[39m
+ [32m✓[39m src/renderer/styles/styleContracts.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/renderer/store/useAtlasStore.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 67[2mms[22m[39m
+ [32m✓[39m src/renderer/components/FeatureLessons.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m src/main/backendProcess.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 1206[2mms[22m[39m
+   [32m✓[39m backendProcess startup (H8 §10.3) [2m(10)[22m
+     [33m[2m✓[22m[39m still gives up at the 300-second total cap, with the log tail[33m 311[2mms[22m[39m
+ [32m✓[39m src/main/electron.multiWindow.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m src/renderer/components/ReviewFindingsCard.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m src/renderer/components/ForkTree.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m src/renderer/components/MessageThread.x6.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m src/main/electron.lifecycle.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 35[2mms[22m[39m
+ [32m✓[39m src/renderer/components/x2/ComputerStatusSection.regression.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/renderer/components/PaneWorkspace.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m src/renderer/components/timeline.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+[90mstderr[2m | src/renderer/components/ConversationMessage.test.tsx[2m > [22m[2mConversationMessage[2m > [22m[2mrenders historical and streaming assistant content with the same message structure
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+
+[90mstderr[2m | src/renderer/components/ConversationMessage.test.tsx[2m > [22m[2mConversationMessage[2m > [22m[2mrenders GitHub Markdown, safe links, and syntax-highlighted fenced code
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+
+[90mstderr[2m | src/renderer/components/ConversationMessage.test.tsx[2m > [22m[2mConversationMessage[2m > [22m[2mrenders a still-streaming reply as markdown, closing unfinished syntax, and math once settled
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:3736
+    at div
+    at Ht (file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:5:7862)
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:3736
+    at div
+    at Ht (file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:5:7862)
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+
+[90mstderr[2m | src/renderer/components/ConversationMessage.test.tsx[2m > [22m[2mConversationMessage[2m > [22m[2mis memoized and keeps identical output for identical props
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+
+[90mstderr[2m | src/renderer/components/ConversationMessage.test.tsx[2m > [22m[2mConversationMessage[2m > [22m[2moffers export and an expanded annotation workflow for rendered Markdown tables
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+
+[90mstderr[2m | src/renderer/components/ConversationMessage.test.tsx[2m > [22m[2mConversationMessage[2m > [22m[2mkeeps built-in message actions alongside session-specific edit, fork and rewind controls
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+
+ [32m✓[39m src/renderer/components/ConversationMessage.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[32m 154[2mms[22m[39m
+[90mstderr[2m | src/renderer/components/ConversationActivity.parity.test.tsx[2m > [22m[2mturn summary and approval composer controls[2m > [22m[2mrenders a compacted replay as one streamed assistant node through the production component
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+    at Renderer (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationActivity.tsx:1902:37)
+    at TimelineRow2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationActivity.tsx:40:76)
+    at ConversationActivity (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationActivity.tsx:49:33)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+    at Renderer (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationActivity.tsx:1902:37)
+    at TimelineRow2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationActivity.tsx:40:76)
+    at ConversationActivity (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationActivity.tsx:49:33)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:3736
+    at div
+    at Ht (file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:5:7862)
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at div
+    at div
+    at ConversationMessage2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:295:92)
+    at Renderer (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationActivity.tsx:1902:37)
+    at TimelineRow2 (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationActivity.tsx:40:76)
+    at ConversationActivity (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationActivity.tsx:49:33)
+
+ [32m✓[39m src/renderer/components/ConversationActivity.parity.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 43[2mms[22m[39m
+ [32m✓[39m src/main/backendPort.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 88[2mms[22m[39m
+[90mstderr[2m | src/renderer/components/ComposerDraftRestore.test.tsx[2m > [22m[2mComposer draft restore UI[2m > [22m[2mrenders restored text, semantic context and staged file metadata together in the composer
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at Composer (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/Composer.tsx:233:22)
+    at Provider (file:///D:/Atlas/node_modules/@radix-ui/react-context/dist/index.mjs:38:15)
+    at TooltipProvider (file:///D:/Atlas/node_modules/@radix-ui/react-tooltip/dist/index.mjs:33:5)
+    at TooltipProvider (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/ui/Tooltip.tsx:5:28)
+
+ [32m✓[39m src/renderer/components/ComposerDraftRestore.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m src/renderer/store/useAtlasStore.x6.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+[90mstderr[2m | src/renderer/components/FormattedMessageContent.test.tsx[2m > [22m[2mFormattedMessageContent[2m > [22m[2mformats preview text with the conversation Markdown renderer
+[22m[39mWarning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at FormattedMessageContent (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:288:36)
+Warning: useLayoutEffect does nothing on the server, because its effect cannot be encoded into the server renderer's output format. This will lead to a mismatch between the initial, non-hydrated UI and the intended UI. To avoid this, useLayoutEffect should only be used in components that render exclusively on the client. See https://reactjs.org/link/uselayouteffect-ssr for common fixes.
+    at file:///D:/Atlas/node_modules/streamdown/dist/chunk-D32TOXHM.js:40:4660
+    at div
+    at MarkdownBody (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:258:25)
+    at FormattedMessageContent (D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend/src/renderer/components/ConversationMessage.tsx:288:36)
+
+ [32m✓[39m src/renderer/components/FormattedMessageContent.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m src/renderer/pages/models/components.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/renderer/components/InitDialog.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m src/renderer/components/evolution/EvolutionPage.test.tsx [2m([22m[2m17 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m src/renderer/components/skills/SkillsMarketPage.test.tsx [2m([22m[2m18 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/TaskOverviewPanel.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/diffReview.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m src/renderer/pages/SkillDiscoveryPage.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[32m 77[2mms[22m[39m
+ [32m✓[39m src/renderer/components/UltraplanPanel.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m src/renderer/components/ConversationQueuePanel.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m src/renderer/pages/automations/describe.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m src/renderer/pages/agents/AgentsPage.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m src/renderer/services/i18n.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m src/renderer/store/useAtlasStore.message-actions.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m src/renderer/components/memory/views.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/renderer/components/ConversationTrajectory.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/renderer/services/runtimeEvents.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/renderer/pages/MemoryPage.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/renderer/services/update-coordinator.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/Inspector.parity.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/renderer/components/UpdateBanner.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/FilesPanel.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/renderer/services/keybindings.test.ts [2m([22m[2m23 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/documentPreviewRegistry.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/renderer/services/slashCommands.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/renderer/components/ConnectionRecovery.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/HomeView.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/renderer/components/ConversationNodeRegistry.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m src/renderer/components/VoiceOverlay.component.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/renderer/components/ComposerAttachmentStatus.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/renderer/services/eventBuffer.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/renderer/components/ForkTree.regression.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/components/MarkdownContent.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/renderer/pages/automations/templateCatalog.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/renderer/services/suggestionSafety.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/inspectorLayout.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/store/persistentSlice.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/renderer/components/ChaptersNav.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/renderer/components/Composer.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/renderer/services/audioDevices.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/main/sourceUpdate.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/renderer/services/vimEditor.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/services/fileDrop.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/renderer/services/speechPlayback.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/components/VoiceOverlay.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/services/pluginSlashCommands.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/pages/DependencyCheckPanel.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/trajectory.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/browserErrors.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/services/voiceHudProtocol.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/services/processNotifications.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/services/composerDraft.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/services/shortcuts.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/inspectorTabs.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/renderer/services/skillExtraction.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/themes.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m83 passed[39m[22m[90m (83)[39m
+[2m      Tests [22m [1m[32m398 passed[39m[22m[90m (398)[39m
+[2m   Start at [22m 04:38:48
+[2m   Duration [22m 6.62s[2m (import 71%, tests 17%, transform 9%, worker 2%)[22m
+
+[2m    Isolate [22m [33m83 workers spawned[39m[2m · ~246ms startup each (spawn + environment, per file)[22m
+[2m            [22m [2mat least ~2.67s faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+
+exit=0

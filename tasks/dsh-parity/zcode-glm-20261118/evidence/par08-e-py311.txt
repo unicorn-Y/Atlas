@@ -1,0 +1,38 @@
+COMMAND: PYTHONPATH="D:/Atlas/.worktrees/zcode-par08-sdk-port/core;D:/Atlas/.worktrees/zcode-par08-sdk-port/sdk/python;C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Lib\site-packages" PYTHONDONTWRITEBYTECODE=1 /c/Users/25011/.local/bin/python3.11.exe -m pytest -q -p no:cacheprovider -o addopts= --tb=short --basetemp=D:/Atlas/.worktrees/zcode-par08-sdk-port/.tmp/pytest-par08-evidence311 tests/test_app_server_user_question_cancel.py tests/test_app_server_acp.py tests/test_app_server_sdk_lifecycle.py tests/test_event_contract.py tests/test_server.py::TestBackendParityWave1::test_ask_user_event_waits_for_a_response
+PYTHON: Python 3.11.15
+
+..........................................                               [100%]
+============================== warnings summary ===============================
+atlas\api\memory_library_router.py:431
+  D:\Atlas\.worktrees\zcode-par08-sdk-port\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+atlas\api\memory_library_router.py:438
+  D:\Atlas\.worktrees\zcode-par08-sdk-port\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+atlas\api\settings_export_router.py:45
+  D:\Atlas\.worktrees\zcode-par08-sdk-port\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+atlas\api\settings_export_router.py:55
+  D:\Atlas\.worktrees\zcode-par08-sdk-port\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+atlas\api\settings_export_router.py:62
+  D:\Atlas\.worktrees\zcode-par08-sdk-port\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+42 passed, 5 warnings in 25.88s
+EXIT=0

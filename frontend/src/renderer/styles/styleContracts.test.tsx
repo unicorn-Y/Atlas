@@ -25,4 +25,11 @@ describe('shared style and accessibility contracts', () => {
     expect(css).toMatch(/:focus-visible\s*\{[^}]*outline: 2px solid var\(--brand\)/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*, \*::before, \*::after\s*\{[^}]*animation: none !important;[^}]*transition: none !important;[^}]*scroll-behavior: auto !important;/);
   });
+
+  it('suppresses pointer-owned focus outlines without removing editable feedback or other paint', () => {
+    const suppression = css.match(/html\[data-input-modality='pointer'\]\s+body\s+:focus-visible:not\(:read-write\)\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(suppression).toMatch(/outline-color:\s*transparent/);
+    expect(suppression).not.toMatch(/outline\s*:\s*none|box-shadow\s*:/);
+    expect(css).not.toMatch(/html\[data-input-modality='pointer'\][^{]*:read-write\s*\{/);
+  });
 });

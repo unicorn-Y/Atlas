@@ -1,0 +1,22 @@
+P1 残余复核收口(ZC-DSH-WATCH-05):git 来源 pending=0;18 个此前未归类族已按子包 manifest 归类,子包清单如下(用途见 SOURCE-INVENTORY disposition)。
+
+acp: README.i18n.yaml, README.md, README.zh.md, acp
+attachment: README.i18n.yaml, README.md, README.zh.md, attachment, attachment-local
+browser-use: README.i18n.yaml, README.md, README.zh.md, browser-use
+computer-use: README.i18n.yaml, README.md, README.zh.md, computer-use
+document: README.i18n.yaml, README.md, README.zh.md, office-kit, tool-office
+feedback: README.i18n.yaml, README.md, README.zh.md, command-feedback, message-feedback
+guard: README.i18n.yaml, README.md, README.zh.md, repeat-tool-reminder, timeout-policy
+identity: README.i18n.yaml, README.md, README.zh.md, anonymous-user-id
+jobs: README.i18n.yaml, README.md, README.zh.md, jobs, jobs-local, tool-jobs
+plan: README.i18n.yaml, README.md, README.zh.md, plan-mode
+settings: README.i18n.yaml, README.md, README.zh.md, settings
+spill: README.i18n.yaml, README.md, README.zh.md, spill, spill-local, spill-policy
+team: README.i18n.yaml, README.md, README.zh.md, agent-team, tool-agent-team
+telemetry: README.i18n.yaml, README.md, README.zh.md, otel
+terminal: README.i18n.yaml, README.md, README.zh.md, terminal, terminal-bash
+todo: README.i18n.yaml, README.md, README.zh.md, tool-todo
+workflow: README.i18n.yaml, README.md, README.zh.md, tool-workflow, workflow, workflow-ptc
+workspace: README.i18n.yaml, README.md, README.zh.md, workspace
+
+根级特例:packages/tsdown.worker.ts=构建 worker 脚本(engineering)。

@@ -575,15 +575,23 @@ def test_wave3_hook_store_validates_event_and_serializes(tmp_path: Path) -> None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("bash_path", "expected_executable"),
+    ("bash_path", "git_bash_present", "expected_executable"),
     [
-        (r"C:\Windows\System32\bash.exe", "powershell.exe"),
-        (r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files\Git\bin\bash.exe"),
+        # WSL's System32 shim is not usable for hook commands, so it must be
+        # skipped in favour of Git Bash when Git Bash exists.
+        (r"C:\Windows\System32\bash.exe", True, r"C:\Program Files\Git\bin\bash.exe"),
+        # ...and when it does not, the hook must fail loudly rather than run
+        # the command through the WSL shim and mangle every Windows path.
+        (r"C:\Windows\System32\bash.exe", False, None),
+        # A real Git Bash on PATH is used directly.
+        (r"C:\Program Files\Git\bin\bash.exe", True, r"C:\Program Files\Git\bin\bash.exe"),
     ],
 )
 async def test_wave3_windows_hook_shell_skips_wsl_bash_shim(
-    monkeypatch, bash_path: str, expected_executable: str,
+    monkeypatch, bash_path: str, git_bash_present: bool, expected_executable: str | None,
 ) -> None:
+    from atlas.engine.kernel import hook_runtime
+
     calls = []
 
     class Process:
@@ -597,12 +605,24 @@ async def test_wave3_windows_hook_shell_skips_wsl_bash_shim(
         return Process()
 
     monkeypatch.setenv("SystemRoot", r"C:\Windows")
-    monkeypatch.setattr(hooks_module, "os", types.SimpleNamespace(name="nt", environ=os.environ))
-    monkeypatch.setattr(hooks_module.shutil, "which", lambda name: bash_path if name == "bash" else None)
+    monkeypatch.setattr(hook_runtime.os, "name", "nt")
+    monkeypatch.setattr(hook_runtime.shutil, "which",
+                        lambda name: bash_path if name == "bash" else None)
+    monkeypatch.setattr(hook_runtime.Path, "is_file",
+                        lambda self: git_bash_present and "Git" in str(self))
     monkeypatch.setattr(hooks_module.asyncio, "create_subprocess_exec", create_process)
 
-    await hooks_module._run_command({"command": "exit 2"}, {}, cwd=None, plugin_root=None)
+    if expected_executable is None:
+        with pytest.raises(FileNotFoundError, match="Git Bash"):
+            await hooks_module._run_command(
+                {"command": "exit 2", "shell": "bash"}, {}, cwd=None, plugin_root=None,
+            )
+        assert calls == [], "must not spawn anything without a usable shell"
+        return
 
+    await hooks_module._run_command(
+        {"command": "exit 2", "shell": "bash"}, {}, cwd=None, plugin_root=None,
+    )
     assert calls[0][0] == expected_executable
 
 

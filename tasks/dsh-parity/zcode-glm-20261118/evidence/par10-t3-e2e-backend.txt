@@ -1,0 +1,7 @@
+2026-11-19 06:15:30 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-par10-skill-runtime\_tmp\lsp-fixtures\par10_skill_cebb223924\atlas\config\atlas.toml
+{"count": 12, "sources": 4, "event": "skills.scanned", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T22:15:31.770132Z"}
+{"name": "shared", "existing": "D:\\Atlas\\.worktrees\\zcode-par10-skill-runtime\\_tmp\\lsp-fixtures\\par10_skill_cebb223924\\ws-a\\.agents\\skills\\shared\\SKILL.md", "new": "D:\\Atlas\\.worktrees\\zcode-par10-skill-runtime\\_tmp\\lsp-fixtures\\par10_skill_cebb223924\\ws-a\\.dsh\\skills\\shared\\SKILL.md", "event": "skills.duplicate_name", "level": "warning", "logger": "atlas.skills", "timestamp": "2026-11-18T22:15:35.699528Z"}
+{"count": 14, "sources": 7, "event": "skills.scanned", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T22:15:35.699528Z"}
+{"name": "shared", "event": "skills.activated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T22:15:40.250303Z"}
+{"count": 14, "sources": 7, "event": "skills.scanned", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T22:15:42.593200Z"}
+{"name": "only-b", "event": "skills.activated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T22:15:44.616512Z"}

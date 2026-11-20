@@ -1,0 +1,253 @@
+diff --git a/core/atlas/api/u6_router.py b/core/atlas/api/u6_router.py
+index ff7f33c8..9dd1f7da 100644
+--- a/core/atlas/api/u6_router.py
++++ b/core/atlas/api/u6_router.py
+@@ -2,10 +2,12 @@
+ 
+ from __future__ import annotations
+ 
++import hashlib
+ import json
+ import os
+ import shutil
+ import subprocess
++import threading
+ import time
+ from datetime import datetime, timezone
+ from pathlib import Path
+@@ -105,27 +107,104 @@ async def put_retention(request: dict[str, Any]) -> dict[str, Any]:
+     return await get_retention()
+ 
+ 
++_KEYBINDINGS_LOCK = threading.Lock()
++
++
++def _keybindings_path() -> Path:
++    from atlas.config import DATA_ROOT
++
++    return DATA_ROOT / "data" / "keybindings.json"
++
++
++def _keybindings_revision(raw: bytes | None) -> str | None:
++    """Opaque content revision: survives mtime collisions and process restarts."""
++    return hashlib.sha256(raw).hexdigest() if raw is not None else None
++
++
++def _validate_keybindings(value: Any) -> dict[str, list[str]]:
++    if not isinstance(value, dict) or any(
++        not isinstance(key, str) or not isinstance(combo, list)
++        or not all(isinstance(item, str) for item in combo)
++        for key, combo in value.items()
++    ):
++        raise ValueError("期望 action id → 字符串数组")
++    return value
++
++
+ @router.get("/api/u6/keybindings")
+ async def get_keybindings() -> dict[str, Any]:
+-    from atlas.config import DATA_ROOT
+-    path = DATA_ROOT / "data" / "keybindings.json"
+-    if not path.exists(): return {"bindings": {}, "updated_at": -1}
+-    try:
+-        value = json.loads(path.read_text(encoding="utf-8"))
+-        if not isinstance(value, dict) or any(not isinstance(k, str) or not isinstance(v, list) or not all(isinstance(x, str) for x in v) for k, v in value.items()): raise ValueError("期望 action id → 字符串数组")
+-        return {"bindings": value, "updated_at": path.stat().st_mtime_ns}
+-    except (OSError, json.JSONDecodeError, ValueError) as exc:
+-        raise HTTPException(status_code=422, detail=f"keybindings.json 格式错误：{exc}") from exc
++    path = _keybindings_path()
++    with _KEYBINDINGS_LOCK:
++        try:
++            raw = path.read_bytes()
++        except FileNotFoundError:
++            return {"bindings": {}, "updated_at": -1, "revision": None}
++        except OSError as exc:
++            raise HTTPException(status_code=422, detail=f"keybindings.json 无法读取：{exc}") from exc
++        try:
++            value = _validate_keybindings(json.loads(raw.decode("utf-8")))
++            return {
++                "bindings": value,
++                "updated_at": path.stat().st_mtime_ns,
++                "revision": _keybindings_revision(raw),
++            }
++        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
++            raise HTTPException(status_code=422, detail=f"keybindings.json 格式错误：{exc}") from exc
+ 
+ 
+ @router.put("/api/u6/keybindings")
+ async def put_keybindings(request: dict[str, Any]) -> dict[str, Any]:
+-    value = request.get("bindings")
+-    if not isinstance(value, dict) or any(not isinstance(k, str) or not isinstance(v, list) or not all(isinstance(x, str) for x in v) for k, v in value.items()): raise HTTPException(status_code=422, detail="期望 action id → 字符串数组")
+-    from atlas.config import DATA_ROOT
+-    path = DATA_ROOT / "data" / "keybindings.json"; path.parent.mkdir(parents=True, exist_ok=True)
+-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+-    return {"bindings": value, "updated_at": path.stat().st_mtime_ns}
++    try:
++        value = _validate_keybindings(request.get("bindings"))
++    except ValueError as exc:
++        raise HTTPException(status_code=422, detail=str(exc)) from exc
++    expected = request.get("expected_revision", ...)
++    if expected is not ... and expected is not None and not isinstance(expected, str):
++        raise HTTPException(status_code=422, detail="expected_revision 必须是字符串或 null")
++    path = _keybindings_path()
++    with _KEYBINDINGS_LOCK:
++        try:
++            current_raw = path.read_bytes()
++        except FileNotFoundError:
++            current_raw = None
++        except OSError as exc:
++            raise HTTPException(status_code=500, detail=f"keybindings.json 无法读取：{exc}") from exc
++        current_revision = _keybindings_revision(current_raw)
++        # Optimistic concurrency: a caller that read a revision must not overwrite a newer file.
++        if expected is not ... and expected != current_revision:
++            raise HTTPException(
++                status_code=409,
++                detail="keybindings.json 已被其他窗口修改，请重新加载后再保存",
++            )
++        path.parent.mkdir(parents=True, exist_ok=True)
++        try:
++            os.chmod(path.parent, 0o700)
++        except OSError:
++            pass
++        payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
++        temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
++        try:
++            with open(temporary, "w", encoding="utf-8", newline="\n") as handle:
++                handle.write(payload)
++                handle.flush()
++                os.fsync(handle.fileno())
++            try:
++                os.chmod(temporary, 0o600)
++            except OSError:
++                pass
++            os.replace(temporary, path)
++        except OSError as exc:
++            try:
++                temporary.unlink()
++            except OSError:
++                pass
++            raise HTTPException(status_code=500, detail=f"keybindings.json 写入失败：{exc}") from exc
++        raw = path.read_bytes()
++        return {
++            "bindings": value,
++            "updated_at": path.stat().st_mtime_ns,
++            "revision": _keybindings_revision(raw),
++        }
+ 
+ 
+ @router.get("/api/u6/whatsnew")
+diff --git a/core/tests/test_u6_keybindings.py b/core/tests/test_u6_keybindings.py
+new file mode 100644
+index 00000000..a137b713
+--- /dev/null
++++ b/core/tests/test_u6_keybindings.py
+@@ -0,0 +1,109 @@
++"""Keybindings persistence: content revision CAS and atomic replacement."""
++
++import json
++from pathlib import Path
++
++import pytest
++from fastapi import FastAPI
++from fastapi.testclient import TestClient
++
++from atlas.api import u6_router
++
++pytestmark = pytest.mark.unit
++
++
++@pytest.fixture
++def client(tmp_path: Path, monkeypatch) -> TestClient:
++    monkeypatch.setattr("atlas.config.DATA_ROOT", tmp_path)
++    app = FastAPI()
++    app.include_router(u6_router.router)
++    return TestClient(app)
++
++
++@pytest.fixture
++def keybindings_path(tmp_path: Path) -> Path:
++    return tmp_path / "data" / "keybindings.json"
++
++
++def test_missing_file_reads_empty_with_null_revision(client: TestClient) -> None:
++    response = client.get("/api/u6/keybindings")
++    assert response.status_code == 200
++    assert response.json() == {"bindings": {}, "updated_at": -1, "revision": None}
++
++
++def test_create_with_null_revision_is_atomic_and_stale_create_conflicts(
++    client: TestClient, keybindings_path: Path,
++) -> None:
++    first = client.put("/api/u6/keybindings", json={
++        "bindings": {"palette": ["Ctrl+K"]}, "expected_revision": None,
++    })
++    assert first.status_code == 200
++    revision = first.json()["revision"]
++    assert isinstance(revision, str) and len(revision) == 64
++    assert json.loads(keybindings_path.read_text(encoding="utf-8")) == {"palette": ["Ctrl+K"]}
++    assert not list(keybindings_path.parent.glob(f".{keybindings_path.name}.*.tmp"))
++
++    stale = client.put("/api/u6/keybindings", json={
++        "bindings": {"palette": ["Ctrl+Shift+K"]}, "expected_revision": None,
++    })
++    assert stale.status_code == 409
++    assert json.loads(keybindings_path.read_text(encoding="utf-8")) == {"palette": ["Ctrl+K"]}
++    assert client.get("/api/u6/keybindings").json()["revision"] == revision
++
++
++def test_stale_revision_is_rejected_and_matching_revision_updates(
++    client: TestClient, keybindings_path: Path,
++) -> None:
++    created = client.put("/api/u6/keybindings", json={"bindings": {"palette": ["Ctrl+K"]}}).json()
++    winner = client.put("/api/u6/keybindings", json={
++        "bindings": {"palette": ["Ctrl+P"]}, "expected_revision": created["revision"],
++    })
++    assert winner.status_code == 200
++    loser = client.put("/api/u6/keybindings", json={
++        "bindings": {"palette": ["Ctrl+O"]}, "expected_revision": created["revision"],
++    })
++    assert loser.status_code == 409
++    assert "其他窗口" in loser.json()["detail"]
++    assert json.loads(keybindings_path.read_text(encoding="utf-8")) == {"palette": ["Ctrl+P"]}
++    latest = client.get("/api/u6/keybindings").json()
++    assert latest["revision"] == winner.json()["revision"]
++    assert latest["revision"] != created["revision"]
++
++
++def test_invalid_shape_writes_nothing(client: TestClient, keybindings_path: Path) -> None:
++    response = client.put("/api/u6/keybindings", json={"bindings": {"palette": "Ctrl+K"}})
++    assert response.status_code == 422
++    assert not keybindings_path.exists()
++    invalid_expected = client.put("/api/u6/keybindings", json={
++        "bindings": {}, "expected_revision": 7,
++    })
++    assert invalid_expected.status_code == 422
++    assert not keybindings_path.exists()
++
++
++def test_replace_failure_keeps_previous_file_and_cleans_temp(
++    client: TestClient, keybindings_path: Path, monkeypatch,
++) -> None:
++    client.put("/api/u6/keybindings", json={"bindings": {"palette": ["Ctrl+K"]}})
++    before = keybindings_path.read_text(encoding="utf-8")
++
++    def fail_replace(*_args, **_kwargs):
++        raise OSError("disk full")
++
++    monkeypatch.setattr(u6_router.os, "replace", fail_replace)
++    response = client.put("/api/u6/keybindings", json={"bindings": {"palette": ["Ctrl+P"]}})
++    assert response.status_code == 500
++    assert "写入失败" in response.json()["detail"]
++    assert keybindings_path.read_text(encoding="utf-8") == before
++    assert not list(keybindings_path.parent.glob(f".{keybindings_path.name}.*.tmp"))
++
++
++def test_malformed_existing_file_is_reported_but_repairable(
++    client: TestClient, keybindings_path: Path,
++) -> None:
++    keybindings_path.parent.mkdir(parents=True)
++    keybindings_path.write_text("{not json", encoding="utf-8")
++    assert client.get("/api/u6/keybindings").status_code == 422
++    repaired = client.put("/api/u6/keybindings", json={"bindings": {"palette": ["Ctrl+K"]}})
++    assert repaired.status_code == 200
++    assert json.loads(keybindings_path.read_text(encoding="utf-8")) == {"palette": ["Ctrl+K"]}
+\ No newline at end of file

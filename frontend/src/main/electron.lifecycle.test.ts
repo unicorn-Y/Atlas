@@ -10,9 +10,11 @@ const mocks = vi.hoisted(() => {
       getPath: vi.fn(() => '/atlas-lifecycle-test'), getVersion: vi.fn(() => '1.0.0'),
       requestSingleInstanceLock: vi.fn(() => true), whenReady: vi.fn(() => new Promise<void>(() => undefined)),
       on: vi.fn(), quit: vi.fn(),
+      setLoginItemSettings: vi.fn(), setAsDefaultProtocolClient: vi.fn(),
     },
     BrowserWindow: { getAllWindows: vi.fn(() => []), getFocusedWindow: vi.fn() },
     ipcMain: { on: vi.fn(), handle: vi.fn() },
+    globalShortcut: { register: vi.fn(), unregister: vi.fn(), unregisterAll: vi.fn(), isRegistered: vi.fn(() => false) },
     Menu: { buildFromTemplate: vi.fn((items: unknown[]) => items), setApplicationMenu: vi.fn() },
     Tray: vi.fn(function () { return tray; }),
     nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => true })), createEmpty: vi.fn(), createFromDataURL: vi.fn() },
@@ -47,6 +49,14 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('desktop lifecycle components', () => {
+  it('does not change OS-global startup integrations in isolated automation mode', () => {
+    vi.stubEnv('ATLAS_AUTOMATION', '1');
+    desktop.registerHostStartupIntegrations();
+    expect(mocks.app.setLoginItemSettings).not.toHaveBeenCalled();
+    expect(mocks.app.setAsDefaultProtocolClient).not.toHaveBeenCalled();
+    expect(mocks.globalShortcut.register).not.toHaveBeenCalled();
+  });
+
   it('quits the second process and registers deep-link entry points only for the owner', async () => {
     expect(mocks.app.requestSingleInstanceLock).toHaveBeenCalledOnce();
     expect(mocks.app.on.mock.calls.map(([event]) => event)).toContain('second-instance');

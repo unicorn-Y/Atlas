@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from atlas.tools.web import WEB_TOOLS, WebRuntime
 from atlas.websearch import WebSearchService, WebSettings, cache
 from atlas.websearch.common import search_fail, search_ok
@@ -72,3 +74,93 @@ async def test_tool_surface_and_argument_errors() -> None:
     assert (await runtime.call_tool("web_search", {"query": "   "}))["is_error"] is True
     assert (await runtime.call_tool("web_fetch", {"url": "ftp://x"}))["is_error"] is True
     assert (await runtime.call_tool("web_nothing", {}))["is_error"] is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_web_fetch_reports_final_status_and_effective_truncation(monkeypatch):
+    import socket
+    import httpx
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+    ])
+    requests = []
+
+    def respond(request):
+        requests.append(str(request.url))
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"location": "/final"})
+        return httpx.Response(
+            202, text="<title>Accepted</title><article>" + ("body text " * 100) + "</article>",
+        )
+
+    def client_factory(**options):
+        options.pop("allow_local", None)
+        return httpx.AsyncClient(transport=httpx.MockTransport(respond), **options)
+
+    monkeypatch.setattr("atlas.tools.web_extract.create_ssrf_safe_async_client", client_factory)
+    service = WebSearchService(WebSettings(
+        extract_order=("local",), cache_enabled=False, extract_char_limit=200,
+    ))
+    result = await WebRuntime(service).call_tool(
+        "web_fetch", {"url": "https://example.com/start", "max_chars": 200},
+    )
+
+    assert result["is_error"] is False
+    assert result["data"]["url"] == "https://example.com/final"
+    assert result["data"]["status_code"] == 202
+    assert result["data"]["truncated"] is True
+    assert requests == ["https://example.com/start", "https://example.com/final"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cross_origin_redirect_policy_error_stops_provider_fallback(monkeypatch):
+    import socket
+    import httpx
+
+    from atlas.websearch.providers.base import WebProvider
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+    ])
+    requested = []
+
+    def respond(request):
+        requested.append(str(request.url))
+        return httpx.Response(302, headers={"location": "https://other.example/landing"})
+
+    def client_factory(**options):
+        options.pop("allow_local", None)
+        return httpx.AsyncClient(transport=httpx.MockTransport(respond), **options)
+
+    monkeypatch.setattr("atlas.tools.web_extract.create_ssrf_safe_async_client", client_factory)
+
+    class Fallback(WebProvider):
+        name, display_name = "fixture-fallback", "fixture fallback"
+        needs_key = False
+        can_extract = True
+
+        def __init__(self):
+            self.calls = 0
+
+        async def extract(self, urls, _settings):
+            self.calls += 1
+            return [{"url": url, "title": "fallback", "content": "fallback body"}
+                    for url in urls]
+
+    fallback = Fallback()
+    monkeypatch.setitem(PROVIDERS, fallback.name, fallback)
+    service = WebSearchService(WebSettings(
+        extract_order=("local", fallback.name), cache_enabled=False,
+    ))
+    result = await WebRuntime(service).call_tool(
+        "web_fetch", {"url": "https://example.com/start"},
+    )
+
+    assert result["is_error"] is True, result
+    assert result["data"]["error_category"] == "policy"
+    assert "跨源网页跳转已拒绝" in result["data"]["error"]
+    assert fallback.calls == 0
+    assert requested == ["https://example.com/start"]

@@ -1,0 +1,71 @@
+2026-11-19 05:02:56 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-rmrzeaw2\atlas\config\atlas.toml
+.F........                                                               [100%]
+================================== FAILURES ===================================
+____________ test_discovery_reports_installed_plugin_override_rows ____________
+
+runtime = <atlas.plugins.runtime.PluginRuntime object at 0x0000016420C02D10>
+
+    def test_discovery_reports_installed_plugin_override_rows(runtime: PluginRuntime) -> None:
+>       installed = runtime.install_local(runtime._dirs[0] / "demo-plugin")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_plugins.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+atlas\plugins\runtime.py:1072: in install_local
+    self._copy_replace(source_root, target)
+atlas\plugins\runtime.py:1023: in _copy_replace
+    incoming.replace(target)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/Atlas/.worktrees/zcode-par09-plugin-registry/.tmp/par09-f09/final-existing/test_discovery_reports_install0/user-plugins/demo-plugin.incoming')
+target = WindowsPath('D:/Atlas/.worktrees/zcode-par09-plugin-registry/.tmp/par09-f09/final-existing/test_discovery_reports_install0/user-plugins/demo-plugin')
+
+    def replace(self, target):
+        """
+        Rename this path to the target path, overwriting if that path exists.
+    
+        The target path may be absolute or relative. Relative paths are
+        interpreted relative to the current working directory, *not* the
+        directory of the Path object.
+    
+        Returns the new Path instance pointing to the target path.
+        """
+>       os.replace(self, target)
+E       PermissionError: [WinError 5] 拒绝访问。: 'D:\\Atlas\\.worktrees\\zcode-par09-plugin-registry\\.tmp\\par09-f09\\final-existing\\test_discovery_reports_install0\\user-plugins\\demo-plugin.incoming' -> 'D:\\Atlas\\.worktrees\\zcode-par09-plugin-registry\\.tmp\\par09-f09\\final-existing\\test_discovery_reports_install0\\user-plugins\\demo-plugin'
+
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\pathlib.py:1188: PermissionError
+============================== warnings summary ===============================
+tests/test_plugins.py::test_discover_reports_manifest_details
+  D:\Atlas\.worktrees\zcode-par09-plugin-registry\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_plugins.py::test_discover_reports_manifest_details
+  D:\Atlas\.worktrees\zcode-par09-plugin-registry\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_plugins.py::test_discover_reports_manifest_details
+  D:\Atlas\.worktrees\zcode-par09-plugin-registry\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_plugins.py::test_discover_reports_manifest_details
+  D:\Atlas\.worktrees\zcode-par09-plugin-registry\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_plugins.py::test_discover_reports_manifest_details
+  D:\Atlas\.worktrees\zcode-par09-plugin-registry\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_plugins.py::test_discovery_reports_installed_plugin_override_rows
+1 failed, 9 passed, 5 warnings in 8.22s

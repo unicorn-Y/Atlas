@@ -1,0 +1,4 @@
+last statement: Return line 1872 direct child: True
+line 1871: detail=response_detail; ancestors=If > AsyncWith > AsyncFunctionDef
+line 1863: detail=response_detail; ancestors=If > If > AsyncWith > AsyncFunctionDef
+line 1782: detail=Dict; ancestors=ExceptHandler > Try > If > AsyncWith > AsyncFunctionDef

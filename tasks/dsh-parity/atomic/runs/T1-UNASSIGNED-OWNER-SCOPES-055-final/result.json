@@ -1,0 +1,10 @@
+{
+  "duration_seconds": 285.6100000000006,
+  "leftover_processes": [],
+  "returncode": 0,
+  "signals": [],
+  "status": "PASS",
+  "stderr_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-UNASSIGNED-OWNER-SCOPES-055-final\\stderr.log",
+  "stdout_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-UNASSIGNED-OWNER-SCOPES-055-final\\stdout.log",
+  "timed_out": false
+}

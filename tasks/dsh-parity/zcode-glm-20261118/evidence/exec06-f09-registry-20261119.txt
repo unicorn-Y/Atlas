@@ -1,0 +1,60 @@
+EXEC-06 · B-F09-REGISTRY-01 复核:插件注册表双源/版本事实/失败归因
+日期: 2026-11-19;DSH rc.4 3f321d32;Atlas wave3@060071ab + 在途
+
+================================================================================
+A. DSH
+================================================================================
+- packages/boot/plugin-manager/src/registry.ts(SRC-07699)
+  - :14 `OFFICIAL_NPM_REGISTRY=https://registry.npmjs.org/`;
+    :17 `NPMMIRROR_REGISTRY=https://registry.npmmirror.com/`;
+  - :23-36 normalizeRegistry(仅 http(s),小写 host,补尾斜杠);
+  - :54-75 registryPlan(requested, configured):配置首注册表+fallbacks;请求注册表若在集合中则
+    先问它,否则单独问(私有注册表绝不回落到公共);pnpm 自身 registry(null)只有在已知公共
+    (官方 npm 或 fallback 之一)时才入集合;去重;
+  - :78-97 attributeFailure(kind, log, spec):network/timeout/not-found/no-matching-version
+    可换注册表;git/tarball spec 的错误行若点名 host → spec-host;其余 other。
+- versions.ts(同一包):newerVersions/versionFacts(peerDependencies/deprecated/dsh 字段)。
+- 浏览器端通过包的 `./registry` 入口复用同一规则,对话框与 Host 一致。
+
+================================================================================
+B. Atlas 实际实现
+================================================================================
+- core/atlas/plugins/runtime.py(当前树,在途 M):
+  - :371-410 start_install_operation(source,ref,registry,...) 接受单个 `registry` 字符串;
+  - :505-530 `_run_package_manager` 用 node+pnpm,`--registry=<registry>`(若有);
+    隔离 NPM_CONFIG_USERCONFIG/store/state/appdata,CI=1;
+  - :657-680 `_run_npm_pack` 用 npm pack `--registry=<registry>`,隔离 userconfig/cache;
+  - install 操作有 requestId 幂等/digest/状态快照/取消/审批事件;
+  - 无 fallback 注册表列表、无 registryPlan、无 pnpm 自身 registry 公共判定、
+    无失败归因(registry/spec-host/other)、无 newerVersions/versionFacts。
+- 因此 Atlas-MAP 旧表述“插件安装无包管理器语义”**错误**;真实形态是单注册表单次安装。
+
+================================================================================
+C. 差距
+================================================================================
+G1 无双源/fallback 计划:只有调用方传入的一个 registry;私有注册表无“单独问/不回落”策略。
+G2 无 pnpm 自身 registry(null)语义与公共性判定。
+G3 无失败归因:安装失败日志不区分“换注册表可解决”/“git 或 tarball host 问题”/其他,
+   也无按归因重试下一注册表。
+G4 无版本事实面(newerVersions/peerDependencies/deprecated/dsh 字段)。
+G5 安装状态有 requestId 幂等/审批,但与注册表计划无关联。
+
+================================================================================
+D. 验收
+================================================================================
+A-1 registryPlan:配置首+fallback;请求注册表在集合内先问、集合外单独问;
+    私有/未知 pnpm 自身 registry 单独问;去重,不空。
+A-2 归因:network/timeout/not-found/no-matching-version→registry;
+    git/tarball 错误行点名 host→spec-host;其余→other;仅 registry 类重试下一源。
+A-3 版本事实:返回 newerVersions 与 {peerDependencies,deprecated,dsh} 字段。
+A-4 Atlas 安装:单 registry 兼容;新增 fallback 列表与请求注册表语义;
+    失败日志归因落 install 状态;审批/幂等/取消不回归。
+A-5 复验:纯函数单测(plan/attribute)+ 受控 npm 包 fixture(两注册表顺序与失败重试)+
+    既有插件安装测试。
+实施:plugins/runtime.py 在途,blocked-on-author;可先在独立模块实现纯函数
+registry plan/attribution 并单测,接线一行待解除。
+
+================================================================================
+E. 结论
+Atlas 有单注册表 pnpm/npm 安装底座,缺 DSH 的双源计划/版本事实/失败归因 → 部分
+(不是“无包管理器语义”)。

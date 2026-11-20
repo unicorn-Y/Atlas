@@ -1,0 +1,2156 @@
+diff --git a/core/atlas/api/workspace_router.py b/core/atlas/api/workspace_router.py
+index 6b83c119..898d0192 100644
+--- a/core/atlas/api/workspace_router.py
++++ b/core/atlas/api/workspace_router.py
+@@ -39,6 +39,9 @@ from atlas.api.dependencies import get_app_services
+ 
+ router = APIRouter()
+ _sandbox_previews: dict[str, tuple[Path, float]] = {}
++# One creator per process: the conversation's worktree fields are the ownership
++# record, so two overlapping creates must not both pass the pre-check.
++_worktree_create_lock = asyncio.Lock()
+ 
+ 
+ @router.get("/api/ide/status")
+@@ -1595,6 +1598,74 @@ async def ssh_test(
+     return await ssh_workspaces.test(host)
+ 
+ 
++@router.post("/api/conversations/{conversation_id}/worktree")
++async def create_conversation_worktree(
++    services: Annotated[AppServices, Depends(get_app_services)],
++    conversation_id: str, req: dict[str, Any] | None = None,
++) -> dict[str, Any]:
++    """Create this conversation's branch/worktree and move it there, once.
++
++    The conversation is the single owner: a second create is a conflict, never a
++    second checkout. If recording the new path fails, the just-created worktree
++    is removed so the conversation cannot point at an unowned tree.
++    """
++    memory = _service("memory", services)
++    assert memory is not None
++    conv = await memory.get_conversation(conversation_id)
++    if not conv:
++        raise HTTPException(status_code=404, detail="Conversation not found")
++    if conv.get("worktree_path"):
++        raise HTTPException(status_code=409, detail="Conversation already has a worktree")
++    workspace_value = str(conv.get("workspace") or "").strip()
++    if not workspace_value:
++        raise HTTPException(status_code=409, detail="Conversation has no workspace")
++    workspace = Path(workspace_value).expanduser().resolve()
++    if not workspace.is_dir():
++        raise HTTPException(status_code=409, detail="Conversation workspace is missing")
++    if not (workspace / ".git").exists():
++        raise HTTPException(status_code=409, detail="Workspace is not a git repository")
++    payload = req or {}
++    name = str(payload.get("name") or "").strip() or None
++    base_branch = str(payload.get("base_branch") or "").strip() or None
++    async with _worktree_create_lock:
++        conv = await memory.get_conversation(conversation_id)
++        if not conv:
++            raise HTTPException(status_code=404, detail="Conversation not found")
++        if conv.get("worktree_path"):
++            raise HTTPException(status_code=409, detail="Conversation already has a worktree")
++        try:
++            info = await asyncio.to_thread(
++                _server()._worktrees().create, workspace, conversation_id, base_branch, name,
++            )
++        except ValueError as exc:
++            raise HTTPException(status_code=400, detail=str(exc)) from exc
++        except (OSError, RuntimeError) as exc:
++            raise HTTPException(status_code=409, detail=str(exc)) from exc
++        try:
++            recorded = await memory.update_conversation(
++                conversation_id,
++                workspace=info["worktree_path"],
++                worktree_path=info["worktree_path"],
++                worktree_branch=info["worktree_branch"],
++                base_branch=info["base_branch"],
++            )
++        except Exception:
++            recorded = False
++        if not recorded:
++            try:
++                await asyncio.to_thread(
++                    _server()._worktrees().remove, workspace,
++                    Path(info["worktree_path"]), info["worktree_branch"], True, False,
++                )
++            except Exception:
++                pass
++            raise HTTPException(
++                status_code=500,
++                detail="Conversation worktree was created but could not be recorded; it has been removed.",
++            )
++    return {**info, "workspace": info["worktree_path"]}
++
++
+ @router.get("/api/conversations/{conversation_id}/worktree")
+ async def conversation_worktree(
+     services: Annotated[AppServices, Depends(get_app_services)],
+diff --git a/core/tests/snapshots/routes.json b/core/tests/snapshots/routes.json
+index 7dd985b8..412f088f 100644
+--- a/core/tests/snapshots/routes.json
++++ b/core/tests/snapshots/routes.json
+@@ -1,7 +1,7 @@
+ {
+   "build": {
+     "server_source": "atlas\\server.py",
+-    "fastapi_version": "0.141.1"
++    "fastapi_version": "0.133.1"
+   },
+   "routes": [
+     {
+@@ -5879,6 +5879,52 @@
+         }
+       ]
+     },
++    {
++      "path": "/api/commands/invoke",
++      "operations": [
++        {
++          "method": "POST",
++          "operation_id": "invoke_plugin_command_api_commands_invoke_post",
++          "parameters": [],
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "additionalProperties": true,
++                  "title": "Req",
++                  "type": "object"
++                }
++              }
++            },
++            "required": true
++          },
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Invoke Plugin Command Api Commands Invoke Post",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
+     {
+       "path": "/api/commands/render",
+       "operations": [
+@@ -7360,6 +7406,172 @@
+         }
+       ]
+     },
++    {
++      "path": "/api/conversations/{conversation_id}/explain",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "explain_conversation_message_api_conversations__conversation_id__explain_get",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "conversation_id",
++              "required": true,
++              "schema": {
++                "title": "Conversation Id",
++                "type": "string"
++              }
++            },
++            {
++              "in": "query",
++              "name": "message_id",
++              "required": true,
++              "schema": {
++                "maxLength": 128,
++                "minLength": 1,
++                "title": "Message Id",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Explain Conversation Message Api Conversations  Conversation Id  Explain Get",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/conversations/{conversation_id}/export",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "export_conversation_api_conversations__conversation_id__export_get",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "conversation_id",
++              "required": true,
++              "schema": {
++                "title": "Conversation Id",
++                "type": "string"
++              }
++            },
++            {
++              "description": "Include turns that in-place compaction archived (what the user still sees).",
++              "in": "query",
++              "name": "include_compacted",
++              "required": false,
++              "schema": {
++                "default": false,
++                "description": "Include turns that in-place compaction archived (what the user still sees).",
++                "title": "Include Compacted",
++                "type": "boolean"
++              }
++            },
++            {
++              "description": "Include every stored row with its active/compacted flags (lossless backup shape).",
++              "in": "query",
++              "name": "include_inactive",
++              "required": false,
++              "schema": {
++                "default": false,
++                "description": "Include every stored row with its active/compacted flags (lossless backup shape).",
++                "title": "Include Inactive",
++                "type": "boolean"
++              }
++            }
++          ],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Export Conversation Api Conversations  Conversation Id  Export Get",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/conversations/{conversation_id}/export.zip",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "export_conversation_zip_api_conversations__conversation_id__export_zip_get",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "conversation_id",
++              "required": true,
++              "schema": {
++                "title": "Conversation Id",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {}
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
+     {
+       "path": "/api/conversations/{conversation_id}/fork",
+       "operations": [
+@@ -8151,11 +8363,11 @@
+       ]
+     },
+     {
+-      "path": "/api/conversations/{conversation_id}/rewind",
++      "path": "/api/conversations/{conversation_id}/refresh-title",
+       "operations": [
+         {
+           "method": "POST",
+-          "operation_id": "rewind_conversation_api_conversations__conversation_id__rewind_post",
++          "operation_id": "refresh_conversation_title_api_conversations__conversation_id__refresh_title_post",
+           "parameters": [
+             {
+               "in": "path",
+@@ -8167,81 +8379,126 @@
+               }
+             }
+           ],
+-          "request_body": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "additionalProperties": true,
+-                  "title": "Req",
+-                  "type": "object"
+-                }
+-              }
+-            },
+-            "required": true
+-          },
+-          "responses": {
+-            "200": {
+-              "content": {
+-                "application/json": {
+-                  "schema": {
+-                    "additionalProperties": true,
+-                    "title": "Response Rewind Conversation Api Conversations  Conversation Id  Rewind Post",
+-                    "type": "object"
+-                  }
+-                }
+-              },
+-              "description": "Successful Response"
+-            },
+-            "422": {
+-              "content": {
+-                "application/json": {
+-                  "schema": {
+-                    "$ref": "#/components/schemas/HTTPValidationError"
+-                  }
+-                }
+-              },
+-              "description": "Validation Error"
+-            }
+-          }
+-        }
+-      ]
+-    },
+-    {
+-      "path": "/api/conversations/{conversation_id}/rewind/preview",
+-      "operations": [
+-        {
+-          "method": "POST",
+-          "operation_id": "preview_rewind_request_api_conversations__conversation_id__rewind_preview_post",
+-          "parameters": [
+-            {
+-              "in": "path",
+-              "name": "conversation_id",
+-              "required": true,
+-              "schema": {
+-                "title": "Conversation Id",
+-                "type": "string"
+-              }
+-            }
+-          ],
+-          "request_body": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "additionalProperties": true,
+-                  "title": "Req",
+-                  "type": "object"
+-                }
+-              }
+-            },
+-            "required": true
+-          },
++          "request_body": null,
+           "responses": {
+             "200": {
+               "content": {
+                 "application/json": {
+                   "schema": {
+                     "additionalProperties": true,
+-                    "title": "Response Preview Rewind Request Api Conversations  Conversation Id  Rewind Preview Post",
++                    "title": "Response Refresh Conversation Title Api Conversations  Conversation Id  Refresh Title Post",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/conversations/{conversation_id}/rewind",
++      "operations": [
++        {
++          "method": "POST",
++          "operation_id": "rewind_conversation_api_conversations__conversation_id__rewind_post",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "conversation_id",
++              "required": true,
++              "schema": {
++                "title": "Conversation Id",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "additionalProperties": true,
++                  "title": "Req",
++                  "type": "object"
++                }
++              }
++            },
++            "required": true
++          },
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Rewind Conversation Api Conversations  Conversation Id  Rewind Post",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/conversations/{conversation_id}/rewind/preview",
++      "operations": [
++        {
++          "method": "POST",
++          "operation_id": "preview_rewind_request_api_conversations__conversation_id__rewind_preview_post",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "conversation_id",
++              "required": true,
++              "schema": {
++                "title": "Conversation Id",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "additionalProperties": true,
++                  "title": "Req",
++                  "type": "object"
++                }
++              }
++            },
++            "required": true
++          },
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Preview Rewind Request Api Conversations  Conversation Id  Rewind Preview Post",
+                     "type": "object"
+                   }
+                 }
+@@ -8790,69 +9047,11 @@
+       ]
+     },
+     {
+-      "path": "/api/conversations/{conversation_id}/truncate",
++      "path": "/api/conversations/{conversation_id}/timeline",
+       "operations": [
+         {
+-          "method": "POST",
+-          "operation_id": "truncate_conversation_api_conversations__conversation_id__truncate_post",
+-          "parameters": [
+-            {
+-              "in": "path",
+-              "name": "conversation_id",
+-              "required": true,
+-              "schema": {
+-                "title": "Conversation Id",
+-                "type": "string"
+-              }
+-            }
+-          ],
+-          "request_body": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "additionalProperties": true,
+-                  "title": "Req",
+-                  "type": "object"
+-                }
+-              }
+-            },
+-            "required": true
+-          },
+-          "responses": {
+-            "200": {
+-              "content": {
+-                "application/json": {
+-                  "schema": {
+-                    "additionalProperties": {
+-                      "type": "string"
+-                    },
+-                    "title": "Response Truncate Conversation Api Conversations  Conversation Id  Truncate Post",
+-                    "type": "object"
+-                  }
+-                }
+-              },
+-              "description": "Successful Response"
+-            },
+-            "422": {
+-              "content": {
+-                "application/json": {
+-                  "schema": {
+-                    "$ref": "#/components/schemas/HTTPValidationError"
+-                  }
+-                }
+-              },
+-              "description": "Validation Error"
+-            }
+-          }
+-        }
+-      ]
+-    },
+-    {
+-      "path": "/api/conversations/{conversation_id}/worktree",
+-      "operations": [
+-        {
+-          "method": "DELETE",
+-          "operation_id": "delete_conversation_worktree_api_conversations__conversation_id__worktree_delete",
++          "method": "GET",
++          "operation_id": "get_conversation_timeline_api_conversations__conversation_id__timeline_get",
+           "parameters": [
+             {
+               "in": "path",
+@@ -8865,22 +9064,25 @@
+             },
+             {
+               "in": "query",
+-              "name": "keep_branch",
++              "name": "limit",
+               "required": false,
+               "schema": {
+-                "default": false,
+-                "title": "Keep Branch",
+-                "type": "boolean"
++                "default": 500,
++                "maximum": 2000,
++                "minimum": 1,
++                "title": "Limit",
++                "type": "integer"
+               }
+             },
+             {
+               "in": "query",
+-              "name": "force",
++              "name": "after_row_id",
+               "required": false,
+               "schema": {
+-                "default": false,
+-                "title": "Force",
+-                "type": "boolean"
++                "default": 0,
++                "minimum": 0,
++                "title": "After Row Id",
++                "type": "integer"
+               }
+             }
+           ],
+@@ -8890,10 +9092,8 @@
+               "content": {
+                 "application/json": {
+                   "schema": {
+-                    "additionalProperties": {
+-                      "type": "string"
+-                    },
+-                    "title": "Response Delete Conversation Worktree Api Conversations  Conversation Id  Worktree Delete",
++                    "additionalProperties": true,
++                    "title": "Response Get Conversation Timeline Api Conversations  Conversation Id  Timeline Get",
+                     "type": "object"
+                   }
+                 }
+@@ -8915,11 +9115,11 @@
+       ]
+     },
+     {
+-      "path": "/api/conversations/{conversation_id}/worktree",
++      "path": "/api/conversations/{conversation_id}/truncate",
+       "operations": [
+         {
+-          "method": "GET",
+-          "operation_id": "conversation_worktree_api_conversations__conversation_id__worktree_get",
++          "method": "POST",
++          "operation_id": "truncate_conversation_api_conversations__conversation_id__truncate_post",
+           "parameters": [
+             {
+               "in": "path",
+@@ -8931,14 +9131,27 @@
+               }
+             }
+           ],
+-          "request_body": null,
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "additionalProperties": true,
++                  "title": "Req",
++                  "type": "object"
++                }
++              }
++            },
++            "required": true
++          },
+           "responses": {
+             "200": {
+               "content": {
+                 "application/json": {
+                   "schema": {
+-                    "additionalProperties": true,
+-                    "title": "Response Conversation Worktree Api Conversations  Conversation Id  Worktree Get",
++                    "additionalProperties": {
++                      "type": "string"
++                    },
++                    "title": "Response Truncate Conversation Api Conversations  Conversation Id  Truncate Post",
+                     "type": "object"
+                   }
+                 }
+@@ -8960,11 +9173,11 @@
+       ]
+     },
+     {
+-      "path": "/api/conversations/{conversation_id}/worktree/merge",
++      "path": "/api/conversations/{conversation_id}/worktree",
+       "operations": [
+         {
+-          "method": "POST",
+-          "operation_id": "merge_conversation_worktree_api_conversations__conversation_id__worktree_merge_post",
++          "method": "DELETE",
++          "operation_id": "delete_conversation_worktree_api_conversations__conversation_id__worktree_delete",
+           "parameters": [
+             {
+               "in": "path",
+@@ -8974,20 +9187,29 @@
+                 "title": "Conversation Id",
+                 "type": "string"
+               }
+-            }
+-          ],
+-          "request_body": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "additionalProperties": true,
+-                  "title": "Req",
+-                  "type": "object"
+-                }
++            },
++            {
++              "in": "query",
++              "name": "keep_branch",
++              "required": false,
++              "schema": {
++                "default": false,
++                "title": "Keep Branch",
++                "type": "boolean"
+               }
+             },
+-            "required": true
+-          },
++            {
++              "in": "query",
++              "name": "force",
++              "required": false,
++              "schema": {
++                "default": false,
++                "title": "Force",
++                "type": "boolean"
++              }
++            }
++          ],
++          "request_body": null,
+           "responses": {
+             "200": {
+               "content": {
+@@ -8996,7 +9218,172 @@
+                     "additionalProperties": {
+                       "type": "string"
+                     },
+-                    "title": "Response Merge Conversation Worktree Api Conversations  Conversation Id  Worktree Merge Post",
++                    "title": "Response Delete Conversation Worktree Api Conversations  Conversation Id  Worktree Delete",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/conversations/{conversation_id}/worktree",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "conversation_worktree_api_conversations__conversation_id__worktree_get",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "conversation_id",
++              "required": true,
++              "schema": {
++                "title": "Conversation Id",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Conversation Worktree Api Conversations  Conversation Id  Worktree Get",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/conversations/{conversation_id}/worktree",
++      "operations": [
++        {
++          "method": "POST",
++          "operation_id": "create_conversation_worktree_api_conversations__conversation_id__worktree_post",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "conversation_id",
++              "required": true,
++              "schema": {
++                "title": "Conversation Id",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "anyOf": [
++                    {
++                      "additionalProperties": true,
++                      "type": "object"
++                    },
++                    {
++                      "type": "null"
++                    }
++                  ],
++                  "title": "Req"
++                }
++              }
++            }
++          },
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Create Conversation Worktree Api Conversations  Conversation Id  Worktree Post",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/conversations/{conversation_id}/worktree/merge",
++      "operations": [
++        {
++          "method": "POST",
++          "operation_id": "merge_conversation_worktree_api_conversations__conversation_id__worktree_merge_post",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "conversation_id",
++              "required": true,
++              "schema": {
++                "title": "Conversation Id",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "additionalProperties": true,
++                  "title": "Req",
++                  "type": "object"
++                }
++              }
++            },
++            "required": true
++          },
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": {
++                      "type": "string"
++                    },
++                    "title": "Response Merge Conversation Worktree Api Conversations  Conversation Id  Worktree Merge Post",
+                     "type": "object"
+                   }
+                 }
+@@ -11710,36 +12097,55 @@
+       ]
+     },
+     {
+-      "path": "/api/evolution/branches",
++      "path": "/api/engine-goals/resume",
+       "operations": [
+         {
+-          "method": "GET",
+-          "operation_id": "branches_api_evolution_branches_get",
++          "method": "POST",
++          "operation_id": "resume_stranded_goal_api_engine_goals_resume_post",
+           "parameters": [],
+-          "request_body": null,
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ResumePayload"
++                }
++              }
++            },
++            "required": true
++          },
+           "responses": {
+             "200": {
+               "content": {
+                 "application/json": {
+                   "schema": {
+                     "additionalProperties": true,
+-                    "title": "Response Branches Api Evolution Branches Get",
++                    "title": "Response Resume Stranded Goal Api Engine Goals Resume Post",
+                     "type": "object"
+                   }
+                 }
+               },
+               "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
+             }
+           }
+         }
+       ]
+     },
+     {
+-      "path": "/api/evolution/candidates",
++      "path": "/api/engine-goals/stranded",
+       "operations": [
+         {
+           "method": "GET",
+-          "operation_id": "list_candidates_api_evolution_candidates_get",
++          "operation_id": "list_stranded_goals_api_engine_goals_stranded_get",
+           "parameters": [],
+           "request_body": null,
+           "responses": {
+@@ -11748,7 +12154,7 @@
+                 "application/json": {
+                   "schema": {
+                     "additionalProperties": true,
+-                    "title": "Response List Candidates Api Evolution Candidates Get",
++                    "title": "Response List Stranded Goals Api Engine Goals Stranded Get",
+                     "type": "object"
+                   }
+                 }
+@@ -11760,61 +12166,67 @@
+       ]
+     },
+     {
+-      "path": "/api/evolution/candidates",
++      "path": "/api/evolution/branches",
+       "operations": [
+         {
+-          "method": "POST",
+-          "operation_id": "create_candidate_api_evolution_candidates_post",
++          "method": "GET",
++          "operation_id": "branches_api_evolution_branches_get",
+           "parameters": [],
+-          "request_body": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/CandidateCreate"
+-                }
+-              }
+-            },
+-            "required": true
+-          },
++          "request_body": null,
+           "responses": {
+             "200": {
+               "content": {
+                 "application/json": {
+                   "schema": {
+                     "additionalProperties": true,
+-                    "title": "Response Create Candidate Api Evolution Candidates Post",
++                    "title": "Response Branches Api Evolution Branches Get",
+                     "type": "object"
+                   }
+                 }
+               },
+               "description": "Successful Response"
+-            },
+-            "422": {
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/evolution/candidates",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "list_candidates_api_evolution_candidates_get",
++          "parameters": [],
++          "request_body": null,
++          "responses": {
++            "200": {
+               "content": {
+                 "application/json": {
+                   "schema": {
+-                    "$ref": "#/components/schemas/HTTPValidationError"
++                    "additionalProperties": true,
++                    "title": "Response List Candidates Api Evolution Candidates Get",
++                    "type": "object"
+                   }
+                 }
+               },
+-              "description": "Validation Error"
++              "description": "Successful Response"
+             }
+           }
+         }
+       ]
+     },
+     {
+-      "path": "/api/evolution/candidates/from-conversation",
++      "path": "/api/evolution/candidates",
+       "operations": [
+         {
+           "method": "POST",
+-          "operation_id": "create_candidate_from_conversation_api_evolution_candidates_from_conversation_post",
++          "operation_id": "create_candidate_api_evolution_candidates_post",
+           "parameters": [],
+           "request_body": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/ConversationCandidateCreate"
++                  "$ref": "#/components/schemas/CandidateCreate"
+                 }
+               }
+             },
+@@ -11826,7 +12238,7 @@
+                 "application/json": {
+                   "schema": {
+                     "additionalProperties": true,
+-                    "title": "Response Create Candidate From Conversation Api Evolution Candidates From Conversation Post",
++                    "title": "Response Create Candidate Api Evolution Candidates Post",
+                     "type": "object"
+                   }
+                 }
+@@ -11848,17 +12260,17 @@
+       ]
+     },
+     {
+-      "path": "/api/evolution/candidates/from-recording",
++      "path": "/api/evolution/candidates/from-conversation",
+       "operations": [
+         {
+           "method": "POST",
+-          "operation_id": "create_candidate_from_recording_api_evolution_candidates_from_recording_post",
++          "operation_id": "create_candidate_from_conversation_api_evolution_candidates_from_conversation_post",
+           "parameters": [],
+           "request_body": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/RecordingBundle"
++                  "$ref": "#/components/schemas/ConversationCandidateCreate"
+                 }
+               }
+             },
+@@ -11870,7 +12282,7 @@
+                 "application/json": {
+                   "schema": {
+                     "additionalProperties": true,
+-                    "title": "Response Create Candidate From Recording Api Evolution Candidates From Recording Post",
++                    "title": "Response Create Candidate From Conversation Api Evolution Candidates From Conversation Post",
+                     "type": "object"
+                   }
+                 }
+@@ -11892,17 +12304,17 @@
+       ]
+     },
+     {
+-      "path": "/api/evolution/candidates/from-runs",
++      "path": "/api/evolution/candidates/from-recording",
+       "operations": [
+         {
+           "method": "POST",
+-          "operation_id": "create_candidate_from_runs_api_evolution_candidates_from_runs_post",
++          "operation_id": "create_candidate_from_recording_api_evolution_candidates_from_recording_post",
+           "parameters": [],
+           "request_body": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/RunsCandidateCreate"
++                  "$ref": "#/components/schemas/RecordingBundle"
+                 }
+               }
+             },
+@@ -11914,7 +12326,51 @@
+                 "application/json": {
+                   "schema": {
+                     "additionalProperties": true,
+-                    "title": "Response Create Candidate From Runs Api Evolution Candidates From Runs Post",
++                    "title": "Response Create Candidate From Recording Api Evolution Candidates From Recording Post",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/evolution/candidates/from-runs",
++      "operations": [
++        {
++          "method": "POST",
++          "operation_id": "create_candidate_from_runs_api_evolution_candidates_from_runs_post",
++          "parameters": [],
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/RunsCandidateCreate"
++                }
++              }
++            },
++            "required": true
++          },
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Create Candidate From Runs Api Evolution Candidates From Runs Post",
+                     "type": "object"
+                   }
+                 }
+@@ -22876,6 +23332,214 @@
+         }
+       ]
+     },
++    {
++      "path": "/api/permissions",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "list_permissions_api_permissions_get",
++          "parameters": [],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response List Permissions Api Permissions Get",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/permissions/clear",
++      "operations": [
++        {
++          "method": "POST",
++          "operation_id": "clear_permissions_api_permissions_clear_post",
++          "parameters": [],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Clear Permissions Api Permissions Clear Post",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/permissions/presets",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "list_presets_api_permissions_presets_get",
++          "parameters": [],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response List Presets Api Permissions Presets Get",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/permissions/presets/resolve",
++      "operations": [
++        {
++          "method": "POST",
++          "operation_id": "resolve_preset_api_permissions_presets_resolve_post",
++          "parameters": [],
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/PresetRequest"
++                }
++              }
++            },
++            "required": true
++          },
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Resolve Preset Api Permissions Presets Resolve Post",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/permissions/presets/{name}",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "show_preset_api_permissions_presets__name__get",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "name",
++              "required": true,
++              "schema": {
++                "title": "Name",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Show Preset Api Permissions Presets  Name  Get",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/permissions/revoke",
++      "operations": [
++        {
++          "method": "POST",
++          "operation_id": "revoke_permissions_api_permissions_revoke_post",
++          "parameters": [],
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/RevokeRequest"
++                }
++              }
++            },
++            "required": true
++          },
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Revoke Permissions Api Permissions Revoke Post",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
+     {
+       "path": "/api/personal-todos",
+       "operations": [
+@@ -23456,6 +24120,74 @@
+         }
+       ]
+     },
++    {
++      "path": "/api/plugins/config-layers",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "get_plugin_config_layers_api_plugins_config_layers_get",
++          "parameters": [
++            {
++              "in": "query",
++              "name": "profile",
++              "required": false,
++              "schema": {
++                "anyOf": [
++                  {
++                    "type": "string"
++                  },
++                  {
++                    "type": "null"
++                  }
++                ],
++                "title": "Profile"
++              }
++            },
++            {
++              "in": "query",
++              "name": "bundle",
++              "required": false,
++              "schema": {
++                "anyOf": [
++                  {
++                    "type": "string"
++                  },
++                  {
++                    "type": "null"
++                  }
++                ],
++                "title": "Bundle"
++              }
++            }
++          ],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Get Plugin Config Layers Api Plugins Config Layers Get",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
+     {
+       "path": "/api/plugins/install",
+       "operations": [
+@@ -23549,12 +24281,113 @@
+       ]
+     },
+     {
+-      "path": "/api/plugins/validate",
++      "path": "/api/plugins/validate",
++      "operations": [
++        {
++          "method": "POST",
++          "operation_id": "validate_plugin_manifest_api_plugins_validate_post",
++          "parameters": [],
++          "request_body": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "additionalProperties": true,
++                  "title": "Req",
++                  "type": "object"
++                }
++              }
++            },
++            "required": true
++          },
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Validate Plugin Manifest Api Plugins Validate Post",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/plugins/{name}",
++      "operations": [
++        {
++          "method": "DELETE",
++          "operation_id": "uninstall_plugin_api_plugins__name__delete",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "name",
++              "required": true,
++              "schema": {
++                "title": "Name",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Uninstall Plugin Api Plugins  Name  Delete",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/plugins/{name}/enabled",
+       "operations": [
+         {
+           "method": "POST",
+-          "operation_id": "validate_plugin_manifest_api_plugins_validate_post",
+-          "parameters": [],
++          "operation_id": "set_plugin_enabled_api_plugins__name__enabled_post",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "name",
++              "required": true,
++              "schema": {
++                "title": "Name",
++                "type": "string"
++              }
++            }
++          ],
+           "request_body": {
+             "content": {
+               "application/json": {
+@@ -23573,7 +24406,7 @@
+                 "application/json": {
+                   "schema": {
+                     "additionalProperties": true,
+-                    "title": "Response Validate Plugin Manifest Api Plugins Validate Post",
++                    "title": "Response Set Plugin Enabled Api Plugins  Name  Enabled Post",
+                     "type": "object"
+                   }
+                 }
+@@ -23595,11 +24428,65 @@
+       ]
+     },
+     {
+-      "path": "/api/plugins/{name}",
++      "path": "/api/plugins/{name}/file",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "read_plugin_file_api_plugins__name__file_get",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "name",
++              "required": true,
++              "schema": {
++                "title": "Name",
++                "type": "string"
++              }
++            },
++            {
++              "in": "query",
++              "name": "path",
++              "required": true,
++              "schema": {
++                "title": "Path",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Read Plugin File Api Plugins  Name  File Get",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/plugins/{name}/patches",
+       "operations": [
+         {
+           "method": "DELETE",
+-          "operation_id": "uninstall_plugin_api_plugins__name__delete",
++          "operation_id": "revert_plugin_patch_api_plugins__name__patches_delete",
+           "parameters": [
+             {
+               "in": "path",
+@@ -23609,6 +24496,22 @@
+                 "title": "Name",
+                 "type": "string"
+               }
++            },
++            {
++              "in": "query",
++              "name": "path",
++              "required": false,
++              "schema": {
++                "anyOf": [
++                  {
++                    "type": "string"
++                  },
++                  {
++                    "type": "null"
++                  }
++                ],
++                "title": "Path"
++              }
+             }
+           ],
+           "request_body": null,
+@@ -23618,7 +24521,7 @@
+                 "application/json": {
+                   "schema": {
+                     "additionalProperties": true,
+-                    "title": "Response Uninstall Plugin Api Plugins  Name  Delete",
++                    "title": "Response Revert Plugin Patch Api Plugins  Name  Patches Delete",
+                     "type": "object"
+                   }
+                 }
+@@ -23640,11 +24543,56 @@
+       ]
+     },
+     {
+-      "path": "/api/plugins/{name}/enabled",
++      "path": "/api/plugins/{name}/patches",
+       "operations": [
+         {
+-          "method": "POST",
+-          "operation_id": "set_plugin_enabled_api_plugins__name__enabled_post",
++          "method": "GET",
++          "operation_id": "list_plugin_patches_api_plugins__name__patches_get",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "name",
++              "required": true,
++              "schema": {
++                "title": "Name",
++                "type": "string"
++              }
++            }
++          ],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response List Plugin Patches Api Plugins  Name  Patches Get",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
++    {
++      "path": "/api/plugins/{name}/patches",
++      "operations": [
++        {
++          "method": "PUT",
++          "operation_id": "write_plugin_patch_api_plugins__name__patches_put",
+           "parameters": [
+             {
+               "in": "path",
+@@ -23674,7 +24622,7 @@
+                 "application/json": {
+                   "schema": {
+                     "additionalProperties": true,
+-                    "title": "Response Set Plugin Enabled Api Plugins  Name  Enabled Post",
++                    "title": "Response Write Plugin Patch Api Plugins  Name  Patches Put",
+                     "type": "object"
+                   }
+                 }
+@@ -27744,6 +28692,74 @@
+         }
+       ]
+     },
++    {
++      "path": "/api/runtime/runs/{run_id}/events",
++      "operations": [
++        {
++          "method": "GET",
++          "operation_id": "page_run_events_api_runtime_runs__run_id__events_get",
++          "parameters": [
++            {
++              "in": "path",
++              "name": "run_id",
++              "required": true,
++              "schema": {
++                "title": "Run Id",
++                "type": "string"
++              }
++            },
++            {
++              "in": "query",
++              "name": "after_sequence",
++              "required": false,
++              "schema": {
++                "default": 0,
++                "minimum": 0,
++                "title": "After Sequence",
++                "type": "integer"
++              }
++            },
++            {
++              "in": "query",
++              "name": "limit",
++              "required": false,
++              "schema": {
++                "default": 200,
++                "maximum": 500,
++                "minimum": 1,
++                "title": "Limit",
++                "type": "integer"
++              }
++            }
++          ],
++          "request_body": null,
++          "responses": {
++            "200": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "additionalProperties": true,
++                    "title": "Response Page Run Events Api Runtime Runs  Run Id  Events Get",
++                    "type": "object"
++                  }
++                }
++              },
++              "description": "Successful Response"
++            },
++            "422": {
++              "content": {
++                "application/json": {
++                  "schema": {
++                    "$ref": "#/components/schemas/HTTPValidationError"
++                  }
++                }
++              },
++              "description": "Validation Error"
++            }
++          }
++        }
++      ]
++    },
+     {
+       "path": "/api/runtime/shutdown",
+       "operations": [
+@@ -39990,6 +41006,11 @@
+             "title": "Agent Id",
+             "type": "string"
+           },
++          "agent_preset_id": {
++            "default": "default",
++            "title": "Agent Preset Id",
++            "type": "string"
++          },
+           "base_branch": {
+             "default": "",
+             "title": "Base Branch",
+@@ -40043,6 +41064,17 @@
+             "title": "Model",
+             "type": "string"
+           },
++          "permission_preset": {
++            "default": "ask",
++            "enum": [
++              "observe",
++              "ask",
++              "trusted",
++              "free"
++            ],
++            "title": "Permission Preset",
++            "type": "string"
++          },
+           "reasoning_effort": {
+             "default": "",
+             "enum": [
+@@ -40253,6 +41285,20 @@
+         "title": "PresenceBeat",
+         "type": "object"
+       },
++      "PresetRequest": {
++        "properties": {
++          "preset": {
++            "description": "observe | ask | trusted | free",
++            "title": "Preset",
++            "type": "string"
++          }
++        },
++        "required": [
++          "preset"
++        ],
++        "title": "PresetRequest",
++        "type": "object"
++      },
+       "PromptBody": {
+         "properties": {
+           "text": {
+@@ -40841,6 +41887,21 @@
+         "title": "RestoreBody",
+         "type": "object"
+       },
++      "ResumePayload": {
++        "properties": {
++          "session_id": {
++            "maxLength": 200,
++            "minLength": 1,
++            "title": "Session Id",
++            "type": "string"
++          }
++        },
++        "required": [
++          "session_id"
++        ],
++        "title": "ResumePayload",
++        "type": "object"
++      },
+       "Revert": {
+         "properties": {
+           "sha": {
+@@ -40854,6 +41915,45 @@
+         "title": "Revert",
+         "type": "object"
+       },
++      "RevokeRequest": {
++        "properties": {
++          "request_fingerprint": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Request Fingerprint"
++          },
++          "tool": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Tool"
++          },
++          "workspace": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Workspace"
++          }
++        },
++        "title": "RevokeRequest",
++        "type": "object"
++      },
+       "RunLimitsPayload": {
+         "properties": {
+           "max_cost_usd": {
+diff --git a/core/tests/test_conversation_worktree_create.py b/core/tests/test_conversation_worktree_create.py
+new file mode 100644
+index 00000000..aea94792
+--- /dev/null
++++ b/core/tests/test_conversation_worktree_create.py
+@@ -0,0 +1,161 @@
++"""POST conversation worktree: create once, move the conversation, roll back on record failure."""
++
++import asyncio
++import subprocess
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++from fastapi import HTTPException
++
++from atlas.api import workspace_router
++from atlas.memory import MemoryStore
++from atlas.task_artifacts import WorktreeService
++
++pytestmark = pytest.mark.unit
++
++
++def git(cwd: Path, *args: str) -> str:
++    result = subprocess.run(
++        ["git", "-C", str(cwd), *args], capture_output=True, text=True,
++        encoding="utf-8", errors="replace", check=False,
++    )
++    assert result.returncode == 0, result.stderr or result.stdout
++    return result.stdout.strip()
++
++
++@pytest.fixture
++async def memory(tmp_path: Path):
++    store = MemoryStore(db_path=tmp_path / "memory.sqlite3")
++    await store.init()
++    yield store
++    await store.close()
++
++
++@pytest.fixture
++def repo(tmp_path: Path) -> Path:
++    root = tmp_path / "repo"
++    root.mkdir()
++    git(root, "init")
++    git(root, "config", "user.email", "atlas@example.invalid")
++    git(root, "config", "user.name", "Atlas Test")
++    (root / "README.md").write_text("base\n", encoding="utf-8")
++    git(root, "add", "README.md")
++    git(root, "commit", "-m", "base")
++    return root
++
++
++async def new_conversation(memory: MemoryStore, workspace: Path) -> str:
++    conversation_id = await memory.create_conversation("worktree task")
++    assert await memory.update_conversation(conversation_id, workspace=str(workspace))
++    return conversation_id
++
++
++@pytest.fixture
++def fake_server(monkeypatch, tmp_path: Path):
++    worktrees = WorktreeService(tmp_path)
++    monkeypatch.setattr(workspace_router, "_server", lambda: SimpleNamespace(_worktrees=lambda: worktrees))
++    return worktrees
++
++
++async def test_create_moves_conversation_and_returns_branch(
++    memory: MemoryStore, repo: Path, fake_server,
++) -> None:
++    conversation_id = await new_conversation(memory, repo)
++    short = conversation_id.replace("-", "")[:8]
++    result = await workspace_router.create_conversation_worktree(
++        SimpleNamespace(memory=memory), conversation_id, {"name": "Feature Login!"},
++    )
++    assert result["worktree_branch"] == f"atlas/{short}-feature-login"
++    path = Path(result["worktree_path"])
++    assert path.is_dir() and (path / ".git").is_file()
++    assert git(repo, "worktree", "list", "--porcelain").count("worktree ") == 2
++
++    conversation = await memory.get_conversation(conversation_id)
++    assert conversation is not None
++    assert conversation["workspace"] == str(path)
++    assert conversation["worktree_path"] == str(path)
++    assert conversation["worktree_branch"] == result["worktree_branch"]
++    assert conversation["base_branch"] == result["base_branch"]
++
++    git(repo, "worktree", "remove", "--force", str(path))
++    git(repo, "branch", "-D", result["worktree_branch"])
++
++
++async def test_second_create_conflicts_without_touching_the_tree(
++    memory: MemoryStore, repo: Path, fake_server,
++) -> None:
++    conversation_id = await new_conversation(memory, repo)
++    first = await workspace_router.create_conversation_worktree(
++        SimpleNamespace(memory=memory), conversation_id, {},
++    )
++    with pytest.raises(HTTPException) as caught:
++        await workspace_router.create_conversation_worktree(
++            SimpleNamespace(memory=memory), conversation_id, {"name": "again"},
++        )
++    assert caught.value.status_code == 409
++    assert git(repo, "worktree", "list", "--porcelain").count("worktree ") == 2
++    assert Path(first["worktree_path"]).is_dir()
++
++    git(repo, "worktree", "remove", "--force", first["worktree_path"])
++    git(repo, "branch", "-D", first["worktree_branch"])
++
++
++async def test_non_git_workspace_and_missing_conversation_are_rejected(
++    memory: MemoryStore, tmp_path: Path, fake_server,
++) -> None:
++    plain = tmp_path / "plain"
++    plain.mkdir()
++    conversation_id = await new_conversation(memory, plain)
++    with pytest.raises(HTTPException) as non_git:
++        await workspace_router.create_conversation_worktree(
++            SimpleNamespace(memory=memory), conversation_id, {},
++        )
++    assert non_git.value.status_code == 409
++    assert "git repository" in str(non_git.value.detail)
++
++    with pytest.raises(HTTPException) as missing:
++        await workspace_router.create_conversation_worktree(
++            SimpleNamespace(memory=memory), "missing-conversation", {},
++        )
++    assert missing.value.status_code == 404
++
++
++async def test_record_failure_removes_the_created_worktree(
++    memory: MemoryStore, repo: Path, fake_server, monkeypatch,
++) -> None:
++    conversation_id = await new_conversation(memory, repo)
++
++    async def refuse(*_args, **_kwargs) -> bool:
++        return False
++
++    monkeypatch.setattr(memory, "update_conversation", refuse)
++    with pytest.raises(HTTPException) as caught:
++        await workspace_router.create_conversation_worktree(
++            SimpleNamespace(memory=memory), conversation_id, {"name": "rollback"},
++        )
++    assert caught.value.status_code == 500
++    assert "has been removed" in str(caught.value.detail)
++    assert git(repo, "worktree", "list", "--porcelain").count("worktree ") == 1
++    worktree_root = repo.parent / ".atlas-worktrees" / repo.name
++    assert not any(worktree_root.glob("*/**")) if worktree_root.exists() else True
++
++
++async def test_concurrent_create_yields_one_winner(
++    memory: MemoryStore, repo: Path, fake_server,
++) -> None:
++    conversation_id = await new_conversation(memory, repo)
++    services = SimpleNamespace(memory=memory)
++    results = await asyncio.gather(
++        workspace_router.create_conversation_worktree(services, conversation_id, {"name": "one"}),
++        workspace_router.create_conversation_worktree(services, conversation_id, {"name": "two"}),
++        return_exceptions=True,
++    )
++    winners = [item for item in results if isinstance(item, dict)]
++    conflicts = [item for item in results if isinstance(item, HTTPException)]
++    assert len(winners) == 1 and len(conflicts) == 1
++    assert conflicts[0].status_code == 409
++    assert git(repo, "worktree", "list", "--porcelain").count("worktree ") == 2
++
++    git(repo, "worktree", "remove", "--force", winners[0]["worktree_path"])
++    git(repo, "branch", "-D", winners[0]["worktree_branch"])
+\ No newline at end of file

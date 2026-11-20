@@ -1,0 +1,49 @@
+# EXEC-06 skill regression (worktree zcode/exec06-skill-sources)
+..............................................F.                         [100%]
+================================== FAILURES ===================================
+_________________ test_atlas_hub_state_forced_under_data_dir __________________
+tests\test_skills_market.py:444: in test_atlas_hub_state_forced_under_data_dir
+    import tools.skills_hub as hub_mod
+E   ModuleNotFoundError: No module named 'tools'
+---------------------------- Captured stdout setup ----------------------------
+2026-11-18 22:16:12 [info     ] skills.change_invalidated
+2026-11-18 22:16:12 [info     ] skills.change_invalidated
+2026-11-18 22:16:12 [info     ] skills.change_invalidated
+2026-11-18 22:16:12 [info     ] skills.change_invalidated
+2026-11-18 22:16:12 [info     ] skills.scanned                 count=0 sources=4
+============================== warnings summary ===============================
+atlas\api\memory_library_router.py:431
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+atlas\api\memory_library_router.py:438
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+atlas\api\settings_export_router.py:45
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+atlas\api\settings_export_router.py:55
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+atlas\api\settings_export_router.py:62
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_skills_market.py::test_atlas_hub_state_forced_under_data_dir
+1 failed, 47 passed, 5 warnings in 9.82s
+EXIT=1

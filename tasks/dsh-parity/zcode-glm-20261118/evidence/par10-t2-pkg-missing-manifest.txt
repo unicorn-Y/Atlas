@@ -1,0 +1,14 @@
+PAR-10-T2 packaged Electron launch: manifest removed from copied payload 2026-11-18T21:48:21Z
+payload: D:\Atlas\.tmp\par10-t2\pkg-broken\win-unpacked (robocopy of win-unpacked, release-manifest.json deleted)
+command: powershell -File run-packaged.ps1 -Exe <pkg-broken>\Atlas.exe -WaitSeconds 8 -ErrorDialogTitle Error
+
+PID=62800
+ALIVE_AFTER_8s=True
+MAIN_WINDOW_TITLE=Error
+CHILDREN=Atlas.exe,Atlas.exe
+UIA_WINDOW_COUNT=1
+UIA_WINDOW_NAME=Error
+ERROR_DIALOG_TEXT=Atlas 启动失败
+ERROR_DIALOG_TEXT=Atlas 启动时出错，请把下面的信息发给维护者： |  | Error: Atlas 安装产物完整性检查失败（未找到清单），已拒绝启动。 | - manifest_missing [D:\Atlas\.tmp\par10-t2\pkg-broken\win-unpacked]: 安装目录中未找到 release-manifest.json（查找：resources/atlas/release-manifest.json、release-manifest.json、resources/release-manifest.json） |     at assertReleaseIntegrity (file:///D:/Atlas/.tmp/par10-t2/pkg-broken/win-unpacked/resources/app.asar/dist-electron/main/releaseIntegrity.js:539:15) |     at file:///D:/Atlas/.tmp/par10-t2/pkg-broken/win-unpacked/resources/app.asar/dist-electron/main/electron.js:2039:9
+GRACEFUL_EXIT=true
+EXIT_CODE=1

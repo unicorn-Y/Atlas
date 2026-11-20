@@ -1,0 +1,137 @@
+diff --git a/core/atlas/tools/mcp_client.py b/core/atlas/tools/mcp_client.py
+index 4b75f407..f4b59759 100644
+--- a/core/atlas/tools/mcp_client.py
++++ b/core/atlas/tools/mcp_client.py
+@@ -544,7 +544,17 @@ class MCPClient:
+         try:
+             task.result()
+         except Exception as exc:
+-            log.warning("mcp.background_start_failed", reason=_failure_reason(exc))
++            reason = _failure_reason(exc)
++            log.warning("mcp.background_start_failed", reason=reason)
++            # A raised startup attempt must settle the server's lifecycle state:
++            # stay fail-closed (state=failed + blocking reason) instead of leaving
++            # it "starting" forever. _failure_reason never echoes command args.
++            server_name = task.get_name().removeprefix("mcp-start:")
++            status = self._server_status.get(server_name)
++            if status is not None and status.get("state") == "starting":
++                status["state"] = "failed"
++                status["blocking_reason"] = reason
++                self._progress(server_name, "failed", reason, status.get("transport") or "")
+ 
+     async def stop(self) -> None:
+         """Disconnect all MCP servers."""
+@@ -1256,9 +1266,19 @@ class MCPClient:
+             item for item in statuses
+             if item["enabled"] and item["state"] == "failed"
+         ]
+-        server_blocker = failed_servers[0]["blocking_reason"] if failed_servers else None
++        # Fail closed while a configured server's start attempt is still undecided:
++        # background handshakes must not delay startup, but the MCP runtime is only
++        # available once every enabled server has settled (connected or failed).
++        pending_servers = [
++            item for item in statuses
++            if item["enabled"] and item["state"] in ("starting", "connecting")
++        ]
++        server_blocker = (
++            failed_servers[0]["blocking_reason"] if failed_servers
++            else ("MCP server startup is still in progress" if pending_servers else None)
++        )
+         return {
+-            "available": not node_blocker and not failed_servers,
++            "available": not node_blocker and not failed_servers and not pending_servers,
+             "node_required": needs_node,
+             "blocking_reason": (
+                 node_status["blocking_reason"] if node_blocker else server_blocker
+diff --git a/core/atlas/tools/node_runtime.py b/core/atlas/tools/node_runtime.py
+index ad9ce8fc..d22bb5e6 100644
+--- a/core/atlas/tools/node_runtime.py
++++ b/core/atlas/tools/node_runtime.py
+@@ -9,10 +9,12 @@ from dataclasses import dataclass
+ from pathlib import Path
+ from typing import Any
+ 
+-NODE_VERSION = "v22.23.3"
+-NODE_ARCHIVE = "node-v22.23.3-win-x64.zip"
+-NODE_SOURCE = "https://nodejs.org/dist/v22.23.3/node-v22.23.3-win-x64.zip"
+-NODE_ARCHIVE_SHA256 = "2b0ff57b049cda1bbcea2240eec20467018713c1efe1f7360c2681859b90ed71"
++# Kept in sync with frontend/node-runtime.json (the deployment manifest for the
++# bundled MCP node runtime); the test pins this file against these constants.
++NODE_VERSION = "v24.21.0"
++NODE_ARCHIVE = "node-v24.21.0-win-x64.zip"
++NODE_SOURCE = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip"
++NODE_ARCHIVE_SHA256 = "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541"
+ 
+ 
+ @dataclass(frozen=True)
+diff --git a/core/tests/test_mcp_client.py b/core/tests/test_mcp_client.py
+index c0e0cce7..3d3ae8a4 100644
+--- a/core/tests/test_mcp_client.py
++++ b/core/tests/test_mcp_client.py
+@@ -2,6 +2,8 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
++
+ from pathlib import Path
+ from unittest.mock import AsyncMock, MagicMock, patch
+ 
+@@ -41,9 +43,10 @@ def test_node_release_manifest_pins_official_binary_and_sha256():
+     manifest_path = Path(__file__).resolve().parents[2] / "frontend" / "node-runtime.json"
+     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+ 
+-    assert manifest["version"] == NODE_VERSION.removeprefix("v")
+-    assert manifest["archive"] == "node-v22.23.3-win-x64.zip"
+-    assert manifest["source"].startswith("https://nodejs.org/dist/v22.23.3/")
++    version = NODE_VERSION.removeprefix("v")
++    assert manifest["version"] == version
++    assert manifest["archive"] == f"node-v{version}-win-x64.zip"
++    assert manifest["source"].startswith(f"https://nodejs.org/dist/v{version}/")
+     assert manifest["sha256"] == NODE_ARCHIVE_SHA256
+ 
+ 
+@@ -95,7 +98,19 @@ async def test_start_records_runtime_config_discovery_and_restart_state():
+         MCPServerConfig(name="filesystem", command="npx", args=["-y", "example"]),
+     ]), patch.object(client, "_connect_stdio", side_effect=connect_stdio):
+         await client.start()
+-        state = client.get_runtime_status()
++        # Background handshakes settle asynchronously; poll for the connected
++        # state instead of racing the startup task (bounded, fail loud on timeout).
++        async def _wait_connected(deadline: float = 5.0):
++            waited = 0.0
++            while waited < deadline:
++                state = client.get_runtime_status()
++                if state["servers"][0]["connected"]:
++                    return state
++                await asyncio.sleep(0.05)
++                waited += 0.05
++            return client.get_runtime_status()
++
++        state = await _wait_connected()
+         assert state["servers"][0]["configured"] is True
+         assert state["servers"][0]["connected"] is True
+         assert state["servers"][0]["tool_discovery"] == "complete"
+@@ -117,7 +132,21 @@ async def test_failed_configured_server_blocks_mcp_runtime_without_echoing_argum
+     ):
+         await client.start()
+ 
+-    status = client.get_runtime_status()
++        # The start attempt runs as a background task; let it settle while the
++        # patches are still active so the failure is the patched one, then the
++        # fail-closed assertions below hold deterministically.
++        async def _wait_failed(deadline: float = 5.0):
++            waited = 0.0
++            while waited < deadline:
++                status = client.get_runtime_status()
++                if status["servers"][0]["state"] == "failed":
++                    return status
++                await asyncio.sleep(0.05)
++                waited += 0.05
++            return client.get_runtime_status()
++
++        status = await _wait_failed()
++
+     assert status["available"] is False
+     assert status["servers"][0]["state"] == "failed"
+     assert secret_argument not in status["blocking_reason"]

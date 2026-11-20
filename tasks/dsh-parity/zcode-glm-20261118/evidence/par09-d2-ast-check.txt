@@ -1,0 +1,19 @@
+== create_conversation_worktree ==
+  line 2165: return keys=['workspace'] ancestors=direct
+== recover_conversation_worktree ==
+  line 2261: return keys=['status', 'conversation_id', 'worktree_path', 'worktree_branch'] ancestors=AsyncWith
+  line 2204: return keys=['status', 'conversation_id'] ancestors=If <- AsyncWith
+
+== _cleanup_worktree_residue ==
+  body statement types: ['Expr', 'FunctionDef', 'AnnAssign', 'Assign', 'If', 'Try', 'If', 'If', 'If', 'Return']
+  rmtree line 774 ancestors=Expr <- If <- AsyncFunctionDef <- Module
+  rmtree line 787 ancestors=Expr <- Try <- AsyncFunctionDef <- Module
+  rmtree line 761 ancestors=Expr <- ExceptHandler <- Try <- AsyncFunctionDef <- Module
+  rmtree line 1916 ancestors=Expr <- Try <- If <- If <- If <- ExceptHandler <- Try <- If
+references to _cleanup_worktree_residue:
+  line 2216
+  line 2029
+  line 2102
+references to _validate_worktree_target:
+  line 1878
+AST_OK

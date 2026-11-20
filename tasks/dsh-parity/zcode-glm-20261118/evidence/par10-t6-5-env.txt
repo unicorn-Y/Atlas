@@ -1,0 +1,31 @@
+PAR-10-T6-5 build environment
+2026-11-18T22:11:01Z
+
+== tool versions ==
+node v24.18.1
+npm 12.0.2
+python Python 3.14.7
+pyinstaller 6.22.3
+electron(runtime marker) 44.7.0electron-builder 26.15.3
+typescript 7.0.2
+vitest 5.0.4
+vite 8.3.4
+
+== reuse inputs ==
+node_modules junction: /d/Atlas/frontend/node_modules
+electron-runtime copied from: D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\electron-runtime
+node archive: D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\backend-build\node-runtime\node-v24.21.0-win-x64.zip
+158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541 */d/Atlas/.worktrees/zcode-par10-release-startup/frontend/backend-build/node-runtime/node-v24.21.0-win-x64.zip
+
+== build isolation decisions ==
+PYTHONPATH=D:\Atlas\.worktrees\zcode-par10-win-release-repro\core (candidate source takes precedence over main-tree editable .pth)
+ATLAS_BUILD_PYTHON=D:\Atlas\core\.venv\Scripts\python.exe (existing venv, PyInstaller 6.22.3)
+ATLAS_BUILD_SKIP_INSTALL=1 (do not mutate main-tree venv metadata)
+ATLAS_NODE_ARCHIVE=local official zip (sha256 matches frontend/node-runtime.json)
+NPM_CONFIG_USERCONFIG=C:\Users\25011\AppData\Local\Temp\par10-t6-5\npmrc-clean (user npmrc allow-scripts triggers npm12 EALLOWSCRIPTS on project-scoped ci; clean file keeps proxy/registry)
+
+== npmrc-clean ==
+proxy=http://127.0.0.1:7897
+https-proxy=http://127.0.0.1:7897
+registry=https://registry.npmjs.org
+noproxy=registry.npmjs.org,localhost,127.0.0.1

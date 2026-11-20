@@ -1,0 +1,12 @@
+1,9c1
+< ERROR    asyncio:base_events.py:1785 Task exception was never retrieved
+< ERROR    asyncio:base_events.py:1785 Task exception was never retrieved
+< FAILED tests/test_mcp_client.py::test_node_release_manifest_pins_official_binary_and_sha256
+< FAILED tests/test_mcp_client.py::test_start_records_runtime_config_discovery_and_restart_state
+< FAILED tests/test_mcp_client.py::test_failed_configured_server_blocks_mcp_runtime_without_echoing_arguments
+< FAILED tests/test_ssh_execution_world.py::test_ssh_cancel_intent_applies_to_late_process_handle[operation]
+< FAILED tests/test_ssh_execution_world.py::test_ssh_cancel_intent_applies_to_late_process_handle[start_task]
+< FAILED tests/test_ssh_execution_world.py::test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry
+< FAILED tests/test_lsp_ssh_world.py::test_kernel_lsp_tool_and_read_file_diagnostics_forward_ssh_workspace
+---
+> ERROR: file or directory not found: tests/test_lsp_ssh_world.py

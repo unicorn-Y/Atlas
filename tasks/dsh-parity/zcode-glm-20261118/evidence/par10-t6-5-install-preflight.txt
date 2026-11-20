@@ -1,0 +1,92 @@
+PAR-10-T6-5 installer option / side-effect preflight
+2026-11-18T22:57:23Z
+
+== configured NSIS options (current package.json) ==
+node:internal/modules/cjs/loader:1520
+  throw err;
+  ^
+
+Error: Cannot find module '/d/Atlas/.worktrees/zcode-par10-win-release-repro/frontend/package.json'
+Require stack:
+- D:\Atlas\[eval]
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+    at Module._load (node:internal/modules/cjs/loader:1294:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1617:12)
+    at require (node:internal/modules/helpers:153:16)
+    at [eval]:1:9
+    at runScriptInThisContext (node:internal/vm:219:10) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [ 'D:\\Atlas\\[eval]' ]
+}
+
+Node.js v24.18.1
+oneClick=false + perMachine=false + allowToChangeInstallationDirectory=true => assisted per-user installer; /S silent and /D=<dir> (last arg, unquoted) select an isolated directory; no elevation required
+
+== old 0.1.0 builder-debug.yml nsis excerpt ==
+23:nsis:
+24-  script: |-
+25-    !include "D:\Atlas\node_modules\app-builder-lib\templates\nsis\include\StdUtils.nsh"
+26-    !addincludedir "D:\Atlas\node_modules\app-builder-lib\templates\nsis\include"
+27-    !macro _isUpdated _a _b _t _f
+28-      ${StdUtils.TestParameter} $R9 "updated"
+29-      StrCmp "$R9" "true" `${_t}` `${_f}`
+30-    !macroend
+31-    !define isUpdated `"" isUpdated ""`
+32-
+33-    !macro _isForceRun _a _b _t _f
+34-      ${StdUtils.TestParameter} $R9 "force-run"
+35-      StrCmp "$R9" "true" `${_t}` `${_f}`
+36-    !macroend
+37-    !define isForceRun `"" isForceRun ""`
+38-
+39-    !macro _isKeepShortcuts _a _b _t _f
+40-      ${StdUtils.TestParameter} $R9 "keep-shortcuts"
+41-      StrCmp "$R9" "true" `${_t}` `${_f}`
+42-    !macroend
+43-    !define isKeepShortcuts `"" isKeepShortcuts ""`
+
+== existing installation check (must be empty) ==
+LocalAppData Programs Atlas: ABSENT
+Program Files Atlas: ABSENT
+HKCU uninstall entries matching Atlas:
+(empty above = absent)
+
+== shortcut snapshot before ==
+/c/Users/25011/Desktop/Atlas.lnk: -rwxr-xr-x 1 25011 197609 1119 Oct 11 01:19 /c/Users/25011/Desktop/Atlas.lnk
+/c/Users/25011/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Atlas.lnk: -rwxr-xr-x 1 25011 197609 1149 Oct  6 03:15 /c/Users/25011/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Atlas.lnk
+/c/Users/25011/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Atlas: ABSENT
+
+== running Atlas processes before ==
+
+== free space ==
+C:              201G  196G  4.6G  98% /c
+D:              754G  686G   68G  91% /d
+
+== target isolated path (must not exist) ==
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/install-0.1.0-upgrade
+ABSENT
+
+== pre-existing user shortcuts: byte-exact backup ==
+0831ce1b29143083577d766eb624c61b344f8c2b8bbc5b714d6bf22b4901d81b */d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/user-shortcut-backup/Desktop-Atlas.lnk
+d59862ec47c0e62fd3b6993ec927dc4d536b5b17dfa4017baeb340339237383e */d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/user-shortcut-backup/StartMenu-Atlas.lnk
+total 12
+drwxr-xr-x 1 25011 197609    0 2026-11-19 06:58:59.809763300 +0800 .
+drwxr-xr-x 1 25011 197609    0 2026-11-19 06:58:59.721455500 +0800 ..
+-rwxr-xr-x 1 25011 197609 1119 2026-10-11 01:19:52.980730700 +0800 Desktop-Atlas.lnk
+-rwxr-xr-x 1 25011 197609 1149 2026-10-06 03:15:18.421399300 +0800 StartMenu-Atlas.lnk
+
+== corrected NSIS config read (the earlier node -e used a Git-Bash path and failed) ==
+{
+  "oneClick": false,
+  "perMachine": false,
+  "allowToChangeInstallationDirectory": true,
+  "installerIcon": "assets/icon/icon.ico",
+  "uninstallerIcon": "assets/icon/icon.ico",
+  "createDesktopShortcut": true,
+  "createStartMenuShortcut": true,
+  "shortcutName": "Atlas"
+}

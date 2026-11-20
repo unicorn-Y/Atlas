@@ -1,0 +1,12 @@
+{
+  "changed_paths": 433,
+  "added": 4,
+  "modified": 429,
+  "package_manifests": 380,
+  "docs_localization": 29,
+  "snapshots": 5,
+  "code_test": 17,
+  "config": 2,
+  "manifests_only_version": true,
+  "problems": []
+}

@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "D:\Atlas\core\scripts\dsh_capability_audit.py", line 1637, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "D:\Atlas\core\scripts\dsh_capability_audit.py", line 1614, in main
+    index = scan_to_ledger(args.source, args.ledger, typescript_module=args.typescript_module)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\scripts\dsh_capability_audit.py", line 1546, in scan_to_ledger
+    index = build_source_index(source, typescript_module=typescript_module)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\scripts\dsh_capability_audit.py", line 1271, in build_source_index
+    typescript_contracts = _typescript_function_contracts(root, contents, typescript_module)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\scripts\dsh_capability_audit.py", line 589, in _typescript_function_contracts
+    raise RuntimeError(
+RuntimeError: TypeScript AST extraction failed closed (node exit 134; stderr sha256 251ed81bfcda1e78b97ed6f16b2af862233de3c17639014b15587b1a0d1bea09; diagnostic '<--- Last few GCs --->\n\n[44780:0000020A6769D000]    90992 ms: Scavenge (interleaved) 4088.2 (4099.4) -> 4086.4 (4099.4) MB, pooled: 0 MB, 1.84 / 0.00 ms  (average mu = 0.287, current mu = 0.164) allocation failure; \n[44780:0000020A6769D000]    91748 ms: Mark-Compact (reduce) 4088.3 (4099.4) -> 4085.0 (4095.1) MB, pooled: 0 MB, 625.95 / 0.01 ms  (+ 115.4 ms in 20 steps since start of marking, biggest step 17.7 ms, walltime since start of marking 755 ms) (average mu = \nFATAL ERROR: Ineffective ma').

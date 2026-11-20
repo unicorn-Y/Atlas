@@ -77,9 +77,14 @@ def test_modes_are_the_closed_set_the_ledger_names():
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(sys.platform != "win32", reason="Job Objects are Windows-only")
-async def test_docker_manager_falls_back_to_the_job_backend(tmp_path):
-    """With no container for the run, the manager must contain the command, not run bare."""
+async def test_docker_manager_falls_back_to_the_host_boundary(tmp_path):
+    """With no container for the run, the manager must contain the command, not run bare.
+
+    The host boundary is the write-restricted ACL layer when the host can build
+    one, and the Job Object otherwise; which one ran is reported, not guessed.
+    """
     from atlas.sandbox import DockerSandboxManager
+    from atlas.windows_acl_sandbox import acl_available
 
     manager = DockerSandboxManager()
     manager._roots["run-1"] = str(tmp_path)
@@ -88,24 +93,29 @@ async def test_docker_manager_falls_back_to_the_job_backend(tmp_path):
         {"command": "echo host-fallback", "cwd": str(tmp_path),
          "sandbox_permissions": "workspace-write"},
     )
-    assert result["data"]["sandbox_backend"] == "win32job"
+    expected = "win32acl" if acl_available() else "win32job"
+    assert result["data"]["sandbox_backend"] == expected
     assert result["sandbox_enforced"] is True
     assert "host-fallback" in result["content"][0]["text"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(sys.platform != "win32", reason="Job Objects are Windows-only")
-async def test_read_only_is_refused_rather_than_faked(tmp_path):
-    """A Job Object cannot enforce a filesystem ACL, so read-only must fail closed."""
+async def test_read_only_never_writes_the_workspace(tmp_path):
+    """read-only either refuses (Job backend) or enforces a real write boundary."""
     from atlas.sandbox import DockerSandboxManager
 
+    target = tmp_path / "should-not-exist.txt"
     manager = DockerSandboxManager()
     manager._roots["run-2"] = str(tmp_path)
     result = await manager.call_tool(
         "run-2", "local_shell",
-        {"command": "echo should-not-run", "cwd": str(tmp_path),
+        {"command": f'echo should-not-run> "{target}"', "cwd": str(tmp_path),
          "sandbox_permissions": "read-only"},
     )
-    assert result["is_error"] is True
-    assert result["data"]["sandbox_enforced"] is False
-    assert "should-not-run" not in result["content"][0]["text"]
+    assert not target.exists(), "a read-only call must not write the workspace"
+    if result["data"].get("sandbox_backend") == "win32job":
+        assert result["is_error"] is True
+        assert result["data"]["sandbox_enforced"] is False
+    else:
+        assert result["sandbox_enforced"] is True

@@ -1,0 +1,987 @@
+2026-11-18 20:24:40 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-x61hwpag\atlas\config\atlas.toml
+FFFF.FF                                                                  [100%]
+================================== FAILURES ===================================
+_ test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event _
+tests\test_app_server_sdk_lifecycle.py:218: in test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event
+    assert result["text"] == "NEW"
+E   AssertionError: assert 'OLDNEW' == 'NEW'
+E     
+E     - NEW
+E     + OLDNEW
+_ test_real_acp_subprocess_cancel_discards_partial_attempt_and_persists_audit _
+tests\test_app_server_acp.py:132: in test_real_acp_subprocess_cancel_discards_partial_attempt_and_persists_audit
+    assert process.wait(timeout=15) == 0
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\subprocess.py:1264: in wait
+    return self._wait(timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\subprocess.py:1593: in _wait
+    raise TimeoutExpired(self.args, timeout)
+E   subprocess.TimeoutExpired: Command '['C:\\Users\\25011\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe', '-m', 'atlas.cli', 'acp', '--workspace', 'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp\\pytest-resume02-base6\\test_real_acp_subprocess_cance0\\workspace']' timed out after 15 seconds
+_______________ test_acp_does_not_stream_discarded_attempt_text _______________
+tests\test_app_server_acp.py:534: in test_acp_does_not_stream_discarded_attempt_text
+    assert chunks == ["NEW"]
+E   AssertionError: assert ['OLD', 'NEW'] == ['NEW']
+E     
+E     At index 0 diff: 'OLD' != 'NEW'
+E     Left contains one more item: 'NEW'
+E     Use -v to get more diff
+________ test_acp_kernel_attempt_stream_returns_only_committed_attempt ________
+tests\test_app_server_acp.py:615: in test_acp_kernel_attempt_stream_returns_only_committed_attempt
+    assert chunks and "".join(chunks) == "NEW answer"
+E   AssertionError: assert (['OLD', 'NEW ', 'NEW answ', 'er'] and 'OLDNEW NEW answer' == 'NEW answer'
+E     
+E     - NEW answer
+E     + OLDNEW NEW answer)
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 20:25:00 [info     ] model_manager.init             api_base=https://api.monkeyapi.net default=claude-opus-4 source=atlas.toml
+2026-11-18 20:25:01 [info     ] agent.run                      conv=a09e640b-fccf-488c-a4d2-c8e4f6845346 model=openai/fake-model msg_len=5
+2026-11-18 20:25:01 [warning  ] memory.library.embed_unavailable error="No module named 'fastembed'"
+2026-11-18 20:25:07 [info     ] agent.idle_maintenance_ran     result={'skipped': False, 'pruned': 0, 'closed': 0, 'vacuumed': False}
+2026-11-18 20:25:07 [info     ] memory.library.skipped         reason=workspace session=a09e640b-fccf-488c-a4d2-c8e4f6845346
+_ test_acp_kernel_permission_decision_controls_real_tool_side_effect[allow_once-True] _
+tests\test_app_server_acp.py:738: in test_acp_kernel_permission_decision_controls_real_tool_side_effect
+    assert target.exists() is should_write
+E   AssertionError: assert False is True
+E    +  where False = exists()
+E    +    where exists = WindowsPath('D:/ENGINE-V3-UPSTREAM-20261118/tmp/pytest-resume02-base6/test_acp_kernel_permission_dec1/must-not-be-created.txt').exists
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 20:25:09 [info     ] model_manager.init             api_base=https://api.monkeyapi.net default=claude-opus-4 source=atlas.toml
+2026-11-18 20:25:09 [info     ] agent.run                      conv=conv-acp-test model=openai/fake-model msg_len=10
+2026-11-18 20:25:09 [debug    ] agent.tool_call_failed         error='No executor is available for this tool' tool=local_file
+┌───────────────────── Traceback (most recent call last) ─────────────────────┐
+│ D:\Atlas\.worktrees\zcode-exec06-baseline\core\atlas\agent\tool_node.py:189 │
+│ 8 in execute_tools_node                                                     │
+│                                                                             │
+│   1895 │   │   │   │   │   raise PermissionError("Docker 沙箱模式下禁用 Web │
+│        和电脑操作工具。")                                                   │
+│   1896 │   │   │   │   result = await agent._mcp.call_tool(fn_name, fn_args │
+│   1897 │   │   │   else:                                                    │
+│ > 1898 │   │   │   │   raise RuntimeError("No executor is available for thi │
+│   1899 │   │   except Exception as exc:                                     │
+│   1900 │   │   │   log.debug(                                               │
+│   1901 │   │   │   │   "agent.tool_call_failed", tool=fn_name, error=str(ex │
+│                                                                             │
+│ ┌──────────────────────────────── locals ─────────────────────────────────┐ │
+│ │                          agent = <atlas.agent.AgentOrchestrator object  │ │
+│ │                                  at 0x0000019CBAFFC7D0>                 │ │
+│ │                  allowed_paths = []                                     │ │
+│ │                  allowed_tools = None                                   │ │
+│ │                  atlas_options = {                                      │ │
+│ │                                  │   'model': 'fake-model',             │ │
+│ │                                  │   'permission_mode': 'ask_writes',   │ │
+│ │                                  │   'allowed_paths': [],               │ │
+│ │                                  │   'tool_allow': None,                │ │
+│ │                                  │   'available_tools': [               │ │
+│ │                                  │   │   'ReportFindings',              │ │
+│ │                                  │   │   'agent_memory_read',           │ │
+│ │                                  │   │   'agent_memory_write',          │ │
+│ │                                  │   │   'ask_advisor',                 │ │
+│ │                                  │   │   'ask_user',                    │ │
+│ │                                  │   │   'automation_manage',           │ │
+│ │                                  │   │   'canvas_update',               │ │
+│ │                                  │   │   'compact_context',             │ │
+│ │                                  │   │   'connector_google_search',     │ │
+│ │                                  │   │   'create_checkpoint',           │ │
+│ │                                  │   │   ... +37                        │ │
+│ │                                  │   ],                                 │ │
+│ │                                  │   'tool_deny': [],                   │ │
+│ │                                  │   'cancel_event':                    │ │
+│ │                                  <asyncio.locks.Event object at         │ │
+│ │                                  0x0000019CBCF1EAD0 [unset,             │ │
+│ │                                  waiters:1]>,                           │ │
+│ │                                  │   'approval_callback': <function     │ │
+│ │                                  execute_tools_node.<locals>.child_app… │ │
+│ │                                  at 0x0000019CBD888FE0>,                │ │
+│ │                                  │   'user_hook_callback': None,        │ │
+│ │                                  │   'ssh_tool_callback': None,         │ │
+│ │                                  │   ... +13                            │ │
+│ │                                  }                                      │ │
+│ │                available_tools = [                                      │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'type': 'function',            │ │
+│ │                                  │   │   'function': {                  │ │
+│ │                                  │   │   │   'name': 'ReportFindings',  │ │
+│ │                                  │   │   │   'description': 'Report     │ │
+│ │                                  structured code-review findings for    │ │
+│ │                                  the current review. An empty list      │ │
+│ │                                  mea'+15,                               │ │
+│ │                                  │   │   │   'parameters': {            │ │
+│ │                                  │   │   │   │   'type': 'object',      │ │
+│ │                                  │   │   │   │   'properties': {        │ │
+│ │                                  │   │   │   │   │   'findings': {      │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'array',                               │ │
+│ │                                  │   │   │   │   │   │   'items': {     │ │
+│ │                                  │   │   │   │   │   │   │   'type':    │ │
+│ │                                  'object',                              │ │
+│ │                                  │   │   │   │   │   │   │              │ │
+│ │                                  'properties': {                        │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'file': {                              │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'type': 'string'                       │ │
+│ │                                  │   │   │   │   │   │   │   │   },     │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'line': {                              │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'type': 'integer'                      │ │
+│ │                                  │   │   │   │   │   │   │   │   },     │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'range': {                             │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'type': 'array',                       │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'items': {                             │ │
+│ │                                  │   │   │   │   │   │   │   │   │   │  │ │
+│ │                                  'type': 'integer'                      │ │
+│ │                                  │   │   │   │   │   │   │   │   │   }, │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'minItems': 2,                         │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'maxItems': 2                          │ │
+│ │                                  │   │   │   │   │   │   │   │   },     │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'severity': {                          │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'type': 'string',                      │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'enum': [                              │ │
+│ │                                  │   │   │   │   │   │   │   │   │   │  │ │
+│ │                                  'blocker',                             │ │
+│ │                                  │   │   │   │   │   │   │   │   │   │  │ │
+│ │                                  'major',                               │ │
+│ │                                  │   │   │   │   │   │   │   │   │   │  │ │
+│ │                                  'minor'                                │ │
+│ │                                  │   │   │   │   │   │   │   │   │   ]  │ │
+│ │                                  │   │   │   │   │   │   │   │   },     │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'title': {                             │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'type': 'string'                       │ │
+│ │                                  │   │   │   │   │   │   │   │   },     │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'explanation': {                       │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'type': 'string'                       │ │
+│ │                                  │   │   │   │   │   │   │   │   },     │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'evidence': {                          │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'type': 'string'                       │ │
+│ │                                  │   │   │   │   │   │   │   │   },     │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'suggested_fix': {                     │ │
+│ │                                  │   │   │   │   │   │   │   │   │      │ │
+│ │                                  'type': 'string'                       │ │
+│ │                                  │   │   │   │   │   │   │   │   }      │ │
+│ │                                  │   │   │   │   │   │   │   },         │ │
+│ │                                  │   │   │   │   │   │   │              │ │
+│ │                                  'required': [                          │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'file',                                │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'severity',                            │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'title',                               │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'explanation',                         │ │
+│ │                                  │   │   │   │   │   │   │   │          │ │
+│ │                                  'evidence'                             │ │
+│ │                                  │   │   │   │   │   │   │   ],         │ │
+│ │                                  │   │   │   │   │   │   │              │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   │   │   │   }              │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'scope': {         │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'enum': [      │ │
+│ │                                  │   │   │   │   │   │   │              │ │
+│ │                                  'working_tree',                        │ │
+│ │                                  │   │   │   │   │   │   │   'branch',  │ │
+│ │                                  │   │   │   │   │   │   │   'commit'   │ │
+│ │                                  │   │   │   │   │   │   ]              │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'scope_label': {   │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string'                               │ │
+│ │                                  │   │   │   │   │   }                  │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'required': [          │ │
+│ │                                  │   │   │   │   │   'findings'         │ │
+│ │                                  │   │   │   │   ],                     │ │
+│ │                                  │   │   │   │                          │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'type': 'function',            │ │
+│ │                                  │   │   'function': {                  │ │
+│ │                                  │   │   │   'name':                    │ │
+│ │                                  'agent_memory_read',                   │ │
+│ │                                  │   │   │   'description': "Read       │ │
+│ │                                  durable memories. In a project         │ │
+│ │                                  conversation, reads include that       │ │
+│ │                                  project's n"+67,                       │ │
+│ │                                  │   │   │   'parameters': {            │ │
+│ │                                  │   │   │   │   'type': 'object',      │ │
+│ │                                  │   │   │   │   'properties': {        │ │
+│ │                                  │   │   │   │   │   'query': {         │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string'                               │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'limit': {         │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'integer',                             │ │
+│ │                                  │   │   │   │   │   │   'minimum': 1,  │ │
+│ │                                  │   │   │   │   │   │   'maximum': 20  │ │
+│ │                                  │   │   │   │   │   }                  │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'required': [],        │ │
+│ │                                  │   │   │   │                          │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'type': 'function',            │ │
+│ │                                  │   │   'function': {                  │ │
+│ │                                  │   │   │   'name':                    │ │
+│ │                                  'agent_memory_write',                  │ │
+│ │                                  │   │   │   'description': 'Write a    │ │
+│ │                                  durable observation. In a project      │ │
+│ │                                  conversation writes default to that    │ │
+│ │                                  pr'+170,                               │ │
+│ │                                  │   │   │   'parameters': {            │ │
+│ │                                  │   │   │   │   'type': 'object',      │ │
+│ │                                  │   │   │   │   'properties': {        │ │
+│ │                                  │   │   │   │   │   'text': {          │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'minLength':   │ │
+│ │                                  2,                                     │ │
+│ │                                  │   │   │   │   │   │   'maxLength':   │ │
+│ │                                  1000                                   │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'scope': {         │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'enum': [      │ │
+│ │                                  │   │   │   │   │   │   │   'project', │ │
+│ │                                  │   │   │   │   │   │   │   'global'   │ │
+│ │                                  │   │   │   │   │   │   ]              │ │
+│ │                                  │   │   │   │   │   }                  │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'required': ['text'],  │ │
+│ │                                  │   │   │   │                          │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'type': 'function',            │ │
+│ │                                  │   │   'function': {                  │ │
+│ │                                  │   │   │   'name': 'ask_advisor',     │ │
+│ │                                  │   │   │   'description': "Consult    │ │
+│ │                                  the user's configured advisor model    │ │
+│ │                                  for a second opinion on an             │ │
+│ │                                  important"+76,                         │ │
+│ │                                  │   │   │   'parameters': {            │ │
+│ │                                  │   │   │   │   'type': 'object',      │ │
+│ │                                  │   │   │   │   'properties': {        │ │
+│ │                                  │   │   │   │   │   'question': {      │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string'                               │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'context': {       │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string'                               │ │
+│ │                                  │   │   │   │   │   }                  │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'required': [          │ │
+│ │                                  │   │   │   │   │   'question'         │ │
+│ │                                  │   │   │   │   ],                     │ │
+│ │                                  │   │   │   │                          │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'type': 'function',            │ │
+│ │                                  │   │   'function': {                  │ │
+│ │                                  │   │   │   'name': 'ask_user',        │ │
+│ │                                  │   │   │   'description': 'Ask the    │ │
+│ │                                  user a question and wait for their     │ │
+│ │                                  reply.',                               │ │
+│ │                                  │   │   │   'parameters': {            │ │
+│ │                                  │   │   │   │   'type': 'object',      │ │
+│ │                                  │   │   │   │   'properties': {        │ │
+│ │                                  │   │   │   │   │   'question': {      │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string'                               │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'options': {       │ │
+│ │                                  │   │   │   │   │   │   'type': [      │ │
+│ │                                  │   │   │   │   │   │   │   'array',   │ │
+│ │                                  │   │   │   │   │   │   │   'null'     │ │
+│ │                                  │   │   │   │   │   │   ],             │ │
+│ │                                  │   │   │   │   │   │   'items': {     │ │
+│ │                                  │   │   │   │   │   │   │   'type':    │ │
+│ │                                  'string'                               │ │
+│ │                                  │   │   │   │   │   │   }              │ │
+│ │                                  │   │   │   │   │   }                  │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'required': [          │ │
+│ │                                  │   │   │   │   │   'question'         │ │
+│ │                                  │   │   │   │   ],                     │ │
+│ │                                  │   │   │   │                          │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'type': 'function',            │ │
+│ │                                  │   │   'function': {                  │ │
+│ │                                  │   │   │   'name':                    │ │
+│ │                                  'automation_manage',                   │ │
+│ │                                  │   │   │   'description': 'Manage     │ │
+│ │                                  Atlas reminders/automations (E8).      │ │
+│ │                                  Actions: create | wakeup | cancel |    │ │
+│ │                                  upd'+437,                              │ │
+│ │                                  │   │   │   'parameters': {            │ │
+│ │                                  │   │   │   │   'type': 'object',      │ │
+│ │                                  │   │   │   │   'properties': {        │ │
+│ │                                  │   │   │   │   │   'action': {        │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'enum': [      │ │
+│ │                                  │   │   │   │   │   │   │   'create',  │ │
+│ │                                  │   │   │   │   │   │   │   'wakeup',  │ │
+│ │                                  │   │   │   │   │   │   │   'cancel',  │ │
+│ │                                  │   │   │   │   │   │   │   'update',  │ │
+│ │                                  │   │   │   │   │   │   │   'list'     │ │
+│ │                                  │   │   │   │   │   │   ]              │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'message': {       │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'description': │ │
+│ │                                  '提醒正文（create/update）'            │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'due_at': {        │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'description': │ │
+│ │                                  'ISO 8601 绝对时间（优先）'            │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'due_text': {      │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'description': │ │
+│ │                                  '自然语言时间，如 明天上午9点 /        │ │
+│ │                                  今天下午3点'                           │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'query': {         │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'description': │ │
+│ │                                  'cancel/update 时用于匹配提醒的子串'   │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'automation_id': { │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'description': │ │
+│ │                                  '精确 id（可选，优先于 query）'        │ │
+│ │                                  │   │   │   │   │   }                  │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'required': [          │ │
+│ │                                  │   │   │   │   │   'action'           │ │
+│ │                                  │   │   │   │   ],                     │ │
+│ │                                  │   │   │   │                          │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'type': 'function',            │ │
+│ │                                  │   │   'function': {                  │ │
+│ │                                  │   │   │   'name': 'canvas_update',   │ │
+│ │                                  │   │   │   'description': "Push or    │ │
+│ │                                  update a live shared canvas in Atlas's │ │
+│ │                                  task panel. Use mermaid for            │ │
+│ │                                  diagr"+171,                            │ │
+│ │                                  │   │   │   'parameters': {            │ │
+│ │                                  │   │   │   │   'type': 'object',      │ │
+│ │                                  │   │   │   │   'properties': {        │ │
+│ │                                  │   │   │   │   │   'widget_id': {     │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'maxLength':   │ │
+│ │                                  80                                     │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'title': {         │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'minLength':   │ │
+│ │                                  1,                                     │ │
+│ │                                  │   │   │   │   │   │   'maxLength':   │ │
+│ │                                  120                                    │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'format': {        │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'enum': [      │ │
+│ │                                  │   │   │   │   │   │   │   'mermaid', │ │
+│ │                                  │   │   │   │   │   │   │   'html',    │ │
+│ │                                  │   │   │   │   │   │   │   'table'    │ │
+│ │                                  │   │   │   │   │   │   ]              │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'content': {       │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'minLength':   │ │
+│ │                                  1,                                     │ │
+│ │                                  │   │   │   │   │   │   'maxLength':   │ │
+│ │                                  100000                                 │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'mode': {          │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'enum': [      │ │
+│ │                                  │   │   │   │   │   │   │   'replace', │ │
+│ │                                  │   │   │   │   │   │   │   'append'   │ │
+│ │                                  │   │   │   │   │   │   ]              │ │
+│ │                                  │   │   │   │   │   }                  │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'required': [          │ │
+│ │                                  │   │   │   │   │   'title',           │ │
+│ │                                  │   │   │   │   │   'format',          │ │
+│ │                                  │   │   │   │   │   'content'          │ │
+│ │                                  │   │   │   │   ],                     │ │
+│ │                                  │   │   │   │                          │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'type': 'function',            │ │
+│ │                                  │   │   'function': {                  │ │
+│ │                                  │   │   │   'name': 'compact_context', │ │
+│ │                                  │   │   │   'description':             │ │
+│ │                                  'Lightweight in-place compaction:      │ │
+│ │                                  replace older history with a           │ │
+│ │                                  work-state summary'+233,               │ │
+│ │                                  │   │   │   'parameters': {            │ │
+│ │                                  │   │   │   │   'type': 'object',      │ │
+│ │                                  │   │   │   │   'properties': {},      │ │
+│ │                                  │   │   │   │                          │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'type': 'function',            │ │
+│ │                                  │   │   'function': {                  │ │
+│ │                                  │   │   │   'name':                    │ │
+│ │                                  'connector_google_search',             │ │
+│ │                                  │   │   │   'description': "Search the │ │
+│ │                                  user's locally authorized Google Drive │ │
+│ │                                  or Gmail connector. This exter"+71,    │ │
+│ │                                  │   │   │   'parameters': {            │ │
+│ │                                  │   │   │   │   'type': 'object',      │ │
+│ │                                  │   │   │   │   'properties': {        │ │
+│ │                                  │   │   │   │   │   'source': {        │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'enum': [      │ │
+│ │                                  │   │   │   │   │   │   │   'drive',   │ │
+│ │                                  │   │   │   │   │   │   │   'gmail'    │ │
+│ │                                  │   │   │   │   │   │   ]              │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'query': {         │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string',                              │ │
+│ │                                  │   │   │   │   │   │   'maxLength':   │ │
+│ │                                  500                                    │ │
+│ │                                  │   │   │   │   │   }                  │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'required': [          │ │
+│ │                                  │   │   │   │   │   'source',          │ │
+│ │                                  │   │   │   │   │   'query'            │ │
+│ │                                  │   │   │   │   ],                     │ │
+│ │                                  │   │   │   │                          │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'type': 'function',            │ │
+│ │                                  │   │   'function': {                  │ │
+│ │                                  │   │   │   'name':                    │ │
+│ │                                  'create_checkpoint',                   │ │
+│ │                                  │   │   │   'description': 'Create an  │ │
+│ │                                  Atlas shadow Git snapshot for explicit │ │
+│ │                                  workspace paths.',                     │ │
+│ │                                  │   │   │   'parameters': {            │ │
+│ │                                  │   │   │   │   'type': 'object',      │ │
+│ │                                  │   │   │   │   'properties': {        │ │
+│ │                                  │   │   │   │   │   'workspace': {     │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'string'                               │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'paths': {         │ │
+│ │                                  │   │   │   │   │   │   'type':        │ │
+│ │                                  'array',                               │ │
+│ │                                  │   │   │   │   │   │   'items': {     │ │
+│ │                                  │   │   │   │   │   │   │   'type':    │ │
+│ │                                  'string'                               │ │
+│ │                                  │   │   │   │   │   │   }              │ │
+│ │                                  │   │   │   │   │   }                  │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'required': [          │ │
+│ │                                  │   │   │   │   │   'workspace',       │ │
+│ │                                  │   │   │   │   │   'paths'            │ │
+│ │                                  │   │   │   │   ],                     │ │
+│ │                                  │   │   │   │                          │ │
+│ │                                  'additionalProperties': False          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   ... +37                            │ │
+│ │                                  ]                                      │ │
+│ │                call_started_at = '2026-11-18T12:25:09.881+00:00'        │ │
+│ │              call_started_mono = 169901.14                              │ │
+│ │                         choice = 'allow'                                │ │
+│ │                            ctx = AgentRunContext(                       │ │
+│ │                                  │   tool_mode='native',                │ │
+│ │                                  │   cancel_event=<asyncio.locks.Event  │ │
+│ │                                  object at 0x0000019CBCF1EAD0 [unset,   │ │
+│ │                                  waiters:1]>,                           │ │
+│ │                                  │   pause_event=None,                  │ │
+│ │                                  │   approval_callback=<function        │ │
+│ │                                  serve_stdio.<locals>.run_prompt.<loca… │ │
+│ │                                  at 0x0000019CBD744A40>,                │ │
+│ │                                  │   event_queue=<Queue at              │ │
+│ │                                  0x19cbcf83490 maxsize=0 _getters[1]    │ │
+│ │                                  tasks=1>,                              │ │
+│ │                                  │   run_id=None,                       │ │
+│ │                                  │   goal='write file',                 │ │
+│ │                                  │   conversation_id='conv-acp-test',   │ │
+│ │                                  │   stable_system_prefix="You are      │ │
+│ │                                  Atlas, the user's own all-in-one       │ │
+│ │                                  personal agent running on their own    │ │
+│ │                                  com"+2582,                             │ │
+│ │                                  │   memory_scope_id='',                │ │
+│ │                                  │   project_id=None,                   │ │
+│ │                                  │                                      │ │
+│ │                                  reminders=<atlas.agent.enrichment.Sys… │ │
+│ │                                  object at 0x0000019CBD768C10>,         │ │
+│ │                                  │   maintenance_snapshot=None,         │ │
+│ │                                  │   maintenance_context={              │ │
+│ │                                  │   │   'project_state': None,         │ │
+│ │                                  │   │   'unresolved_work': None,       │ │
+│ │                                  │   │   'user_constraints': [          │ │
+│ │                                  │   │   │   'Preserve FULL_ACCESS      │ │
+│ │                                  policy',                               │ │
+│ │                                  │   │   │   'Verify the task before    │ │
+│ │                                  reporting completion'                  │ │
+│ │                                  │   │   ],                             │ │
+│ │                                  │   │   'memory_refs': [],             │ │
+│ │                                  │   │   'active_tool_refs': [          │ │
+│ │                                  │   │   │   {                          │ │
+│ │                                  │   │   │   │   'name': 'local_file',  │ │
+│ │                                  │   │   │   │   'tool_call_id':        │ │
+│ │                                  'call_fake_1'                          │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   ],                             │ │
+│ │                                  │   │   'active_process_refs': []      │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   steer_queue=None,                  │ │
+│ │                                  │                                      │ │
+│ │                                  inbox=<atlas.engine.kernel.inbox.Dura… │ │
+│ │                                  object at 0x0000019CBD496510>,         │ │
+│ │                                  │   input_callback=<function           │ │
+│ │                                  serve_stdio.<locals>.run_prompt.<loca… │ │
+│ │                                  at 0x0000019CBD6FA480>,                │ │
+│ │                                  │                                      │ │
+│ │                                  workspace='D:\\ENGINE-V3-UPSTREAM-202… │ │
+│ │                                  │   workspace_trusted=True,            │ │
+│ │                                  │   agent_role='general',              │ │
+│ │                                  │   agent_depth=0,                     │ │
+│ │                                  │   agent_type='general',              │ │
+│ │                                  │   agent_preset_id='default',         │ │
+│ │                                  │   agent_preset_capabilities={        │ │
+│ │                                  │   │   'tools': {                     │ │
+│ │                                  │   │   │   'allow_all': True,         │ │
+│ │                                  │   │   │   'allow': [],               │ │
+│ │                                  │   │   │   'deny': []                 │ │
+│ │                                  │   │   },                             │ │
+│ │                                  │   │   'skills': [],                  │ │
+│ │                                  │   │   'mcp_servers': [],             │ │
+│ │                                  │   │   'plugins': [],                 │ │
+│ │                                  │   │   'plugin_allow_all': False,     │ │
+│ │                                  │   │   'mode': 'act',                 │ │
+│ │                                  │   │   'model': 'fake-model'          │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   permission_preset='ask',           │ │
+│ │                                  │                                      │ │
+│ │                                  todo_store=<atlas.agent.todo_state.To… │ │
+│ │                                  object at 0x0000019CBD4955D0>,         │ │
+│ │                                  │   moa_enabled=False,                 │ │
+│ │                                  │   mode='act',                        │ │
+│ │                                  │   mode_explicit=False,               │ │
+│ │                                  │   tool_allow=None,                   │ │
+│ │                                  │   tool_deny=[],                      │ │
+│ │                                  │   mcp_server_allow=[],               │ │
+│ │                                  │   read_only=False,                   │ │
+│ │                                  │   permission_mode='ask_writes',      │ │
+│ │                                  │   allowed_paths=[],                  │ │
+│ │                                  │   session_env={},                    │ │
+│ │                                  │   atlas_preapproved_writes=set(),    │ │
+│ │                                  │   process_notifications=<Queue at    │ │
+│ │                                  0x19cbd495a90 maxsize=0>,              │ │
+│ │                                  │                                      │ │
+│ │                                  parent_process_event_callback=None,    │ │
+│ │                                  │   user_hook_callback=None,           │ │
+│ │                                  │   ssh_tool_callback=None,            │ │
+│ │                                  │   ssh_checkpoint_callback=None,      │ │
+│ │                                  │   sandbox_tool_callback=None,        │ │
+│ │                                  │   sandbox_enabled=False,             │ │
+│ │                                  │   reasoning_effort=None,             │ │
+│ │                                  │   model='fake-model',                │ │
+│ │                                  │   truncated_tool_retries=0,          │ │
+│ │                                  │   fallback_models=[],                │ │
+│ │                                  │   sticky_fallback_model=None,        │ │
+│ │                                  │   failed_models=set(),               │ │
+│ │                                  │   recovery_retries=0,                │ │
+│ │                                  │                                      │ │
+│ │                                  context_compression_attempted=False,   │ │
+│ │                                  │   file_edit_counts={},               │ │
+│ │                                  │                                      │ │
+│ │                                  new_context_window_callback=<function  │ │
+│ │                                  AtlasKernel.run.<locals>.new_context_… │ │
+│ │                                  at 0x0000019CBD8891C0>,                │ │
+│ │                                  │   changed_paths=set(),               │ │
+│ │                                  │   verification_passed=False,         │ │
+│ │                                  │   verify_nudge_sent=False,           │ │
+│ │                                  │   subtask_started=None,              │ │
+│ │                                  │   subtask_progress=None,             │ │
+│ │                                  │   subtask_completed=None,            │ │
+│ │                                  │   subtask_group_completed=None,      │ │
+│ │                                  │   maintenance_callback=<function     │ │
+│ │                                  _idle_maintenance_callback.<locals>._… │ │
+│ │                                  at 0x0000019CBD85C720>                 │ │
+│ │                                  )                                      │ │
+│ │                         denied = False                                  │ │
+│ │                   denied_tools = []                                     │ │
+│ │                   edit_targets = []                                     │ │
+│ │                edit_tool_names = {'apply_patch', 'write', 'edit'}       │ │
+│ │                         events = []                                     │ │
+│ │                            exc = RuntimeError('No executor is available │ │
+│ │                                  for this tool')                        │ │
+│ │                    fingerprint = 'fb7b30ac9beca874d81e5c4c02560eddcc7a… │ │
+│ │                        fn_args = {                                      │ │
+│ │                                  │   'action': 'write',                 │ │
+│ │                                  │   'path':                            │ │
+│ │                                  'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ │                                  │   'content': 'ACP_REJECTED_WRITE',   │ │
+│ │                                  │   'cwd':                             │ │
+│ │                                  'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ │                                  }                                      │ │
+│ │                        fn_name = 'local_file'                           │ │
+│ │                   hook_context = ''                                     │ │
+│ │                hook_permission = {}                                     │ │
+│ │                   is_mcp_write = False                                  │ │
+│ │                       is_write = True                                   │ │
+│ │                           last = AIMessage(                             │ │
+│ │                                  │   content='',                        │ │
+│ │                                  │   additional_kwargs={},              │ │
+│ │                                  │   response_metadata={},              │ │
+│ │                                  │   tool_calls=[                       │ │
+│ │                                  │   │   {                              │ │
+│ │                                  │   │   │   'name': 'local_file',      │ │
+│ │                                  │   │   │   'args': {                  │ │
+│ │                                  │   │   │   │   'action': 'write',     │ │
+│ │                                  │   │   │   │   'path':                │ │
+│ │                                  'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ │                                  │   │   │   │   'content':             │ │
+│ │                                  'ACP_REJECTED_WRITE',                  │ │
+│ │                                  │   │   │   │   'cwd':                 │ │
+│ │                                  'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ │                                  │   │   │   },                         │ │
+│ │                                  │   │   │   'id': 'call_fake_1',       │ │
+│ │                                  │   │   │   'type': 'tool_call'        │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   ],                                 │ │
+│ │                                  │   invalid_tool_calls=[]              │ │
+│ │                                  )                                      │ │
+│ │          local_edit_tool_names = {'local_edit_batch', 'local_edit'}     │ │
+│ │                       mcp_info = None                                   │ │
+│ │                       messages = [                                      │ │
+│ │                                  │   AIMessage(                         │ │
+│ │                                  │   │   content='',                    │ │
+│ │                                  │   │   additional_kwargs={},          │ │
+│ │                                  │   │   response_metadata={},          │ │
+│ │                                  │   │   tool_calls=[                   │ │
+│ │                                  │   │   │   {                          │ │
+│ │                                  │   │   │   │   'name': 'local_file',  │ │
+│ │                                  │   │   │   │   'args': {              │ │
+│ │                                  │   │   │   │   │   'action': 'write', │ │
+│ │                                  │   │   │   │   │   'path':            │ │
+│ │                                  'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ │                                  │   │   │   │   │   'content':         │ │
+│ │                                  'ACP_REJECTED_WRITE',                  │ │
+│ │                                  │   │   │   │   │   'cwd':             │ │
+│ │                                  'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'id': 'call_fake_1',   │ │
+│ │                                  │   │   │   │   'type': 'tool_call'    │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   ],                             │ │
+│ │                                  │   │   invalid_tool_calls=[]          │ │
+│ │                                  │   )                                  │ │
+│ │                                  ]                                      │ │
+│ │                permission_mode = 'ask_writes'                           │ │
+│ │               policy_tool_name = 'local_file'                           │ │
+│ │                      read_only = False                                  │ │
+│ │                      reference = {                                      │ │
+│ │                                  │   'name': 'local_file',              │ │
+│ │                                  │   'tool_call_id': 'call_fake_1'      │ │
+│ │                                  }                                      │ │
+│ │                           refs = [                                      │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'name': 'local_file',          │ │
+│ │                                  │   │   'tool_call_id': 'call_fake_1'  │ │
+│ │                                  │   }                                  │ │
+│ │                                  ]                                      │ │
+│ │ review_tool_explicitly_allowed = False                                  │ │
+│ │                screenshot_urls = []                                     │ │
+│ │        ssh_checkpoint_callback = None                                   │ │
+│ │              ssh_tool_callback = None                                   │ │
+│ │                          state = {                                      │ │
+│ │                                  │   'messages': [                      │ │
+│ │                                  │   │   AIMessage(                     │ │
+│ │                                  │   │   │   content='',                │ │
+│ │                                  │   │   │   additional_kwargs={},      │ │
+│ │                                  │   │   │   response_metadata={},      │ │
+│ │                                  │   │   │   tool_calls=[               │ │
+│ │                                  │   │   │   │   {                      │ │
+│ │                                  │   │   │   │   │   'name':            │ │
+│ │                                  'local_file',                          │ │
+│ │                                  │   │   │   │   │   'args': {          │ │
+│ │                                  │   │   │   │   │   │   'action':      │ │
+│ │                                  'write',                               │ │
+│ │                                  │   │   │   │   │   │   'path':        │ │
+│ │                                  'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ │                                  │   │   │   │   │   │   'content':     │ │
+│ │                                  'ACP_REJECTED_WRITE',                  │ │
+│ │                                  │   │   │   │   │   │   'cwd':         │ │
+│ │                                  'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'id':              │ │
+│ │                                  'call_fake_1',                         │ │
+│ │                                  │   │   │   │   │   'type':            │ │
+│ │                                  'tool_call'                            │ │
+│ │                                  │   │   │   │   }                      │ │
+│ │                                  │   │   │   ],                         │ │
+│ │                                  │   │   │   invalid_tool_calls=[]      │ │
+│ │                                  │   │   )                              │ │
+│ │                                  │   ],                                 │ │
+│ │                                  │   'pending_events': [],              │ │
+│ │                                  │   'runtime': AgentRunContext(        │ │
+│ │                                  │   │   tool_mode='native',            │ │
+│ │                                  │   │                                  │ │
+│ │                                  cancel_event=<asyncio.locks.Event      │ │
+│ │                                  object at 0x0000019CBCF1EAD0 [unset,   │ │
+│ │                                  waiters:1]>,                           │ │
+│ │                                  │   │   pause_event=None,              │ │
+│ │                                  │   │   approval_callback=<function    │ │
+│ │                                  serve_stdio.<locals>.run_prompt.<loca… │ │
+│ │                                  at 0x0000019CBD744A40>,                │ │
+│ │                                  │   │   event_queue=<Queue at          │ │
+│ │                                  0x19cbcf83490 maxsize=0 _getters[1]    │ │
+│ │                                  tasks=1>,                              │ │
+│ │                                  │   │   run_id=None,                   │ │
+│ │                                  │   │   goal='write file',             │ │
+│ │                                  │   │                                  │ │
+│ │                                  conversation_id='conv-acp-test',       │ │
+│ │                                  │   │   stable_system_prefix="You are  │ │
+│ │                                  Atlas, the user's own all-in-one       │ │
+│ │                                  personal agent running on their own    │ │
+│ │                                  com"+2582,                             │ │
+│ │                                  │   │   memory_scope_id='',            │ │
+│ │                                  │   │   project_id=None,               │ │
+│ │                                  │   │                                  │ │
+│ │                                  reminders=<atlas.agent.enrichment.Sys… │ │
+│ │                                  object at 0x0000019CBD768C10>,         │ │
+│ │                                  │   │   maintenance_snapshot=None,     │ │
+│ │                                  │   │   maintenance_context={          │ │
+│ │                                  │   │   │   'project_state': None,     │ │
+│ │                                  │   │   │   'unresolved_work': None,   │ │
+│ │                                  │   │   │   'user_constraints': [      │ │
+│ │                                  │   │   │   │   'Preserve FULL_ACCESS  │ │
+│ │                                  policy',                               │ │
+│ │                                  │   │   │   │   'Verify the task       │ │
+│ │                                  before reporting completion'           │ │
+│ │                                  │   │   │   ],                         │ │
+│ │                                  │   │   │   'memory_refs': [],         │ │
+│ │                                  │   │   │   'active_tool_refs': [      │ │
+│ │                                  │   │   │   │   {                      │ │
+│ │                                  │   │   │   │   │   'name':            │ │
+│ │                                  'local_file',                          │ │
+│ │                                  │   │   │   │   │   'tool_call_id':    │ │
+│ │                                  'call_fake_1'                          │ │
+│ │                                  │   │   │   │   }                      │ │
+│ │                                  │   │   │   ],                         │ │
+│ │                                  │   │   │   'active_process_refs': []  │ │
+│ │                                  │   │   },                             │ │
+│ │                                  │   │   steer_queue=None,              │ │
+│ │                                  │   │                                  │ │
+│ │                                  inbox=<atlas.engine.kernel.inbox.Dura… │ │
+│ │                                  object at 0x0000019CBD496510>,         │ │
+│ │                                  │   │   input_callback=<function       │ │
+│ │                                  serve_stdio.<locals>.run_prompt.<loca… │ │
+│ │                                  at 0x0000019CBD6FA480>,                │ │
+│ │                                  │   │                                  │ │
+│ │                                  workspace='D:\\ENGINE-V3-UPSTREAM-202… │ │
+│ │                                  │   │   workspace_trusted=True,        │ │
+│ │                                  │   │   agent_role='general',          │ │
+│ │                                  │   │   agent_depth=0,                 │ │
+│ │                                  │   │   agent_type='general',          │ │
+│ │                                  │   │   agent_preset_id='default',     │ │
+│ │                                  │   │   agent_preset_capabilities={    │ │
+│ │                                  │   │   │   'tools': {                 │ │
+│ │                                  │   │   │   │   'allow_all': True,     │ │
+│ │                                  │   │   │   │   'allow': [],           │ │
+│ │                                  │   │   │   │   'deny': []             │ │
+│ │                                  │   │   │   },                         │ │
+│ │                                  │   │   │   'skills': [],              │ │
+│ │                                  │   │   │   'mcp_servers': [],         │ │
+│ │                                  │   │   │   'plugins': [],             │ │
+│ │                                  │   │   │   'plugin_allow_all': False, │ │
+│ │                                  │   │   │   'mode': 'act',             │ │
+│ │                                  │   │   │   'model': 'fake-model'      │ │
+│ │                                  │   │   },                             │ │
+│ │                                  │   │   permission_preset='ask',       │ │
+│ │                                  │   │                                  │ │
+│ │                                  todo_store=<atlas.agent.todo_state.To… │ │
+│ │                                  object at 0x0000019CBD4955D0>,         │ │
+│ │                                  │   │   moa_enabled=False,             │ │
+│ │                                  │   │   mode='act',                    │ │
+│ │                                  │   │   mode_explicit=False,           │ │
+│ │                                  │   │   tool_allow=None,               │ │
+│ │                                  │   │   tool_deny=[],                  │ │
+│ │                                  │   │   mcp_server_allow=[],           │ │
+│ │                                  │   │   read_only=False,               │ │
+│ │                                  │   │   permission_mode='ask_writes',  │ │
+│ │                                  │   │   allowed_paths=[],              │ │
+│ │                                  │   │   session_env={},                │ │
+│ │                                  │   │                                  │ │
+│ │                                  atlas_preapproved_writes=set(),        │ │
+│ │                                  │   │   process_notifications=<Queue   │ │
+│ │                                  at 0x19cbd495a90 maxsize=0>,           │ │
+│ │                                  │   │                                  │ │
+│ │                                  parent_process_event_callback=None,    │ │
+│ │                                  │   │   user_hook_callback=None,       │ │
+│ │                                  │   │   ssh_tool_callback=None,        │ │
+│ │                                  │   │   ssh_checkpoint_callback=None,  │ │
+│ │                                  │   │   sandbox_tool_callback=None,    │ │
+│ │                                  │   │   sandbox_enabled=False,         │ │
+│ │                                  │   │   reasoning_effort=None,         │ │
+│ │                                  │   │   model='fake-model',            │ │
+│ │                                  │   │   truncated_tool_retries=0,      │ │
+│ │                                  │   │   fallback_models=[],            │ │
+│ │                                  │   │   sticky_fallback_model=None,    │ │
+│ │                                  │   │   failed_models=set(),           │ │
+│ │                                  │   │   recovery_retries=0,            │ │
+│ │                                  │   │                                  │ │
+│ │                                  context_compression_attempted=False,   │ │
+│ │                                  │   │   file_edit_counts={},           │ │
+│ │                                  │   │                                  │ │
+│ │                                  new_context_window_callback=<function  │ │
+│ │                                  AtlasKernel.run.<locals>.new_context_… │ │
+│ │                                  at 0x0000019CBD8891C0>,                │ │
+│ │                                  │   │   changed_paths=set(),           │ │
+│ │                                  │   │   verification_passed=False,     │ │
+│ │                                  │   │   verify_nudge_sent=False,       │ │
+│ │                                  │   │   subtask_started=None,          │ │
+│ │                                  │   │   subtask_progress=None,         │ │
+│ │                                  │   │   subtask_completed=None,        │ │
+│ │                                  │   │   subtask_group_completed=None,  │ │
+│ │                                  │   │   maintenance_callback=<function │ │
+│ │                                  _idle_maintenance_callback.<locals>._… │ │
+│ │                                  at 0x0000019CBD85C720>                 │ │
+│ │                                  │   )                                  │ │
+│ │                                  }                                      │ │
+│ │                             tc = {                                      │ │
+│ │                                  │   'name': 'local_file',              │ │
+│ │                                  │   'args': {                          │ │
+│ │                                  │   │   'action': 'write',             │ │
+│ │                                  │   │   'path':                        │ │
+│ │                                  'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ │                                  │   │   'content':                     │ │
+│ │                                  'ACP_REJECTED_WRITE',                  │ │
+│ │                                  │   │   'cwd':                         │ │
+│ │                                  'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   'id': 'call_fake_1',               │ │
+│ │                                  │   'type': 'tool_call'                │ │
+│ │                                  }                                      │ │
+│ │                          tc_id = 'call_fake_1'                          │ │
+│ │                  tool_messages = []                                     │ │
+│ │             user_hook_callback = None                                   │ │
+│ │                      workspace = 'D:\\ENGINE-V3-UPSTREAM-20261118\\tmp… │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+RuntimeError: No executor is available for this tool
+
+2026-11-18 20:25:10 [info     ] agent.idle_maintenance_ran     result={'skipped': True, 'pruned': 0, 'closed': 0, 'vacuumed': False}
+2026-11-18 20:25:10 [info     ] memory.library.skipped         reason=workspace session=conv-acp-test
+__ test_child_directory_instruction_update_reaches_next_kernel_model_request __
+tests\test_projects.py:253: in test_child_directory_instruction_update_reaches_next_kernel_model_request
+    assert "ROOT_RULE_FOR_MODEL" in first_prompt
+E   assert 'ROOT_RULE_FOR_MODEL' in '[{"role": "system", "content": "# Atlas self-knowledge\\n- Model id selected in Atlas: main-model\\n- Provider: atlas...ols refer back here."}, {"role": "user", "content": "Read src/readme.txt and continue with its folder instructions."}]'
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 20:25:11 [info     ] memory.init                    db=D:\ENGINE-V3-UPSTREAM-20261118\tmp\pytest-resume02-base6\test_child_directory_instructi0\kernel-project-instructions.sqlite3
+============================== warnings summary ===============================
+tests/test_app_server_sdk_lifecycle.py::test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event
+  D:\Atlas\.worktrees\zcode-exec06-baseline\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_app_server_sdk_lifecycle.py::test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event
+  D:\Atlas\.worktrees\zcode-exec06-baseline\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_app_server_sdk_lifecycle.py::test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event
+  D:\Atlas\.worktrees\zcode-exec06-baseline\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_app_server_sdk_lifecycle.py::test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event
+  D:\Atlas\.worktrees\zcode-exec06-baseline\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_app_server_sdk_lifecycle.py::test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event
+  D:\Atlas\.worktrees\zcode-exec06-baseline\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_app_server_sdk_lifecycle.py::test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event
+FAILED tests/test_app_server_acp.py::test_real_acp_subprocess_cancel_discards_partial_attempt_and_persists_audit
+FAILED tests/test_app_server_acp.py::test_acp_does_not_stream_discarded_attempt_text
+FAILED tests/test_app_server_acp.py::test_acp_kernel_attempt_stream_returns_only_committed_attempt
+FAILED tests/test_app_server_acp.py::test_acp_kernel_permission_decision_controls_real_tool_side_effect[allow_once-True]
+FAILED tests/test_projects.py::test_child_directory_instruction_update_reaches_next_kernel_model_request
+6 failed, 1 passed, 5 warnings in 34.46s

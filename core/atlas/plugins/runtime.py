@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
+from contextlib import contextmanager
+import functools
+import hashlib
 import inspect
 import json
 import os
@@ -12,7 +17,10 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -21,12 +29,35 @@ import structlog
 
 from atlas.agent.enrichment import HOOK_POINTS
 from atlas.plugins import patch_layer
+from atlas.plugins.compatibility import ATLAS_VERSION, evaluate_plugin_compatibility
 
 log = structlog.get_logger(__name__)
 
 MANIFEST_NAMES = (".claude-plugin/plugin.json", "plugin.json")
 MARKETPLACE_NAMES = (".claude-plugin/marketplace.json", "marketplace.json")
 _GIT_RETRY_DELAYS = (0.25, 0.6)
+_PLUGIN_MUTATION_OWNER: contextvars.ContextVar[object | None] = contextvars.ContextVar(
+    "atlas_plugin_mutation_owner", default=None,
+)
+
+
+def _serializes_plugin_mutation(resolve_name: Any):
+    def decorate(method: Any) -> Any:
+        if asyncio.iscoroutinefunction(method):
+            @functools.wraps(method)
+            async def async_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+                name = resolve_name(self, *args, **kwargs)
+                with self._plugin_mutation(name):
+                    return await method(self, *args, **kwargs)
+            return async_wrapper
+
+        @functools.wraps(method)
+        def sync_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+            name = resolve_name(self, *args, **kwargs)
+            with self._plugin_mutation(name):
+                return method(self, *args, **kwargs)
+        return sync_wrapper
+    return decorate
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -233,6 +264,17 @@ class PluginRuntime:
         #: re-attach the same hook bus / capability registry without the caller
         #: having to pass them again.
         self._wiring: dict[str, Any] = {}
+        self._install_operations: dict[str, dict[str, Any]] = {}
+        self._install_tasks: dict[str, asyncio.Task[None]] = {}
+        self._install_processes: dict[str, asyncio.subprocess.Process] = {}
+        self._install_cancel_events: dict[str, asyncio.Event] = {}
+        self._install_done_events: dict[str, asyncio.Event] = {}
+        self._install_approval_events: dict[str, asyncio.Event] = {}
+        self._install_transaction_lock = asyncio.Lock()
+        self._install_request_args: dict[str, tuple[Any, ...]] = {}
+        self._runtime_epoch = uuid.uuid4().hex
+        self._install_target_guard = threading.Lock()
+        self._install_target_busy: dict[str, tuple[object, int]] = {}
         self._load_state()
 
     def _load_state(self) -> None:
@@ -244,6 +286,12 @@ class PluginRuntime:
             self._state["marketplaces"] = {}
         if not isinstance(self._state.get("sources"), dict):
             self._state["sources"] = {}
+        if not isinstance(self._state.get("compatibility_exemptions"), dict):
+            self._state["compatibility_exemptions"] = {}
+        if not isinstance(self._state.get("script_approvals"), dict):
+            self._state["script_approvals"] = {}
+        if not isinstance(self._state.get("install_requests"), dict):
+            self._state["install_requests"] = {}
 
     def _save_state(self) -> None:
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -251,6 +299,844 @@ class PluginRuntime:
         self._state_path.write_text(
             json.dumps(self._state, ensure_ascii=False, indent=2), encoding="utf-8",
         )
+
+    def _compatibility_issue(self, manifest: dict[str, Any]) -> dict[str, Any] | None:
+        raw = self._state.get("compatibility_exemptions")
+        exemptions = raw if isinstance(raw, dict) else {}
+        try:
+            return evaluate_plugin_compatibility(manifest, ATLAS_VERSION, exemptions)
+        except ValueError:
+            return {
+                "name": str(manifest.get("name") or ""),
+                "version": str(manifest.get("version") or ""),
+                "runtime_version": ATLAS_VERSION,
+                "peers": {"peerDependencies": "invalid"},
+                "exempted": False,
+            }
+
+    def _require_compatible_manifest(self, manifest: dict[str, Any]) -> None:
+        issue = self._compatibility_issue(manifest)
+        if issue and not issue.get("exempted"):
+            raise ValueError(f"Atlas peer compatibility check failed: {issue['peers']}")
+
+    @staticmethod
+    def _approval_timestamp(value: str) -> datetime:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("expires_at must be an ISO-8601 timestamp") from exc
+        if parsed.tzinfo is None:
+            raise ValueError("expires_at must include a timezone")
+        return parsed.astimezone(timezone.utc)
+
+    def grant_script_approval(self, package_name: str, *, expires_at: str, request_id: str) -> dict[str, str]:
+        if not re.fullmatch(r"(?:@[a-z0-9._-]+/)?[a-z0-9._-]+", package_name):
+            raise ValueError("package_name is invalid")
+        pending = self._install_operations.get(request_id)
+        if (
+            pending is None or pending.get("status") != "awaiting_approval"
+            or package_name not in pending.get("approvalRequired", [])
+        ):
+            raise ValueError("script approval is stale or not requested by this install")
+        expiry = self._approval_timestamp(expires_at)
+        record = {"expires_at": expiry.isoformat().replace("+00:00", "Z")}
+        self._state.setdefault("script_approvals", {})[package_name] = record
+        self._save_state()
+        for request_id, operation in self._install_operations.items():
+            if operation.get("status") == "awaiting_approval" and package_name in operation.get("approvalRequired", []):
+                self._install_operations[request_id]["approvalRequired"] = [
+                    item for item in operation["approvalRequired"] if item != package_name
+                ]
+                self._install_operations[request_id]["status"] = (
+                    "running" if not self._install_operations[request_id]["approvalRequired"] else "awaiting_approval"
+                )
+                self._install_operations[request_id]["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                event = self._install_approval_events.get(request_id)
+                if event is not None:
+                    event.set()
+        return {"packageName": package_name, "expiresAt": record["expires_at"]}
+
+    def script_approval_status(self, package_name: str, *, now: str | None = None) -> str:
+        record = self._state.get("script_approvals", {}).get(package_name)
+        if not isinstance(record, dict) or not isinstance(record.get("expires_at"), str):
+            return "not_approved"
+        try:
+            expiry = self._approval_timestamp(record["expires_at"])
+            current = self._approval_timestamp(now) if now else datetime.now(timezone.utc)
+        except ValueError:
+            return "not_approved"
+        return "approved" if expiry > current else "expired"
+
+    async def start_install_operation(
+        self, source: str, *, ref: str | None = None, registry: str | None = None, request_id: str | None = None,
+        on_complete: Any = None, source_type: str | None = None, marketplace: str | None = None,
+        plugin_name: str | None = None,
+    ) -> dict[str, Any]:
+        request_id = request_id or uuid.uuid4().hex
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", request_id):
+            raise ValueError("requestId is invalid")
+        source_type = source_type or self._infer_install_source_type(source)
+        args = (source, ref, registry, source_type, marketplace, plugin_name)
+        previous = self._install_request_args.get(request_id)
+        if previous is not None:
+            if previous != args:
+                raise ValueError("requestId already belongs to a different install request")
+            return self._install_snapshot(request_id)
+        request_records = self._state.setdefault("install_requests", {})
+        previous_record = request_records.get(request_id)
+        request_digest = hashlib.sha256(json.dumps(args, ensure_ascii=True).encode("utf-8")).hexdigest()
+        if isinstance(previous_record, dict):
+            if previous_record.get("digest") != request_digest:
+                raise ValueError("requestId already belongs to a different install request")
+            raise ValueError("requestId belongs to an earlier runtime; install status is unknown")
+        request_records[request_id] = {"digest": request_digest, "epoch": self._runtime_epoch}
+        while len(request_records) > 256:
+            request_records.pop(next(iter(request_records)))
+        self._save_state()
+        loop = asyncio.get_running_loop()
+        self._install_operations[request_id] = {
+            "requestId": request_id, "source": source, "status": "queued",
+            "createdAt": datetime.now(timezone.utc).isoformat(), "updatedAt": datetime.now(timezone.utc).isoformat(),
+            "approvalRequired": [],
+        }
+        self._install_cancel_events[request_id] = asyncio.Event()
+        self._install_done_events[request_id] = asyncio.Event()
+        self._install_approval_events[request_id] = asyncio.Event()
+        self._install_request_args[request_id] = args
+        task = loop.create_task(self._run_install_operation(
+            request_id, source, ref, registry, on_complete, source_type, marketplace, plugin_name,
+        ))
+        self._install_tasks[request_id] = task
+        return self._install_snapshot(request_id)
+
+    def _install_snapshot(self, request_id: str) -> dict[str, Any]:
+        operation = self._install_operations.get(request_id)
+        if operation is None:
+            return {"requestId": request_id, "status": "unknown"}
+        return {key: value for key, value in operation.items() if key != "source"}
+
+    def _claim_install_target(self, name: str, *, owner: object | None = None) -> object:
+        owner = owner or object()
+        with self._install_target_guard:
+            current = self._install_target_busy.get(name)
+            if current is not None and current[0] is not owner:
+                raise ValueError(f"plugin mutation already in progress: {name}")
+            self._install_target_busy[name] = (owner, current[1] + 1 if current else 1)
+        return owner
+
+    def _release_install_target(self, name: str, *, owner: object | None = None) -> None:
+        with self._install_target_guard:
+            current = self._install_target_busy.get(name)
+            if current is None or (owner is not None and current[0] is not owner):
+                return
+            if current[1] > 1:
+                self._install_target_busy[name] = (current[0], current[1] - 1)
+            else:
+                self._install_target_busy.pop(name, None)
+
+    @contextmanager
+    def _plugin_mutation(self, name: str):
+        owner = _PLUGIN_MUTATION_OWNER.get()
+        context_token = None
+        if owner is None:
+            owner = object()
+            context_token = _PLUGIN_MUTATION_OWNER.set(owner)
+        claimed = False
+        try:
+            self._claim_install_target(name, owner=owner)
+            claimed = True
+            yield
+        finally:
+            if claimed:
+                self._release_install_target(name, owner=owner)
+            if context_token is not None:
+                _PLUGIN_MUTATION_OWNER.reset(context_token)
+
+    def _ensure_install_target_idle(self, name: str) -> None:
+        with self._install_target_guard:
+            if name in self._install_target_busy:
+                raise ValueError(f"plugin mutation already in progress: {name}")
+
+    async def wait_install_operation(self, request_id: str, *, wait_seconds: float = 0) -> dict[str, Any]:
+        if request_id not in self._install_operations:
+            previous = self._state.get("install_requests", {}).get(request_id)
+            response = {"requestId": request_id, "status": "unknown"}
+            if isinstance(previous, dict):
+                response["previousRuntime"] = True
+            return response
+        if wait_seconds > 0:
+            try:
+                await asyncio.wait_for(self._install_done_events[request_id].wait(), timeout=min(wait_seconds, 30))
+            except asyncio.TimeoutError:
+                pass
+        return self._install_snapshot(request_id)
+
+    async def cancel_install_operation(self, request_id: str) -> dict[str, Any]:
+        operation = self._install_operations.get(request_id)
+        if operation is None:
+            return {"requestId": request_id, "status": "unknown"}
+        if operation["status"] in {"completed", "failed", "cancelled", "too_late"} or operation.get("phase") in {"committing", "legacy_install"}:
+            return {"requestId": request_id, "status": "too_late"}
+        operation["status"] = "cancelling"
+        operation["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        self._install_cancel_events[request_id].set()
+        self._install_approval_events[request_id].set()
+        try:
+            await asyncio.wait_for(self._install_done_events[request_id].wait(), timeout=30)
+        except asyncio.TimeoutError:
+            pass
+        status = self._install_operations[request_id]["status"]
+        return {"requestId": request_id, "status": status if status == "cancelled" else "cancelling"}
+
+    async def close_install_operations(self) -> None:
+        """Stop cancellable package-manager jobs and drain legacy installs before shutdown."""
+        active = [request_id for request_id, task in self._install_tasks.items() if not task.done()]
+        await asyncio.gather(
+            *(self.cancel_install_operation(request_id) for request_id in active),
+            return_exceptions=True,
+        )
+        tasks = [self._install_tasks[request_id] for request_id in active if request_id in self._install_tasks]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._install_tasks.clear()
+        self._install_processes.clear()
+
+    async def _run_package_manager(
+        self, request_id: str, cwd: Path, registry: str | None, args: list[str],
+    ) -> tuple[int, str]:
+        node = shutil.which("node")
+        pnpm_entry = self._pnpm_entry()
+        if not node or pnpm_entry is None or not pnpm_entry.is_file():
+            raise FileNotFoundError("Node.js and pnpm are required for plugin dependency installation")
+        support = cwd.parent
+        isolated_userconfig = support / "atlas-pnpm-user.npmrc"
+        isolated_userconfig.write_text("", encoding="utf-8")
+        command = [node, str(pnpm_entry), *args, "--ignore-pnpmfile", "--store-dir", str(support / ".pnpm-store"),
+                   "--state-dir", str(support / ".pnpm-state")]
+        if registry:
+            command.append(f"--registry={registry}")
+        isolated_env = {
+            "PATH": os.environ.get("PATH", ""),
+            "CI": "1",
+            "NPM_CONFIG_USERCONFIG": str(isolated_userconfig),
+            "APPDATA": str(support / ".appdata"),
+            "LOCALAPPDATA": str(support / ".local-appdata"),
+            "USERPROFILE": str(support / ".home"),
+            "HOME": str(support / ".home"),
+            "TEMP": str(support / ".tmp"),
+            "TMP": str(support / ".tmp"),
+        }
+        for key in ("SystemRoot", "WINDIR", "ComSpec"):
+            if os.environ.get(key):
+                isolated_env[key] = os.environ[key]
+        return await self._run_managed_command(request_id, cwd, command, isolated_env)
+
+    async def _run_managed_command(
+        self, request_id: str, cwd: Path, command: list[str], env: dict[str, str], *, timeout: float | None = None,
+    ) -> tuple[int, str]:
+        with tempfile.TemporaryFile(prefix="atlas-pnpm-") as output_file:
+            process = await asyncio.create_subprocess_exec(
+                *command, cwd=str(cwd), stdout=output_file,
+                stderr=subprocess.STDOUT, env=env,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
+            )
+            self._install_processes[request_id] = process
+            exit_task = asyncio.create_task(process.wait())
+            cancel_task = asyncio.create_task(self._install_cancel_events[request_id].wait())
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + float(timeout or getattr(self, "_package_manager_timeout", 600))
+            try:
+                while not exit_task.done():
+                    remaining = deadline - loop.time()
+                    if remaining <= 0:
+                        raise RuntimeError("package_manager_timeout")
+                    done, _ = await asyncio.wait(
+                        {exit_task, cancel_task}, timeout=min(0.25, remaining),
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if cancel_task in done and self._install_cancel_events[request_id].is_set():
+                        await self._terminate_install_process_tree(process, deadline=deadline)
+                        await asyncio.wait_for(exit_task, timeout=max(0.01, deadline - loop.time()))
+                        output_file.flush()
+                        output_file.seek(0, os.SEEK_END)
+                        size = output_file.tell()
+                        output_file.seek(max(0, size - 4000))
+                        return -1, output_file.read(4000).decode("utf-8", errors="replace")
+                    output_file.flush()
+                    if os.fstat(output_file.fileno()).st_size > 8_000_000:
+                        raise RuntimeError("package_manager_output_limit")
+                await exit_task
+                output_file.flush()
+                output_file.seek(0, os.SEEK_END)
+                size = output_file.tell()
+                output_file.seek(max(0, size - 4000))
+                output = output_file.read(4000).decode("utf-8", errors="replace")
+                return int(process.returncode or 0), output
+            except asyncio.CancelledError:
+                if process.returncode is None:
+                    try:
+                        await self._terminate_install_process_tree(process, deadline=deadline)
+                    except asyncio.TimeoutError:
+                        process.kill()
+                if not exit_task.done():
+                    exit_task.cancel()
+                await asyncio.gather(exit_task, return_exceptions=True)
+                raise
+            except Exception:
+                if process.returncode is None:
+                    try:
+                        await self._terminate_install_process_tree(process, deadline=deadline)
+                    except asyncio.TimeoutError:
+                        process.kill()
+                if not exit_task.done():
+                    exit_task.cancel()
+                await asyncio.gather(exit_task, return_exceptions=True)
+                raise
+            finally:
+                cancel_task.cancel()
+                self._install_processes.pop(request_id, None)
+
+    @staticmethod
+    def _pnpm_entry() -> Path | None:
+        configured = os.environ.get("ATLAS_PNPM_ENTRY")
+        if configured:
+            return Path(configured)
+        appdata = os.environ.get("APPDATA")
+        candidate = Path(appdata) / "npm" / "node_modules" / "pnpm" / "bin" / "pnpm.mjs" if appdata else None
+        return candidate
+
+    @staticmethod
+    def _infer_install_source_type(source: str) -> str:
+        value = source.strip()
+        if Path(value).expanduser().exists() or value.startswith((".\\", "./", "../")):
+            return "local"
+        if value.startswith("npm:") or re.fullmatch(r"@[a-z0-9._-]+/[a-z0-9._-]+(?:@[^\s]+)?", value, re.IGNORECASE):
+            return "npm"
+        if value.startswith(("https://", "http://", "ssh://", "git+https://", "git+ssh://", "git@")):
+            return "git"
+        if "/" in value and ":" not in value:
+            return "git"
+        if re.fullmatch(r"[a-z0-9._-]+(?:@[^\s]+)?", value, re.IGNORECASE):
+            return "npm"
+        return "local"
+
+    @staticmethod
+    def _normalize_git_source(source: str) -> str:
+        value = source.strip()
+        if re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", value):
+            return PluginRuntime._github_url(value)
+        if value.startswith(("git+https://", "git+ssh://")):
+            return value[4:]
+        return value
+
+    @staticmethod
+    def _npm_package_name(spec: str) -> str:
+        value = spec.removeprefix("npm:")
+        if value.startswith("@"):
+            scope, separator, rest = value.partition("/")
+            if not separator:
+                raise ValueError("invalid scoped npm package spec")
+            name = rest.split("@", 1)[0]
+            return f"{scope}/{name}"
+        return value.split("@", 1)[0]
+
+    @staticmethod
+    def _npm_entry() -> Path | None:
+        configured = os.environ.get("ATLAS_NPM_ENTRY")
+        if configured:
+            return Path(configured)
+        appdata = os.environ.get("APPDATA")
+        node = shutil.which("node")
+        candidates = [
+            Path(appdata) / "npm" / "node_modules" / "npm" / "bin" / "npm-cli.js" if appdata else None,
+            Path(node).parent / "node_modules" / "npm" / "bin" / "npm-cli.js" if node else None,
+        ]
+        return next((path for path in candidates if path is not None and path.is_file()), None)
+
+    async def _run_npm_pack(
+        self, request_id: str, spec: str, cwd: Path, registry: str | None,
+    ) -> tuple[int, str]:
+        node = shutil.which("node")
+        npm_entry = self._npm_entry()
+        if not node or npm_entry is None:
+            raise FileNotFoundError("Node.js and npm are required to fetch an npm plugin package")
+        support = cwd
+        userconfig = support / "atlas-npm-user.npmrc"
+        userconfig.write_text("", encoding="utf-8")
+        command = [node, str(npm_entry), "pack", spec.removeprefix("npm:"), "--ignore-scripts",
+                   "--pack-destination", str(cwd), "--cache", str(support / ".npm-cache")]
+        if registry:
+            command.append(f"--registry={registry}")
+        env = {
+            "PATH": os.environ.get("PATH", ""), "CI": "1",
+            "NPM_CONFIG_USERCONFIG": str(userconfig),
+            "NPM_CONFIG_CACHE": str(support / ".npm-cache"),
+            "APPDATA": str(support / ".appdata"), "LOCALAPPDATA": str(support / ".local-appdata"),
+            "USERPROFILE": str(support / ".home"), "HOME": str(support / ".home"),
+            "TEMP": str(support / ".tmp"), "TMP": str(support / ".tmp"),
+        }
+        for key in ("SystemRoot", "WINDIR", "ComSpec"):
+            if os.environ.get(key):
+                env[key] = os.environ[key]
+        return await self._run_managed_command(request_id, cwd, command, env, timeout=180)
+
+    async def _run_git_clone_operation(
+        self, request_id: str, url: str, target: Path, *, ref: str | None = None,
+    ) -> tuple[int, str]:
+        git = shutil.which("git")
+        if not git:
+            raise FileNotFoundError("Git is required for this plugin source")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        command = [git, "clone", "--depth", "1"]
+        if ref:
+            command.extend(["--branch", ref])
+        command.extend([url, str(target)])
+        env = {"PATH": os.environ.get("PATH", ""), "GIT_TERMINAL_PROMPT": "0"}
+        for key in ("SystemRoot", "WINDIR", "ComSpec", "USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA"):
+            if os.environ.get(key):
+                env[key] = os.environ[key]
+        return await self._run_managed_command(request_id, target.parent, command, env, timeout=180)
+
+    @staticmethod
+    def _extract_npm_package(archive: Path, destination: Path) -> Path:
+        import tarfile
+
+        destination.mkdir(parents=True, exist_ok=True)
+        root = destination.resolve()
+        with tarfile.open(archive, "r:gz") as bundle:
+            members = bundle.getmembers()
+            for member in members:
+                parts = Path(member.name).parts
+                if Path(member.name).is_absolute() or ".." in parts or member.issym() or member.islnk() or not (member.isfile() or member.isdir()):
+                    raise ValueError("npm package archive contains an unsafe entry")
+            bundle.extractall(destination, members=members)
+        package_root = destination / "package"
+        if not package_root.resolve().is_relative_to(root) or not package_root.is_dir():
+            raise ValueError("npm package archive has no package root")
+        return package_root
+
+    @staticmethod
+    async def _terminate_install_process_tree(
+        process: asyncio.subprocess.Process, *, deadline: float | None = None,
+    ) -> None:
+        loop = asyncio.get_running_loop()
+
+        def remaining() -> float:
+            if deadline is None:
+                return 3.0
+            value = deadline - loop.time()
+            if value <= 0:
+                raise asyncio.TimeoutError
+            return value
+
+        if process.returncode is not None:
+            return
+        if os.name == "nt" and process.pid:
+            killer = await asyncio.wait_for(
+                asyncio.create_subprocess_exec(
+                    "taskkill.exe", "/PID", str(process.pid), "/T", "/F",
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                ),
+                timeout=remaining(),
+            )
+            await asyncio.wait_for(killer.wait(), timeout=remaining())
+        else:
+            try:
+                process.terminate()
+            except ProcessLookupError:
+                pass
+        try:
+            await asyncio.wait_for(process.wait(), timeout=remaining())
+        except asyncio.TimeoutError:
+            process.kill()
+            await asyncio.wait_for(process.wait(), timeout=remaining())
+
+    @staticmethod
+    def _blocked_build_packages(output: str) -> list[str]:
+        packages: set[str] = set()
+        for line in output.splitlines():
+            value = line.strip().lstrip("├└─* ").strip("`'\" ")
+            match = re.search(r"(@[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+|[a-zA-Z0-9._-]+)@[^\s]+", value)
+            if match:
+                packages.add(match.group(1))
+        return sorted(packages)
+
+    async def _run_install_operation(
+        self, request_id: str, source: str, ref: str | None, registry: str | None, on_complete: Any,
+        source_type: str, marketplace: str | None, requested_plugin_name: str | None,
+    ) -> None:
+        async with self._install_transaction_lock:
+            await self._run_install_operation_locked(
+                request_id, source, ref, registry, on_complete, source_type, marketplace, requested_plugin_name,
+            )
+
+    async def _run_install_operation_locked(
+        self, request_id: str, source: str, ref: str | None, registry: str | None, on_complete: Any,
+        source_type: str, marketplace: str | None, requested_plugin_name: str | None,
+    ) -> None:
+        operation = self._install_operations[request_id]
+        cancel_event = self._install_cancel_events[request_id]
+        stage: Path | None = None
+        prepared: Path | None = None
+        transaction_dir: Path | None = None
+        target: Path | None = None
+        backup: Path | None = None
+        plugin_name = ""
+        prior_source: Any = None
+        had_prior_source = False
+        prior_enabled: Any = None
+        had_prior_enabled = False
+        committed = False
+        claimed_target = False
+        source_workspace: Path | None = None
+        source_record: dict[str, Any] = {}
+        source_checkout_target: Path | None = None
+        source_checkout_prepared: Path | None = None
+        source_checkout_backup: Path | None = None
+        source_checkout_committed = False
+        target_owner: object | None = None
+        terminal_status = "failed"
+        terminal_error: str | None = None
+        terminal_phase = "failed"
+        try:
+            operation.update(status="running", phase="prepare", updatedAt=datetime.now(timezone.utc).isoformat())
+            if cancel_event.is_set():
+                raise asyncio.CancelledError
+            source_path = Path(source).expanduser()
+            source_root: Path | None = None
+            if source_type == "marketplace":
+                if not marketplace or not requested_plugin_name:
+                    raise ValueError("marketplace and plugin are required")
+                record = self._state.get("marketplaces", {}).get(marketplace)
+                if not isinstance(record, dict):
+                    raise KeyError(marketplace)
+                entry = next((item for item in self.list_marketplace_plugins(marketplace)
+                              if item.get("name") == requested_plugin_name), None)
+                if entry is None:
+                    raise KeyError(requested_plugin_name)
+                local, url, market_ref, subdir = self._resolve_plugin_source(record, entry)
+                ref = ref or market_ref
+                source_record = {"source": "marketplace", "marketplace": marketplace,
+                                 "plugin_source": entry.get("source"), "entry": entry,
+                                 "plugin_name": requested_plugin_name}
+                if local is not None:
+                    source_root = self._plugin_root(local)
+                elif url:
+                    source_workspace = Path(tempfile.mkdtemp(prefix="ag-"))
+                    checkout = source_workspace / "r"
+                    operation.update(status="running", phase="source_fetch")
+                    code, _ = await self._run_git_clone_operation(request_id, url, checkout, ref=ref)
+                    if cancel_event.is_set():
+                        raise asyncio.CancelledError
+                    if code != 0:
+                        raise RuntimeError("source_fetch_failed")
+                    source_root = self._plugin_root(checkout / subdir if subdir else checkout)
+                    source_record.update({"subdir": subdir, "ref": ref})
+                    source_checkout_target = self._installed_base() / ".sources" / requested_plugin_name
+                else:
+                    raise ValueError("unsupported marketplace plugin source")
+                plugin_name = _plugin_name(requested_plugin_name)
+            elif source_type == "git":
+                url = self._normalize_git_source(source)
+                source_workspace = Path(tempfile.mkdtemp(prefix="ag-"))
+                checkout = source_workspace / "r"
+                operation.update(status="running", phase="source_fetch")
+                code, _ = await self._run_git_clone_operation(request_id, url, checkout, ref=ref)
+                if cancel_event.is_set():
+                    raise asyncio.CancelledError
+                if code != 0:
+                    raise RuntimeError("source_fetch_failed")
+                source_root = self._plugin_root(checkout)
+                plugin_name = _plugin_name(Path(url.rstrip("/")).name.removesuffix(".git"))
+                source_record = {"source": "git", "url": url, "ref": ref, "plugin_name": plugin_name}
+                source_checkout_target = self._installed_base() / ".sources" / plugin_name
+            elif source_type == "npm":
+                spec = source.removeprefix("npm:")
+                source_workspace = Path(tempfile.mkdtemp(prefix="an-"))
+                operation.update(status="running", phase="source_fetch")
+                code, _ = await self._run_npm_pack(request_id, spec, source_workspace, registry)
+                if cancel_event.is_set():
+                    raise asyncio.CancelledError
+                if code != 0:
+                    raise RuntimeError("source_fetch_failed")
+                archives = sorted(source_workspace.glob("*.tgz"))
+                if len(archives) != 1:
+                    raise ValueError("npm source did not resolve to exactly one package")
+                source_root = self._extract_npm_package(archives[0], source_workspace / "unpacked")
+                source_record = {"source": "npm", "spec": spec}
+            else:
+                if self._marketplace_root(source_path):
+                    raise ValueError("register a marketplace before installing one of its plugins")
+                source_root = self._plugin_root(source_path)
+                if source_root is None:
+                    raise ValueError("plugin manifest/components not found in local source")
+                manifest = self._effective_manifest_for_root(source_root)
+                plugin_name = str(manifest.get("name") or source_root.name)
+                source_record = {"source": "local", "path": str(source_root.resolve()), "plugin_name": plugin_name}
+
+            if source_root is None:
+                raise ValueError("plugin manifest/components not found in source")
+            _, base_manifest = _manifest(source_root)
+            manifest = self._effective_manifest(source_root, base_manifest, source_record)
+            self._require_compatible_manifest(manifest)
+            validation = await asyncio.to_thread(self.validate, source_root, source_record=source_record)
+            if not validation.get("valid"):
+                raise ValueError("plugin manifest validation failed")
+            plugin_name = _plugin_name(str(source_record.get("plugin_name") or manifest.get("name") or plugin_name))
+            source_record["plugin_name"] = plugin_name
+            target_owner = object()
+            self._claim_install_target(plugin_name, owner=target_owner)
+            claimed_target = True
+            base = self._installed_base()
+            transaction_root = base / ".transactions"
+            transaction_id = uuid.uuid4().hex[:16]
+            transaction_dir = transaction_root / transaction_id
+            stage = Path(tempfile.mkdtemp(prefix="ap-")) / "p"
+            prepared = base / f".prepared-{transaction_id}"
+            target_dir = source_root.name if source_type == "local" else (requested_plugin_name if source_type == "marketplace" else plugin_name)
+            target = base / target_dir
+            backup = transaction_root / transaction_id / "previous"
+            shutil.copytree(source_root, stage, ignore=shutil.ignore_patterns(".git"))
+            package_file = stage / "package.json"
+            package = _read_json(package_file) if package_file.is_file() else {}
+            if package_file.is_file() and any(package.get(field) for field in ("dependencies", "optionalDependencies", "devDependencies")):
+                import yaml
+
+                operation.update(status="running", phase="dependencies", approvalRequired=[])
+                original_package = package_file.read_bytes()
+                workspace_file = stage / "pnpm-workspace.yaml"
+                original_workspace = workspace_file.read_bytes() if workspace_file.is_file() else None
+                workspace_value = yaml.safe_load(original_workspace) if original_workspace else {}
+                safe_workspace = dict(workspace_value) if isinstance(workspace_value, dict) else {}
+                for field in (
+                    "pnpmfile", "allowBuilds", "onlyBuiltDependencies", "ignoredBuiltDependencies",
+                    "dangerouslyAllowAllBuilds",
+                ):
+                    safe_workspace.pop(field, None)
+                safe_workspace["dangerouslyAllowAllBuilds"] = False
+                nested_pnpm = safe_workspace.get("pnpm")
+                if isinstance(nested_pnpm, dict):
+                    nested_pnpm = dict(nested_pnpm)
+                    for field in (
+                        "configDependencies", "onlyBuiltDependencies", "ignoredBuiltDependencies",
+                        "neverBuiltDependencies", "allowBuilds", "dangerouslyAllowAllBuilds",
+                    ):
+                        nested_pnpm.pop(field, None)
+                    nested_pnpm["dangerouslyAllowAllBuilds"] = False
+                    safe_workspace["pnpm"] = nested_pnpm
+                safe_package = dict(package)
+                safe_package.pop("scripts", None)
+                pnpm_config = safe_package.get("pnpm")
+                if isinstance(pnpm_config, dict):
+                    pnpm_config = dict(pnpm_config)
+                    for field in (
+                        "configDependencies", "onlyBuiltDependencies", "ignoredBuiltDependencies",
+                        "neverBuiltDependencies", "allowBuilds", "dangerouslyAllowAllBuilds",
+                    ):
+                        pnpm_config.pop(field, None)
+                    pnpm_config["dangerouslyAllowAllBuilds"] = False
+                    safe_package["pnpm"] = pnpm_config
+                try:
+                    package_file.write_text(json.dumps(safe_package, ensure_ascii=False, indent=2), encoding="utf-8")
+                    workspace_file.write_text(yaml.safe_dump(safe_workspace, allow_unicode=True, sort_keys=False), encoding="utf-8")
+                    code, install_output = await self._run_package_manager(
+                        request_id, stage, registry, ["install", "--reporter=append-only"],
+                    )
+                    if cancel_event.is_set():
+                        raise asyncio.CancelledError
+                    blocked = self._blocked_build_packages(install_output)
+                    if code != 0 and not ("ERR_PNPM_IGNORED_BUILDS" in install_output and blocked):
+                        raise RuntimeError("package_manager_failed")
+                    if code == 0 and blocked:
+                        raise RuntimeError("unexpected_blocked_build_report")
+                    operation["blockedPackages"] = blocked
+                    missing = [name for name in blocked if self.script_approval_status(name) != "approved"]
+                    while missing:
+                        if cancel_event.is_set():
+                            raise asyncio.CancelledError
+                        operation.update(status="awaiting_approval", phase="script_approval", approvalRequired=missing,
+                                         updatedAt=datetime.now(timezone.utc).isoformat())
+                        event = self._install_approval_events[request_id]
+                        await event.wait()
+                        event.clear()
+                        missing = [name for name in blocked if self.script_approval_status(name) != "approved"]
+                    if blocked:
+                        operation.update(status="running", phase="approved_build", approvalRequired=[])
+                        safe_workspace["allowBuilds"] = {name: True for name in blocked}
+                        workspace_file.write_text(yaml.safe_dump(safe_workspace, allow_unicode=True, sort_keys=False), encoding="utf-8")
+                        code, approved_output = await self._run_package_manager(
+                            request_id, stage, registry, ["install", "--reporter=append-only"],
+                        )
+                        if cancel_event.is_set():
+                            raise asyncio.CancelledError
+                        if code != 0:
+                            raise RuntimeError("approved_build_failed")
+                        operation["executedBuildPackages"] = blocked
+                        if "ERR_PNPM_IGNORED_BUILDS" in approved_output:
+                            raise RuntimeError("approved_build_failed")
+                finally:
+                    package_file.write_bytes(original_package)
+                    if original_workspace is None:
+                        workspace_file.unlink(missing_ok=True)
+                    else:
+                        workspace_file.write_bytes(original_workspace)
+            if cancel_event.is_set():
+                raise asyncio.CancelledError
+            operation.update(status="running", phase="committing", updatedAt=datetime.now(timezone.utc).isoformat())
+            await asyncio.to_thread(self._copy_replace, stage, prepared, previous=target)
+            sources = self._state.setdefault("sources", {})
+            had_prior_source = plugin_name in sources
+            prior_source = sources.get(plugin_name)
+            enabled = self._enabled
+            had_prior_enabled = plugin_name in enabled
+            prior_enabled = enabled.get(plugin_name)
+            if source_checkout_target is not None and source_workspace is not None:
+                checkout = source_workspace / "r"
+                source_checkout_prepared = source_checkout_target.parent / f".prepared-{transaction_id}"
+                source_checkout_backup = transaction_dir / "previous-source"
+                source_checkout_target.parent.mkdir(parents=True, exist_ok=True)
+                await asyncio.to_thread(shutil.copytree, checkout, source_checkout_prepared)
+                if source_checkout_target.exists():
+                    source_checkout_backup.parent.mkdir(parents=True, exist_ok=True)
+                    source_checkout_target.replace(source_checkout_backup)
+                source_checkout_prepared.replace(source_checkout_target)
+                source_checkout_committed = True
+                source_record["checkout"] = str(source_checkout_target)
+            if target.exists():
+                backup.parent.mkdir(parents=True, exist_ok=True)
+                target.replace(backup)
+            prepared.replace(target)
+            committed = True
+            sources[plugin_name] = source_record
+            if source_type == "marketplace":
+                self._enabled.setdefault(plugin_name, manifest.get("defaultEnabled", True) is not False)
+            await asyncio.to_thread(self._save_state)
+            operation["result"] = {"name": plugin_name, "path": str(target)}
+            if on_complete is not None:
+                report = on_complete()
+                if inspect.isawaitable(report):
+                    report = await report
+                operation["report"] = report
+            terminal_status = "completed"
+            terminal_phase = "complete"
+            if committed and backup is not None and backup.exists():
+                await asyncio.to_thread(self._rmtree, backup)
+        except asyncio.CancelledError:
+            terminal_status = "cancelled"
+            terminal_phase = "cancelled"
+        except Exception as exc:
+            operation["failureType"] = type(exc).__name__
+            terminal_error = str(exc) if isinstance(exc, ValueError) else (
+                str(exc) if isinstance(exc, RuntimeError) and str(exc) in {
+                    "package_manager_failed", "approved_build_failed", "package_manager_timeout",
+                    "package_manager_output_limit", "source_fetch_failed",
+                } else "package_manager_failed" if isinstance(exc, RuntimeError) else type(exc).__name__
+            )
+            terminal_phase = "failed"
+            operation["rollback"] = ["package.json", "pnpm-lock.yaml"]
+            if backup is not None and backup.exists() and target is not None:
+                if target.exists():
+                    await asyncio.to_thread(self._rmtree, target)
+                backup.replace(target)
+            elif committed and target is not None and target.exists():
+                await asyncio.to_thread(self._rmtree, target)
+            if source_checkout_backup is not None and source_checkout_backup.exists() and source_checkout_target is not None:
+                if source_checkout_target.exists():
+                    await asyncio.to_thread(self._rmtree, source_checkout_target)
+                source_checkout_backup.replace(source_checkout_target)
+            elif source_checkout_committed and source_checkout_target is not None and source_checkout_target.exists():
+                await asyncio.to_thread(self._rmtree, source_checkout_target)
+            if committed and target is not None:
+                sources = self._state.setdefault("sources", {})
+                if had_prior_source:
+                    sources[plugin_name] = prior_source
+                else:
+                    sources.pop(plugin_name, None)
+                if had_prior_enabled:
+                    self._enabled[plugin_name] = prior_enabled
+                else:
+                    self._enabled.pop(plugin_name, None)
+                await asyncio.to_thread(self._save_state)
+                if on_complete is not None:
+                    try:
+                        refreshed = on_complete()
+                        if inspect.isawaitable(refreshed):
+                            await refreshed
+                    except Exception:
+                        pass
+        finally:
+            if stage is not None and stage.parent.exists():
+                await asyncio.to_thread(self._rmtree, stage.parent)
+            if prepared is not None and prepared.exists():
+                await asyncio.to_thread(self._rmtree, prepared)
+            if source_checkout_prepared is not None and source_checkout_prepared.exists():
+                await asyncio.to_thread(self._rmtree, source_checkout_prepared)
+            if transaction_dir is not None and transaction_dir.exists():
+                await asyncio.to_thread(self._rmtree, transaction_dir)
+            if source_workspace is not None and source_workspace.exists():
+                await asyncio.to_thread(self._rmtree, source_workspace)
+            if claimed_target:
+                self._release_install_target(plugin_name, owner=target_owner)
+            operation["updatedAt"] = datetime.now(timezone.utc).isoformat()
+            operation["status"] = terminal_status
+            operation["phase"] = terminal_phase
+            if terminal_error is not None:
+                operation["error"] = terminal_error
+            self._install_done_events[request_id].set()
+
+    def grant_compatibility_exemption(
+        self, name: str, version: str, runtime_version: str, *, accept_risk: bool,
+    ) -> dict[str, Any] | None:
+        """Grant an exact plugin/runtime exemption after explicit risk acceptance."""
+        if accept_risk is not True:
+            raise ValueError("acceptRisk=true is required to bypass the peer compatibility block")
+        if runtime_version != ATLAS_VERSION:
+            raise ValueError("compatibility exemption runtime version is stale")
+        plugin = next((item for item in self.discover() if item["name"] == name), None)
+        if plugin is None:
+            raise ValueError(f"plugin not found: {name}")
+        root = Path(plugin["path"])
+        _, base_manifest = _manifest(root)
+        source = self._state.get("sources", {}).get(name) or self._state.get("sources", {}).get(root.name, {})
+        manifest = self._effective_manifest(root, base_manifest, source)
+        if str(manifest.get("version") or "") != version:
+            raise ValueError("compatibility exemption plugin version is stale")
+        if self._compatibility_issue(manifest) is None:
+            raise ValueError("plugin has no Atlas peer compatibility mismatch to exempt")
+        key = f"{name}@{version}"
+        exemptions = self._state.setdefault("compatibility_exemptions", {})
+        runtimes = set(exemptions.get(key, [])) if isinstance(exemptions.get(key), list) else set()
+        runtimes.add(runtime_version)
+        if runtimes:
+            exemptions[key] = sorted(runtimes)
+        self._save_state()
+        return self._compatibility_issue(manifest)
+
+    def revoke_compatibility_exemption(
+        self, name: str, version: str, runtime_version: str,
+    ) -> dict[str, Any] | None:
+        """Revoke only this exact plugin-version/runtime-version exemption."""
+        if runtime_version != ATLAS_VERSION:
+            raise ValueError("compatibility exemption runtime version is stale")
+        plugin = next((item for item in self.discover() if item["name"] == name), None)
+        if plugin is None:
+            raise ValueError(f"plugin not found: {name}")
+        root = Path(plugin["path"])
+        _, base_manifest = _manifest(root)
+        source = self._state.get("sources", {}).get(name) or self._state.get("sources", {}).get(root.name, {})
+        manifest = self._effective_manifest(root, base_manifest, source)
+        if str(manifest.get("version") or "") != version:
+            raise ValueError("compatibility exemption plugin version is stale")
+        key = f"{name}@{version}"
+        exemptions = self._state.setdefault("compatibility_exemptions", {})
+        runtimes = set(exemptions.get(key, [])) if isinstance(exemptions.get(key), list) else set()
+        runtimes.discard(runtime_version)
+        if runtimes:
+            exemptions[key] = sorted(runtimes)
+        else:
+            exemptions.pop(key, None)
+        self._save_state()
+        return self._compatibility_issue(manifest)
 
     @staticmethod
     def _plugin_root(path: Path) -> Path | None:
@@ -284,12 +1170,11 @@ class PluginRuntime:
     def discover(self) -> list[dict[str, Any]]:
         """List available plugin bundles, preferring user-installed copies."""
         plugins: dict[str, dict[str, Any]] = {}
-        sources = self._state.get("sources", {})
         for root in self._all_plugin_roots():
             manifest_path, base_manifest = _manifest(root)
             # Source records are keyed by plugin name; marketplace/git installs
             # use the installed directory name, local installs the manifest name.
-            source = sources.get(root.name) or sources.get(str(base_manifest.get("name") or root.name)) or {}
+            source = self._source_for_root(root, base_manifest)
             manifest = self._effective_manifest(root, base_manifest, source)
             try:
                 name = _plugin_name(source.get("plugin_name") or manifest.get("name") or root.name)
@@ -339,6 +1224,7 @@ class PluginRuntime:
                     if str(spec.get("point", "")) in HOOK_POINTS
                 ]),
                 "mcp_servers": sorted(self._mcp_configs(root, manifest)),
+                "compatibility": self._compatibility_issue(manifest),
                 "enabled": enabled,
                 "loaded": loaded,
                 "update_available": bool(source.get("update_available", False)) if isinstance(source, dict) else False,
@@ -504,7 +1390,9 @@ class PluginRuntime:
             groups.append({"kind": kind, "label": label, "count": len(items), "items": items})
         return groups
 
-    def validate(self, source: str | Path) -> dict[str, Any]:
+    def validate(
+        self, source: str | Path, *, source_record: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Validate a plugin manifest and explain path, contribution and name conflicts."""
         diagnostics: list[dict[str, str]] = []
 
@@ -535,6 +1423,10 @@ class PluginRuntime:
             else:
                 manifest = parsed
 
+        if source_record is None:
+            source_record = self._source_for_root(root, manifest)
+        manifest = self._effective_manifest(root, manifest, source_record)
+
         raw_name = manifest.get("name")
         try:
             name = _plugin_name(raw_name or root.name)
@@ -547,7 +1439,8 @@ class PluginRuntime:
 
         allowed = {"name", "version", "description", "displayName", "author", "homepage", "repository",
                    "license", "keywords", "metadata", "defaultEnabled", "skills", "commands", "agents",
-                   "hooks", "mcpServers", "tools", "permissions", "outputStyles", "lspServers"}
+                   "hooks", "mcpServers", "tools", "permissions", "outputStyles", "lspServers",
+                   "peerDependencies"}
         for key in sorted(set(manifest) - allowed):
             add("warning", "unknown_field", f"字段 {key} 不在 Atlas 支持清单中，会被忽略。", key)
         for key in ("description", "displayName", "homepage", "repository", "license"):
@@ -583,6 +1476,22 @@ class PluginRuntime:
             add("error", "invalid_component_declaration", "tools 必须是名称、数组或映射；Atlas 目前只显示该声明，不会执行插件工具。", "tools")
         if "permissions" in manifest and not isinstance(manifest["permissions"], dict):
             add("error", "invalid_field_type", "permissions 必须是对象；其中工具/网络声明用于风险投影。", "permissions")
+        peer_dependencies = manifest.get("peerDependencies")
+        if peer_dependencies is not None and (
+            not isinstance(peer_dependencies, dict)
+            or any(not isinstance(key, str) or not isinstance(value, str)
+                   for key, value in peer_dependencies.items())
+        ):
+            add("error", "peer_dependencies_invalid", "peerDependencies 必须是包名到版本范围的文本映射。", "peerDependencies")
+        compatibility = self._compatibility_issue(manifest)
+        if compatibility and not compatibility["exempted"]:
+            add("error", "atlas_peer_incompatible",
+                f"插件要求的 Atlas peer 范围与当前运行时 {ATLAS_VERSION} 不兼容；需升级插件，或显式接受风险后为此精确版本豁免。",
+                "peerDependencies")
+        elif compatibility:
+            add("warning", "atlas_peer_exemption_active",
+                f"此插件版本已对 Atlas {ATLAS_VERSION} 启用精确版本兼容豁免。",
+                "peerDependencies")
 
         for field in ("skills", "agents", "commands"):
             value = manifest.get(field)
@@ -743,22 +1652,26 @@ class PluginRuntime:
         errors = sum(item["severity"] == "error" for item in diagnostics)
         warnings = sum(item["severity"] == "warning" for item in diagnostics)
         return {"valid": errors == 0, "source": str(root), "plugin": {"name": name, "version": version,
-                "commands": sorted(set(command_names)), "mcp_servers": mcp_names}, "diagnostics": diagnostics,
+                "commands": sorted(set(command_names)), "mcp_servers": mcp_names,
+                "compatibility": compatibility}, "diagnostics": diagnostics,
                 "summary": {"errors": errors, "warnings": warnings},
                 "policy": {"status": "not_configured", "diagnostics": [],
                            "message": "组织策略适配器尚未配置；当前无组织策略跳过项。"}}
 
-    def validate_source(self, source: str | Path, *, ref: str | None = None, subdir: str | None = None) -> dict[str, Any]:
+    def validate_source(
+        self, source: str | Path, *, ref: str | None = None, subdir: str | None = None,
+        source_record: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Validate local sources directly and inspect Git sources in a temporary checkout."""
         path = Path(source).expanduser()
         if path.exists():
-            return self.validate(path)
+            return self.validate(path, source_record=source_record)
         url = str(source)
         if not url.startswith(("https://", "http://", "ssh://", "git@")):
             if "/" in url and ":" not in url:
                 url = self._github_url(url)
             else:
-                return self.validate(path)
+                return self.validate(path, source_record=source_record)
         with tempfile.TemporaryDirectory(prefix="atlas-plugin-validate-") as directory:
             checkout = Path(directory) / "source"
             try:
@@ -772,7 +1685,7 @@ class PluginRuntime:
                                    "message": "组织策略适配器尚未配置；当前无组织策略跳过项。"}}
             selected = checkout / subdir if subdir else checkout
             root = self._plugin_root(selected)
-            result = self.validate(root or checkout)
+            result = self.validate(root or checkout, source_record=source_record)
             return {**result, "source": url}
 
     def validate_marketplace_plugin(self, marketplace: str, plugin_name: str) -> dict[str, Any]:
@@ -783,11 +1696,12 @@ class PluginRuntime:
         if entry is None:
             raise KeyError(plugin_name)
         local, url, ref, subdir = self._resolve_plugin_source(record, entry)
+        source_record = {"entry": entry, "plugin_name": plugin_name}
         if local is not None:
-            return self.validate(local)
+            return self.validate(local, source_record=source_record)
         if url is None:
             raise ValueError("unsupported plugin source")
-        return self.validate_source(url, ref=ref, subdir=subdir)
+        return self.validate_source(url, ref=ref, subdir=subdir, source_record=source_record)
 
     @staticmethod
     def _component_paths(
@@ -931,20 +1845,35 @@ class PluginRuntime:
             for name, spec in result.items() if isinstance(spec, dict)
         }
 
+    def _source_for_root(self, root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+        sources = self._state.get("sources", {})
+        if not isinstance(sources, dict):
+            return {}
+        for key in (root.name, str(manifest.get("name") or root.name)):
+            source = sources.get(key)
+            if isinstance(source, dict):
+                return source
+        return {}
+
+    def _effective_manifest_for_root(self, root: Path) -> dict[str, Any]:
+        _, base_manifest = _manifest(root)
+        return self._effective_manifest(root, base_manifest, self._source_for_root(root, base_manifest))
+
     @staticmethod
     def _effective_manifest(root: Path, manifest: dict[str, Any], source: Any) -> dict[str, Any]:
         result = dict(manifest)
-        if not isinstance(source, dict) or not isinstance(source.get("entry"), dict):
+        if not isinstance(source, dict):
             return result
-        entry = source["entry"]
-        for field in ("displayName", "description", "author", "homepage", "repository", "license", "keywords",
-                      "tools", "permissions", "outputStyles", "lspServers"):
-            if field in entry:
-                result[field] = entry[field]
-        if entry.get("strict") is False:
-            for field in ("skills", "commands", "agents", "hooks", "mcpServers"):
+        entry = source.get("entry")
+        if isinstance(entry, dict):
+            for field in ("displayName", "description", "author", "homepage", "repository", "license", "keywords",
+                          "peerDependencies", "tools", "permissions", "outputStyles", "lspServers"):
                 if field in entry:
                     result[field] = entry[field]
+            if entry.get("strict") is False:
+                for field in ("skills", "commands", "agents", "hooks", "mcpServers"):
+                    if field in entry:
+                        result[field] = entry[field]
         result["name"] = source.get("plugin_name", result.get("name") or root.name)
         return result
 
@@ -956,8 +1885,12 @@ class PluginRuntime:
                 continue
             root = Path(plugin["path"])
             _, base_manifest = _manifest(root)
-            source = self._state.get("sources", {}).get(plugin["name"], {})
+            source = self._source_for_root(root, base_manifest)
             manifest = self._effective_manifest(root, base_manifest, source)
+            try:
+                self._require_compatible_manifest(manifest)
+            except ValueError:
+                continue
             hooks = self._claude_hook_specs(root, manifest)
             for hook in hooks:
                 hook["plugin_root"] = str(root)
@@ -1004,7 +1937,7 @@ class PluginRuntime:
             shutil.rmtree(path, onerror=_force)
 
     @staticmethod
-    def _copy_replace(source: Path, target: Path) -> None:
+    def _copy_replace(source: Path, target: Path, *, previous: Path | None = None) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         incoming = target.with_name(target.name + ".incoming")
         if incoming.exists():
@@ -1015,10 +1948,12 @@ class PluginRuntime:
         # deleted. Without this an upgrade silently deletes every local edit —
         # the shipped file is replaced, so ``reload`` cannot recover it either.
         soup = None
-        if target.exists():
-            carried = patch_layer.carry_over(target, incoming)
+        previous_root = previous if previous is not None and previous.exists() else target
+        if previous_root.exists():
+            carried = patch_layer.carry_over(previous_root, incoming)
             if carried["had_patches"]:
                 soup = carried
+        if target.exists():
             PluginRuntime._rmtree(target)
         incoming.replace(target)
         if soup is not None:
@@ -1060,11 +1995,20 @@ class PluginRuntime:
         args.extend([url, str(target)])
         PluginRuntime._run_git_with_retry(args, timeout=180)
 
+    def _mutation_name_for_source(self, source: str | Path) -> str:
+        source_root = self._plugin_root(Path(source))
+        if source_root is None:
+            raise ValueError(f"no plugin.json or plugin components found under {source}")
+        manifest = self._effective_manifest_for_root(source_root)
+        return str(manifest.get("name") or source_root.name)
+
+    @_serializes_plugin_mutation(lambda self, source: self._mutation_name_for_source(source))
     def install_local(self, source: str | Path) -> dict[str, Any]:
         source_root = self._plugin_root(Path(source))
         if source_root is None:
             raise ValueError(f"no plugin.json or plugin components found under {source}")
-        _, manifest = _manifest(source_root)
+        manifest = self._effective_manifest_for_root(source_root)
+        self._require_compatible_manifest(manifest)
         name = str(manifest.get("name") or source_root.name)
         # Installed layout convention: keep the source directory name; the
         # manifest name is only the plugin identity in state/discovery.
@@ -1143,6 +2087,7 @@ class PluginRuntime:
             return None, str(source["url"]), str(ref) if ref else None, str(source["path"])
         raise ValueError(f"unsupported plugin source type: {kind}")
 
+    @_serializes_plugin_mutation(lambda self, marketplace, plugin_name: plugin_name)
     def install_marketplace_plugin(self, marketplace: str, plugin_name: str) -> dict[str, Any]:
         record = self._state.get("marketplaces", {}).get(marketplace)
         if not isinstance(record, dict):
@@ -1152,11 +2097,19 @@ class PluginRuntime:
             raise KeyError(plugin_name)
         local, url, ref, subdir = self._resolve_plugin_source(record, entry)
         target = self._installed_base() / plugin_name
-        source_record: dict[str, Any] = {"source": "marketplace", "marketplace": marketplace, "plugin_source": entry.get("source")}
+        source_record: dict[str, Any] = {
+            "source": "marketplace", "marketplace": marketplace,
+            "plugin_source": entry.get("source"), "entry": entry,
+            "plugin_name": plugin_name,
+        }
         if local is not None:
             if self._plugin_root(local) is None:
                 raise ValueError(f"plugin path not found: {local}")
-            self._copy_replace(self._plugin_root(local), target)
+            plugin_root = self._plugin_root(local)
+            _, manifest = _manifest(plugin_root)
+            manifest = self._effective_manifest(plugin_root, manifest, source_record)
+            self._require_compatible_manifest(manifest)
+            self._copy_replace(plugin_root, target)
         else:
             clone = self._installed_base() / ".sources" / plugin_name
             if clone.exists():
@@ -1166,6 +2119,9 @@ class PluginRuntime:
             plugin_root = self._plugin_root(plugin_root)
             if plugin_root is None:
                 raise ValueError(f"plugin manifest/components not found in {url}")
+            _, manifest = _manifest(plugin_root)
+            manifest = self._effective_manifest(plugin_root, manifest, source_record)
+            self._require_compatible_manifest(manifest)
             self._copy_replace(plugin_root, target)
             source_record["checkout"] = str(clone)
             source_record["subdir"] = subdir
@@ -1176,6 +2132,8 @@ class PluginRuntime:
         self._save_state()
         return {"name": plugin_name, "path": str(target), "marketplace": marketplace}
 
+    @_serializes_plugin_mutation(lambda self, url, *, name=None, ref=None, subdir=None:
+                                 _plugin_name(name or Path(url.rstrip("/")).name.removesuffix(".git")))
     def install_git(self, url: str, *, name: str | None = None, ref: str | None = None, subdir: str | None = None) -> dict[str, Any]:
         plugin_name = _plugin_name(name or Path(url.rstrip("/")).name.removesuffix(".git"))
         clone = self._installed_base() / ".sources" / plugin_name
@@ -1185,6 +2143,8 @@ class PluginRuntime:
         root = self._plugin_root(clone / subdir if subdir else clone)
         if root is None:
             raise ValueError(f"plugin manifest/components not found in {url}")
+        _, manifest = _manifest(root)
+        self._require_compatible_manifest(manifest)
         target = self._installed_base() / plugin_name
         self._copy_replace(root, target)
         self._state.setdefault("sources", {})[plugin_name] = {"source": "git", "plugin_name": plugin_name, "url": url, "ref": ref, "subdir": subdir, "checkout": str(clone)}
@@ -1203,6 +2163,7 @@ class PluginRuntime:
             return self.install_git(self._github_url(str(source)), name=name, ref=ref)
         raise ValueError(f"unsupported plugin source: {source}")
 
+    @_serializes_plugin_mutation(lambda self, name, enabled: name)
     async def set_enabled(self, name: str, enabled: bool) -> bool:
         """Record the toggle and, when disabling, actually withdraw the plugin.
 
@@ -1213,6 +2174,12 @@ class PluginRuntime:
         registries are reached through the wiring captured by the last
         ``load_all``, which is the only handle this object has on them.
         """
+        if enabled:
+            plugin = next((item for item in self.discover() if item["name"] == name), None)
+            if plugin is None:
+                raise ValueError(f"plugin not found: {name}")
+            manifest = self._effective_manifest_for_root(Path(plugin["path"]))
+            self._require_compatible_manifest(manifest)
         self._enabled[name] = enabled
         self._save_state()
         if not enabled:
@@ -1257,6 +2224,7 @@ class PluginRuntime:
         """Read a plugin file with any patch applied."""
         return patch_layer.effective_text(self._root_for(name), relative)
 
+    @_serializes_plugin_mutation(lambda self, name: name)
     def uninstall(self, name: str) -> bool:
         plugin = next((item for item in self.discover() if item["name"] == name), None)
         if plugin is None:
@@ -1345,6 +2313,7 @@ class PluginRuntime:
         self._save_state()
         return {"name": name, "updated": True}
 
+    @_serializes_plugin_mutation(lambda self, name: name)
     def update(self, name: str) -> dict[str, Any]:
         source = self._state.get("sources", {}).get(name, {})
         if source.get("source") == "local":
@@ -1365,6 +2334,8 @@ class PluginRuntime:
             root = self._plugin_root(checkout / source["subdir"] if source.get("subdir") else checkout)
             if root is None:
                 raise ValueError(f"plugin components missing after update: {name}")
+            _, manifest = _manifest(root)
+            self._require_compatible_manifest(manifest)
             target = self._installed_base() / name
             self._copy_replace(root, target)
             source["update_available"] = False
@@ -1405,6 +2376,11 @@ class PluginRuntime:
             name = plugin["name"]
             if not plugin["enabled"]:
                 report["skipped"].append({"name": name, "reason": "disabled"})
+                continue
+            compatibility = plugin.get("compatibility")
+            if compatibility and not compatibility.get("exempted"):
+                report["skipped"].append({"name": name, "reason": "incompatible peerDependencies",
+                                          "compatibility": compatibility})
                 continue
             try:
                 self._loaded[name] = await self._load_one(
@@ -1477,6 +2453,18 @@ class PluginRuntime:
         if plugin is None:
             return {"ok": False, "name": name, "error": "plugin not found"}
 
+        compatibility = plugin.get("compatibility")
+        if compatibility and not compatibility.get("exempted"):
+            removed, hooks_cleared = await self._forget_plugin(
+                name, capabilities=capabilities, hook_bus=hook_bus,
+            )
+            self._loaded.pop(name, None)
+            return {
+                "ok": False, "name": name,
+                "error": f"Atlas peer compatibility check failed: {compatibility['peers']}",
+                "capabilities_removed": removed, "hooks_cleared": hooks_cleared,
+            }
+
         # ``_read_json`` is deliberately forgiving elsewhere (a corrupt manifest
         # must not break discovery), but during an explicit reload a file that does
         # not parse is exactly the case the user needs told about: loading it would
@@ -1522,11 +2510,13 @@ class PluginRuntime:
         self, root: Path, *, plugin_name: str, hook_bus: Any,
         mcp_client: Any, capabilities: Any,
     ) -> dict[str, Any]:
+        _, manifest = _manifest(root)
+        manifest = self._effective_manifest(root, manifest, self._source_for_root(root, manifest))
+        self._require_compatible_manifest(manifest)
         disposers = _DisposerStack()
         loaded: dict[str, Any] = {
             "skills": [], "commands": [], "hooks": 0, "mcp": [],
         }
-        _, manifest = _manifest(root)
         if capabilities is not None:
             for skill in self._component_paths(root, manifest, "skills", root / "skills", directories=True):
                 content = (skill / "SKILL.md").read_text(encoding="utf-8", errors="replace")

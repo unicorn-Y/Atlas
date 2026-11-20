@@ -371,22 +371,139 @@ def _turn_context_block(volatile_context: Any) -> str:
     return _TURN_CONTEXT_OPEN + "\n\n".join(parts) + "\n</turn_context>" if parts else ""
 
 
-def _attach_turn_context(messages: list[dict[str, Any]], current_text: str, current_block: str) -> None:
-    """Put each user message's per-turn context in front of it, inside the message.
+_CURRENT_ONLY_CONTEXT_PREFIXES = (
+    "Atlas Skill index ", "Current user-local date and time", "Current permission ",
+    "Follow this structured task plan",
+    "Current project state (refreshed each turn):",
+    "Active project: ", "Project goal: ", "Last known state: ", "Workspace: ",
+    "Project conversations: ",
+)
 
-    Per-turn material (clock, memory recall, skill matches, project state) used to sit in
-    the system prompt, ahead of the tool schemas and history, so every new message
-    changed the prefix and the provider re-read ~18k tokens uncached (cached_tokens 0-384).
-    Stored with its own user row, the block replays byte-identically on later turns and
-    only the newest message is new to the cache.
+
+def _turn_context_sections(volatile_context: Any) -> list[dict[str, Any]]:
+    sections: list[dict[str, Any]] = []
+    for raw in volatile_context or []:
+        text = str(raw).strip()
+        if not text:
+            continue
+        sections.append({
+            "source": text.splitlines()[0][:96],
+            "text": text,
+            "current_only": text.startswith(_CURRENT_ONLY_CONTEXT_PREFIXES),
+        })
+    return sections
+
+
+def _legacy_turn_context_sections(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, str) or not value:
+        return []
+    body = value
+    if body.startswith(_TURN_CONTEXT_OPEN) and body.endswith("</turn_context>"):
+        body = body[len(_TURN_CONTEXT_OPEN):-len("</turn_context>")].strip()
+    if body.startswith("Project context "):
+        body = re.sub(r"^Project context[^\n]*\n", "", body, count=1)
+    # Older records have no source metadata. Split only at known section starts;
+    # blank lines inside plans/JSON and recalled prose are part of their source.
+    starts = (
+        "【本轮动态上下文】", "Atlas Skill index ", "Project context ",
+        "【本轮相关记忆】", "Current user-local date and time", "Current permission ",
+        "Follow this structured task plan", "Active project: ", "Project goal: ",
+        "Last known state: ", "Workspace: ", "Project conversations: ",
+        "InstructionsLoaded hook context:",
+        "Relevant prior sessions (raw recall):", "SOURCE CONFLICTS —",
+        "Relevant shared project knowledge ", "Project knowledge index error:",
+        "Shared knowledge budget truncated:",
+    )
+    pattern = r"(?=\n{0,2}(?:" + "|".join(re.escape(item) for item in starts) + r"))"
+    return _turn_context_sections(re.split(pattern, body))
+
+
+def _attach_turn_context(
+    messages: list[dict[str, Any]], current_message_id: str, current_block: str,
+    current_sections: list[dict[str, Any]] | None = None,
+    restored_projection: list[dict[str, Any]] | None = None,
+    restored_ref_index: list[str] | None = None,
+) -> None:
+    """Project current state plus still-relevant historical volatile sources.
+
+    Durable turn_context metadata remains untouched for audit. Source metadata
+    distinguishes snapshots that must refresh (clock/index/plan) from recalled
+    facts, references and loaded constraints that remain useful to later turns.
     """
     users = [item for item in messages if item.get("role") == "user"]
-    current = next((item for item in reversed(users) if _message_text(item) == current_text),
-                   users[-1] if users else None)
+    current = next((item for item in reversed(users)
+                    if item.get("kernel_message_id") == current_message_id), None)
+
+    historical_sections: list[dict[str, Any]] = []
+    seen_text: set[str] = set()
+    ref_index: list[str] = []
+    seen_refs: set[str] = set()
+    for ref in restored_ref_index or []:
+        if isinstance(ref, str) and ref.startswith("[ref:") and ref.endswith("]") and ref not in seen_refs:
+            ref_index.append(ref)
+            seen_refs.add(ref)
+    for section in restored_projection or []:
+        if isinstance(section, dict):
+            text = str(section.get("text") or "").strip()
+            if text and text not in seen_text:
+                historical_sections.append(section)
+                seen_text.add(text)
     for item in users:
-        block = item.pop("turn_context", None) or (current_block if item is current else "")
-        if not isinstance(block, str) or not block:
+        if item is current:
+            break
+        sections = item.get("turn_context_sections")
+        if not isinstance(sections, list):
+            sections = _legacy_turn_context_sections(item.get("turn_context"))
+        for section in sections:
+            if not isinstance(section, dict) or section.get("current_only"):
+                continue
+            text = str(section.get("text") or "").strip()
+            for match in re.finditer(r"\[ref:([^\]\r\n]{1,250})\]", text):
+                stable_ref = f"[ref:{match.group(1)}]"
+                if stable_ref not in seen_refs and len(ref_index) < 512:
+                    ref_index.append(stable_ref)
+                    seen_refs.add(stable_ref)
+            if text and text not in seen_text:
+                historical_sections.append({
+                    **section,
+                    "source_run_id": str(item.get("kernel_run_id") or "legacy"),
+                    "source_timestamp": str(item.get("timestamp") or item.get("created_at") or "unknown"),
+                })
+                seen_text.add(text)
+
+    current_texts = [str(item.get("text") or "").strip()
+                     for item in (current_sections or []) if str(item.get("text") or "").strip()]
+    # Bound historical model surface while keeping the full audit in SessionDB.
+    current_chars = sum(len(text) for text in current_texts)
+    remaining = max(0, 6000 - current_chars)
+    projected: list[str] = []
+    projected_historical_texts: set[str] = set()
+    for section in reversed(historical_sections):
+        text = str(section.get("text") or "").strip()
+        if not text or len(text) > remaining:
             continue
+        source_run = str(section.get("source_run_id") or "prior")
+        source_time = str(section.get("source_timestamp") or "unknown")
+        projected.append(f"Historical context from run {source_run} at {source_time}:\n{text}")
+        projected_historical_texts.add(text)
+        remaining -= len(text)
+    projected.reverse()
+    projected.extend(text for text in current_texts if text not in projected_historical_texts)
+    # Keep the durable projection bounded; the underlying transcript/audit remains intact.
+    while len(historical_sections) > 128 or sum(
+        len(str(section.get("text") or "")) for section in historical_sections
+    ) > 96_000:
+        historical_sections.pop(0)
+    block = _turn_context_block(projected) if projected else current_block
+    for item in users:
+        item.pop("turn_context", None)
+        item.pop("turn_context_sections", None)
+        item.pop("turn_context_projection", None)
+        item.pop("turn_context_ref_index", None)
+        if item is not current or not isinstance(block, str) or not block:
+            continue
+        item["turn_context_projection"] = historical_sections
+        item["turn_context_ref_index"] = ref_index
         content = item.get("content")
         if isinstance(content, list):
             item["content"] = [{"type": "text", "text": block}, *content]
@@ -426,7 +543,7 @@ _ALWAYS_KEEP_TOOLS = (
     "read_file", "write", "write_file", "edit", "edit_file", "apply_patch", "list_directory",
     "glob", "grep", "bash", "powershell", "exec_command",
     "update_plan", "todo_write",
-    "memory_search", "session_search",
+    "memory_search", "session_search", "session_context_search", "session_context_read",
     "ask_user", "request_user_input", "AskUserQuestion",
     "tool_search", "workflow",
     # S20: the deliverable declaration must be reachable in every tier — a
@@ -551,7 +668,9 @@ def _session_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else row.get("display_metadata", {})
         metadata = metadata if isinstance(metadata, dict) else {}
         for key in ("tool_calls", "tool_call_id", "tool_name", "output_ref", "repair_state",
-                    "microcompacted", "masked_content", "turn_context",
+                    "microcompacted", "masked_content", "turn_context", "turn_context_sections",
+                    "kernel_run_id", "kernel_message_id", "turn_context_projection",
+                    "turn_context_ref_index", "steered",
                     "reasoning_content", "reasoning_details"):
             if key in metadata:
                 message[key] = metadata[key]
@@ -561,6 +680,24 @@ def _session_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             message["tool_calls"] = message["tool_calls"]
         messages.append(message)
     return messages
+
+
+def _current_user_message(
+    messages: list[dict[str, Any]], run_id: str, message_id: str,
+) -> dict[str, Any] | None:
+    current = next((item for item in reversed(messages)
+                    if item.get("role") == "user"
+                    and item.get("kernel_message_id") == message_id), None)
+    if current is None:
+        # Compatibility for transcripts written before kernel_message_id. The
+        # durable run id identifies the original user row; steers are excluded.
+        current = next((item for item in reversed(messages)
+                        if item.get("role") == "user"
+                        and item.get("kernel_run_id") == run_id
+                        and not item.get("steered")), None)
+        if current is not None:
+            current.setdefault("kernel_message_id", message_id)
+    return current
 
 
 def _compaction_payload(
@@ -612,6 +749,23 @@ def _compaction_payload(
             ))
         ]
     return compacted, tail_count, carried
+
+
+def _compaction_snapshot_state(
+    messages: list[dict[str, Any]], current_message_id: str, *,
+    plan: dict[str, Any] | None, todo: dict[str, Any] | None,
+    open_tool_call_ids: list[str],
+) -> dict[str, Any]:
+    current = next((item for item in reversed(messages)
+                    if item.get("role") == "user"
+                    and item.get("kernel_message_id") == current_message_id), {})
+    return {
+        "plan": copy.deepcopy(plan),
+        "todo": copy.deepcopy(todo),
+        "open_tool_call_ids": sorted(set(open_tool_call_ids)),
+        "turn_context_projection": copy.deepcopy(current.get("turn_context_projection", [])),
+        "turn_context_ref_index": copy.deepcopy(current.get("turn_context_ref_index", [])),
+    }
 
 
 def _tool_call_for_history(call: dict[str, Any]) -> dict[str, Any]:
@@ -788,6 +942,8 @@ class AtlasKernel:
             tool_finalizers = ToolResultFinalizers()
         pause_event = request.pause_event or getattr(runtime, "pause_event", None)
         run_id = str(getattr(runtime, "run_id", None) or uuid.uuid4().hex)
+        # Stable across a resumed run, distinct from any accepted steer rows.
+        kernel_message_id = f"{run_id}:user"
         session_id = request.conversation_id
         selected_model = request.model_id or getattr(runtime, "model", None) or agent._model_mgr.current_model
         state = RunState(run_id=run_id, session_id=session_id)
@@ -968,6 +1124,7 @@ class AtlasKernel:
                 SessionAttachmentIntegrityError, read_session_model_messages,
             )
             restored_snapshot_state: dict[str, Any] = {}
+            canonical_history_read = True
             try:
                 if request.ephemeral:
                     raise LookupError("ephemeral run has no durable session transcript")
@@ -996,8 +1153,27 @@ class AtlasKernel:
             except Exception:
                 log.exception("kernel.session_read_failed", extra={"session_id": session_id})
                 canonical_rows = []
+                canonical_history_read = False
             history = _session_history(canonical_rows) if canonical_rows else copy.deepcopy(request.history)
-            if not any(m.get("role") == "user" and _message_text(m) == request.message for m in history[-3:]):
+            if canonical_history_read and not canonical_rows and history and not request.ephemeral:
+                seed_history = [
+                    copy.deepcopy(item) for item in history
+                    if isinstance(item, dict) and str(item.get("role") or "")
+                    in {"system", "user", "assistant", "tool"}
+                ]
+                if seed_history:
+                    from atlas.engine.session_sync import append_session_messages
+
+                    await asyncio.to_thread(
+                        append_session_messages, self.data_dir / "engine", session_id,
+                        seed_history,
+                    )
+                    canonical_rows = await asyncio.to_thread(
+                        read_session_model_messages, self.data_dir / "engine", session_id,
+                    )
+                    history = _session_history(canonical_rows)
+            existing_current_user = _current_user_message(history, run_id, kernel_message_id)
+            if existing_current_user is None:
                 if not request.ephemeral:
                     from atlas.engine.session_sync import (
                         append_user_message_before_model, persist_session_attachments,
@@ -1011,13 +1187,19 @@ class AtlasKernel:
                     await asyncio.to_thread(
                         append_user_message_before_model, self.data_dir / "engine", session_id,
                         durable_user_content,
-                        {"kernel_run_id": run_id,
-                         **({"turn_context": turn_context} if turn_context else {})},
+                        {"kernel_run_id": run_id, "kernel_message_id": kernel_message_id,
+                         **({"turn_context": turn_context,
+                             "turn_context_sections": _turn_context_sections(request.volatile_context)}
+                            if turn_context else {})},
                     )
                 history.append({"role": "user", "content": request.user_content or request.message,
+                                "kernel_run_id": run_id, "kernel_message_id": kernel_message_id,
+                                **({"turn_context_sections": _turn_context_sections(request.volatile_context)}
+                                   if turn_context else {}),
                                 **({"turn_context": turn_context} if turn_context else {})})
-            elif request.user_content is not None and history and history[-1].get("role") == "user":
-                history[-1]["content"] = request.user_content
+            else:
+                if request.user_content is not None:
+                    existing_current_user["content"] = request.user_content
             # The first outbound request (including route prewarm) must not race
             # the durable user turn write above.
             prewarm_task = asyncio.create_task(_prewarm_route(agent, selected_model))
@@ -1048,9 +1230,7 @@ class AtlasKernel:
                     durable_history = _session_history(canonical_rows)
                     history = copy.deepcopy(durable_history)
                     if request.user_content is not None:
-                        current_user = next((item for item in reversed(history)
-                                             if item.get("role") == "user"
-                                             and _message_text(item) == request.message), None)
+                        current_user = _current_user_message(history, run_id, kernel_message_id)
                         if current_user is not None:
                             current_user["content"] = request.user_content
             except LookupError:
@@ -1087,7 +1267,12 @@ class AtlasKernel:
                 from atlas.expert_harness import scrub
 
                 result = build_prompt(identity=scrub(_live_system_prompt()), history=items, rules="")
-                _attach_turn_context(result.messages, request.message, turn_context)
+                _attach_turn_context(
+                    result.messages, kernel_message_id, turn_context,
+                    _turn_context_sections(request.volatile_context),
+                    restored_snapshot_state.get("turn_context_projection"),
+                    restored_snapshot_state.get("turn_context_ref_index"),
+                )
                 return result
 
             # A model can call EnterPlanMode mid-run. `system_prompt` was
@@ -1194,7 +1379,7 @@ class AtlasKernel:
                 internal_runtime.tool_allow = None
                 result = await self._dispatch(
                     agent, internal_runtime, None, name, arguments, internal_events,
-                    exec_manager=None, nested=True,
+                    exec_manager=None, nested=True, edit_manager=edit_manager,
                 )
                 while not internal_events.empty():
                     event = internal_events.get_nowait()
@@ -1207,7 +1392,9 @@ class AtlasKernel:
             exec_manager = ExecManager(
                 dispatch_managed_process,
                 output_dir=output_dir, run_id=run_id,
-                local_runtime=getattr(agent, "_local_execution", None),
+                local_runtime=(
+                    None if remote_workspace else getattr(agent, "_local_execution", None)
+                ),
                 event_queue=event_queue,
                 max_output_bytes=int(engine_config.get("exec_head_tail_bytes", 10_000)),
             )
@@ -1542,10 +1729,17 @@ class AtlasKernel:
                     tool_name=name, state="dispatching", replay_safe=replay_safe_tool(name),
                 )
                 record("tool_start", tool_call_id=call_id, name=name, arguments=tool_args)
-                return await self._dispatch(
+                result = await self._dispatch(
                     agent, proxy_runtime, call_id, name, tool_args, event_queue,
-                    exec_manager=exec_manager,
+                    exec_manager=exec_manager, edit_manager=edit_manager,
                 )
+                if name == "working_directory" and isinstance(result, dict):
+                    directory = result.get("data", {}).get("cwd") if isinstance(
+                        result.get("data"), dict,
+                    ) else None
+                    if isinstance(directory, str) and directory:
+                        proxy_runtime.working_directory = directory
+                return result
 
             scheduler = ToolScheduler(
                 dispatch_tool,
@@ -1826,7 +2020,8 @@ class AtlasKernel:
                 steer_messages.append(message)
                 messages.append({"role": "user", "content": message})
                 await persist_async("user", message, {
-                    "kernel_run_id": run_id, "steered": True,
+                    "kernel_run_id": run_id, "kernel_message_id": uuid.uuid4().hex,
+                    "steered": True,
                     "steer_event_id": steer["event_id"],
                 })
                 stuck.observe_message(message, role="user")
@@ -1865,9 +2060,7 @@ class AtlasKernel:
                         durable_history = _session_history(canonical_rows)
                         history = copy.deepcopy(durable_history)
                         if request.user_content is not None:
-                            current_user = next((item for item in reversed(history)
-                                                 if item.get("role") == "user"
-                                                 and _message_text(item) == request.message), None)
+                            current_user = _current_user_message(history, run_id, kernel_message_id)
                             if current_user is not None:
                                 current_user["content"] = request.user_content
                         prompt = assemble_prompt(history)
@@ -2069,16 +2262,12 @@ class AtlasKernel:
                                 compact_session_messages, self.data_dir / "engine", session_id,
                                 holder, int(compaction_lease["watermark"]), held_messages,
                                 compacted_messages, tail_count=tail_count, carried_messages=carried,
-                                snapshot_state={
-                                    "plan": plan.plan.to_dict() if plan.plan else None,
-                                    "todo": copy.deepcopy(request.plan_state),
-                                    "open_tool_call_ids": sorted(open_call_ids),
-                                    "provider": str(compaction_route.get("provider") or ""),
-                                    "model": str(compaction_route.get("model") or turn_model),
-                                    "before_tokens": result.before_tokens,
-                                    "after_tokens": result.after_tokens,
-                                    "policy": copy.deepcopy(context_manager.compaction_policy),
-                                },
+                                snapshot_state=_compaction_snapshot_state(
+                                    messages, kernel_message_id,
+                                    plan=plan.plan.to_dict() if plan.plan else None,
+                                    todo=copy.deepcopy(request.plan_state),
+                                    open_tool_call_ids=sorted(open_call_ids),
+                                ),
                             )
                         except Exception as exc:
                             record("compaction_end", holder=holder,
@@ -2089,6 +2278,14 @@ class AtlasKernel:
                                 category="context_budget",
                             ) from exc
                         compaction_lease["holder"] = None
+                        restored_snapshot_state.update(
+                            _compaction_snapshot_state(
+                                messages, kernel_message_id,
+                                plan=plan.plan.to_dict() if plan.plan else None,
+                                todo=copy.deepcopy(request.plan_state),
+                                open_tool_call_ids=sorted(open_call_ids),
+                            )
+                        )
                         transition(RunPhase.COMPACTING)
                         record("compaction", method=result.method,
                                before_tokens=result.before_tokens, after_tokens=result.after_tokens,
@@ -2112,9 +2309,7 @@ class AtlasKernel:
                             durable_history = copy.deepcopy(held_messages)
                             history = copy.deepcopy(held_messages)
                             if request.user_content is not None:
-                                current_user = next((item for item in reversed(history)
-                                                     if item.get("role") == "user"
-                                                     and _message_text(item) == request.message), None)
+                                current_user = _current_user_message(history, run_id, kernel_message_id)
                                 if current_user is not None:
                                     current_user["content"] = request.user_content
                             prompt = assemble_prompt(history)
@@ -2147,7 +2342,7 @@ class AtlasKernel:
                         if item is not None:
                             if item.event_id not in inbox_items_in_flight:
                                 messages.append({
-                                    "role": "developer",
+                                    "role": "user" if lane == "next-turn" else "developer",
                                     "content": f"[Durable {lane} injection]\n{item.content}",
                                 })
                                 inbox_items_in_flight[item.event_id] = item
@@ -2259,6 +2454,7 @@ class AtlasKernel:
                             )
                         ],
                     ]
+                discoverable_tools = list(available_tools)
                 # Keep contracts for the complete executable pool, including
                 # schemas that tool_search may defer and expose later this turn.
                 tool_output_contracts = output_contracts_for_tools(available_tools)
@@ -2306,6 +2502,23 @@ class AtlasKernel:
                             log.debug("kernel.tool_tier", tier=tier, tools=len(pruned))
                     except Exception:
                         log.warning("kernel.tool_pruning_failed", exc_info=True)
+                # Tier pruning is a static prefix-preserving default, but an
+                # explicit tool_search call must make its selected schemas
+                # available on the next model request. Only reuse this
+                # conversation's names and only from the already authorized
+                # executable pool above.
+                from atlas.library.runtime import loaded_tools
+
+                loaded_names = set(loaded_tools(str(getattr(runtime, "conversation_id", "") or "")))
+                if loaded_names:
+                    available_tools = merge_schemas(
+                        available_tools,
+                        [
+                            schema for schema in discoverable_tools
+                            if str((schema.get("function") or schema).get("name", "")) in loaded_names
+                        ],
+                        sort=False,
+                    )
                 if not tool_allow:
                     # Library: rarely used / MCP schemas collapse to a stable name list.
                     from atlas.library.runtime import partition_tools
@@ -2381,24 +2594,118 @@ class AtlasKernel:
                 yield emit("run_status", status="running", text="Calling model")
 
                 reasoning_buffer: list[str] = []
-                preparing_sent: dict[tuple[int, int], tuple[float, int]] = {}
+                preparing_sent: dict[tuple[str, int], tuple[float, int]] = {}
+                active_attempt = 0
+                active_attempt_id = ""
 
                 async def flush_reasoning() -> None:
                     if reasoning_buffer:
                         pending = "".join(reasoning_buffer)
                         reasoning_buffer.clear()
-                        await event_queue.put(emit("thinking", content=pending))
+                        await event_queue.put(emit(
+                            "thinking", content=pending, attempt=active_attempt,
+                            attempt_id=active_attempt_id,
+                        ))
 
                 async def on_text(delta: str) -> None:
                     await flush_reasoning()
                     partial_response_text.append(delta)
-                    yield_event = emit("chunk", content=delta)
+                    yield_event = emit(
+                        "chunk", content=delta, attempt=active_attempt,
+                        attempt_id=active_attempt_id,
+                    )
                     # Async callback cannot yield from its parent generator; queue it
                     # for the loop's event pump.
                     await event_queue.put(yield_event)
 
+                async def persist_attempt_audit(event: dict[str, Any], status: str) -> None:
+                    if request.ephemeral or not session_id:
+                        return
+                    from atlas.engine.session_sync import append_session_event
+
+                    payload = {
+                        "run_id": run_id,
+                        "attempt_id": str(event.get("attempt_id") or ""),
+                        "attempt": int(event.get("attempt") or 1),
+                        "status": status,
+                        "model": str(event.get("model") or wire_model),
+                    }
+                    if status == "discarded":
+                        payload.update({
+                            "category": str(event.get("category") or ""),
+                            "retry": bool(event.get("retry")),
+                            "retry_kind": event.get("retry_kind"),
+                            "retry_number": event.get("retry_number"),
+                            "retry_delay_s": event.get("retry_delay_s"),
+                            "retry_denied_reason": event.get("retry_denied_reason"),
+                            "retry_budget_attempt_limit": event.get("retry_budget_attempt_limit"),
+                            "retry_budget_attempts_used_after_decision": event.get(
+                                "retry_budget_attempts_used_after_decision",
+                            ),
+                            "retry_budget_attempts_remaining": event.get(
+                                "retry_budget_attempts_remaining",
+                            ),
+                            "retry_budget_wait_s_limit": event.get("retry_budget_wait_s_limit"),
+                            "retry_budget_wait_s_used_after_decision": event.get(
+                                "retry_budget_wait_s_used_after_decision",
+                            ),
+                            "retry_budget_wait_s_remaining": event.get(
+                                "retry_budget_wait_s_remaining",
+                            ),
+                            "partial_text": str(event.get("partial_text") or ""),
+                        })
+                    try:
+                        await asyncio.to_thread(
+                            append_session_event, self.data_dir / "engine", str(session_id),
+                            "model/attempt", payload,
+                        )
+                    except Exception:
+                        log.exception("kernel.model_attempt_audit_failed", extra={
+                            "session_id": str(session_id), "attempt_id": payload["attempt_id"],
+                            "status": status,
+                        })
+                        await event_queue.put(emit("run.recovery.notice", data={
+                            "message": "模型尝试审计未能写入会话记录。",
+                        }))
+                        raise ModelCallError(
+                            "model attempt audit persistence failed",
+                            category="attempt_audit", retryable=False,
+                        ) from None
+
                 async def on_event(event: dict[str, Any]) -> None:
+                    nonlocal active_attempt, active_attempt_id
                     kind = event.get("type")
+                    if kind == "attempt_started":
+                        active_attempt = int(event.get("attempt") or 1)
+                        active_attempt_id = str(event.get("attempt_id") or "")
+                        await persist_attempt_audit(event, "started")
+                        return
+                    if kind == "attempt_committed":
+                        await persist_attempt_audit(event, "committed")
+                        await event_queue.put({
+                            "type": "model_attempt_committed",
+                            "attempt": int(event.get("attempt") or 1),
+                            "attempt_id": str(event.get("attempt_id") or ""),
+                        })
+                        return
+                    if kind == "attempt_discarded":
+                        attempt_id = str(event.get("attempt_id") or "")
+                        attempt = int(event.get("attempt") or active_attempt or 1)
+                        await persist_attempt_audit(event, "discarded")
+                        if not attempt_id or attempt_id == active_attempt_id:
+                            partial_response_text.clear()
+                            state.streamed_text = ""
+                            state.streamed_reasoning = ""
+                            state.streamed_refusal = ""
+                            state.streamed_tool_calls.clear()
+                            reasoning_buffer.clear()
+                        for key in [key for key in preparing_sent if key[0] == attempt_id]:
+                            preparing_sent.pop(key, None)
+                        await event_queue.put(emit(
+                            "message.rollback", attempt=attempt, attempt_id=attempt_id,
+                            category=str(event.get("category") or ""),
+                        ))
+                        return
                     if kind == "service_tier_downgraded":
                         await event_queue.put(emit("run.recovery.notice", data={
                             "message": f"模型 {event.get('model') or ''} 未提供快速服务档，本轮改用普通服务档。",
@@ -2416,7 +2723,10 @@ class AtlasKernel:
                         pending = "".join(reasoning_buffer)
                         if len(pending) >= 80 or "\n" in delta:
                             reasoning_buffer.clear()
-                            await event_queue.put(emit("thinking", content=pending))
+                            await event_queue.put(emit(
+                                "thinking", content=pending, attempt=attempt,
+                                attempt_id=str(event.get("attempt_id") or active_attempt_id),
+                            ))
                     elif kind == "refusal_delta":
                         state.streamed_refusal += delta
                     elif kind == "tool_call_delta":
@@ -2432,14 +2742,16 @@ class AtlasKernel:
                         name = fragments.get("name", "")
                         if name:
                             chars = len(fragments.get("arguments", ""))
-                            sent = preparing_sent.get((attempt, index))
+                            attempt_id = str(event.get("attempt_id") or active_attempt_id)
+                            sent = preparing_sent.get((attempt_id, index))
                             now = time.monotonic()
                             if sent is None or (chars > sent[1] and (
                                     now - sent[0] >= 0.25 or chars - sent[1] >= 2048)):
-                                preparing_sent[(attempt, index)] = (now, chars)
+                                preparing_sent[(attempt_id, index)] = (now, chars)
                                 await flush_reasoning()
                                 await event_queue.put(emit(
                                     "tool_preparing", index=index, attempt=attempt,
+                                    attempt_id=attempt_id,
                                     call_id=fragments.get("id", ""), name=name, chars=chars,
                                     preview=fragments.get("arguments", "")[-200:],
                                 ))
@@ -2500,6 +2812,8 @@ class AtlasKernel:
                 model_interrupted_by_steer = False
                 response: ModelCallResult | None = None
                 while True:
+                    if state.phase == RunPhase.AWAITING_MODEL_RESPONSE:
+                        transition(RunPhase.STREAMING)
                     partial_response_text.clear()
                     state.streamed_text = ""
                     state.streamed_reasoning = ""
@@ -2567,6 +2881,20 @@ class AtlasKernel:
                         else:
                             model_task.cancel()
                             await asyncio.gather(model_task, return_exceptions=True)
+                            if queue_get is not None and not queue_get.done():
+                                queue_get.cancel()
+                            if queue_get is not None:
+                                await asyncio.gather(queue_get, return_exceptions=True)
+                                if not queue_get.cancelled():
+                                    try:
+                                        queued_event = queue_get.result()
+                                    except BaseException:
+                                        pass
+                                    else:
+                                        yield queued_event
+                                queue_get = None
+                            while not event_queue.empty():
+                                yield event_queue.get_nowait()
                             raise
                     finally:
                         pending_tasks = [queue_get, cancel_waiter]
@@ -2596,9 +2924,7 @@ class AtlasKernel:
                                 durable_history = _session_history(canonical_rows)
                                 history = copy.deepcopy(durable_history)
                                 if request.user_content is not None:
-                                    current_user = next((item for item in reversed(history)
-                                                         if item.get("role") == "user"
-                                                         and _message_text(item) == request.message), None)
+                                    current_user = _current_user_message(history, run_id, kernel_message_id)
                                     if current_user is not None:
                                         current_user["content"] = request.user_content
                                 prompt = assemble_prompt(history)
@@ -3263,6 +3589,7 @@ class AtlasKernel:
     async def _dispatch(
         self, agent: Any, runtime: Any, call_id: str | None, name: str, arguments: dict[str, Any],
         event_queue: asyncio.Queue[Any], *, exec_manager: Any = None, nested: bool = False,
+        edit_manager: Any = None,
     ) -> Any:
         tool_mode = getattr(runtime, "tool_mode", "native") or "native"
         if tool_mode == "ptc" and nested and name in {"execute_code", "run_code"}:
@@ -3303,7 +3630,7 @@ class AtlasKernel:
                 else:
                     result = await self._dispatch(
                         agent, runtime, child_id, child_name, dict(child_arguments), event_queue,
-                        exec_manager=exec_manager, nested=True,
+                        exec_manager=exec_manager, nested=True, edit_manager=edit_manager,
                     )
                 await event_queue.put({
                     "type": "tool_result", "id": child_id, "name": child_name,
@@ -3339,7 +3666,7 @@ class AtlasKernel:
             internal_events: asyncio.Queue[Any] = asyncio.Queue()
             result = await self._dispatch(
                 agent, runtime, call_id, target, args, internal_events,
-                exec_manager=exec_manager, nested=nested,
+                exec_manager=exec_manager, nested=nested, edit_manager=edit_manager,
             )
             while not internal_events.empty():
                 event = internal_events.get_nowait()
@@ -3489,6 +3816,60 @@ class AtlasKernel:
             except (OSError, ValueError) as exc:
                 return {"content": str(exc), "is_error": True, "outcome": "failed"}
             return {"content": result["content"], "data": result["data"], "outcome": "completed"}
+        if name == "read_file":
+            workspace = str(getattr(runtime, "workspace", "") or "").strip()
+            raw_path = str(arguments.get("path") or "").strip()
+            if not raw_path:
+                return {"content": "path is required.", "is_error": True, "outcome": "failed"}
+            if workspace.startswith("ssh://"):
+                try:
+                    from atlas.ssh import ssh_workspaces
+
+                    content = await ssh_workspaces.read_workspace_file(
+                        workspace, raw_path,
+                        offset=arguments.get("offset", 0),
+                        limit=arguments.get("limit"),
+                        observation_owner_id=str(
+                            getattr(runtime, "conversation_id", "") or ""
+                        ) or None,
+                    )
+                except PermissionError as exc:
+                    return {"content": str(exc), "is_error": True, "outcome": "denied"}
+                except ValueError as exc:
+                    return {"content": str(exc), "is_error": True, "outcome": "failed"}
+                except Exception as exc:
+                    return {"content": f"Remote file read failed ({type(exc).__name__}).",
+                            "is_error": True, "outcome": "failed"}
+                return {"content": content, "outcome": "completed"}
+            if not workspace:
+                return {"content": "read_file requires an active workspace.",
+                        "is_error": True, "outcome": "denied"}
+            if edit_manager is None:
+                return {"content": "read_file has no workspace-scoped file manager.",
+                        "is_error": True, "outcome": "denied"}
+            try:
+                root = Path(workspace).expanduser().resolve()
+                requested = Path(raw_path).expanduser()
+                target = (requested if requested.is_absolute() else root / requested).resolve()
+                try:
+                    target.relative_to(root)
+                except ValueError:
+                    return {"content": "File is outside the active workspace.",
+                            "is_error": True, "outcome": "denied"}
+                content = await asyncio.to_thread(
+                    edit_manager.read_file_page,
+                    target,
+                    offset=arguments.get("offset", 0),
+                    limit=arguments.get("limit"),
+                )
+            except PermissionError as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "denied"}
+            except ValueError as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+            except (OSError, TypeError) as exc:
+                return {"content": f"{type(exc).__name__}: {exc}",
+                        "is_error": True, "outcome": "failed"}
+            return {"content": content, "outcome": "completed"}
         if name in {"glob", "grep"}:
             from atlas.tools.workspace_queries import glob_workspace, grep_workspace
 
@@ -3528,11 +3909,18 @@ class AtlasKernel:
                 "lsp_document_symbols": "document_symbols",
             }[name]
             try:
+                remote_world = None
+                if workspace.startswith("ssh://"):
+                    from atlas.ssh import ssh_workspaces
+                    remote_world = await ssh_workspaces.make_lsp_workspace(
+                        workspace, trusted=bool(getattr(runtime, "workspace_trusted", False)),
+                    )
                 data = await asyncio.to_thread(
                     query_lsp, workspace, operation=operation,
                     path=arguments.get("path"), line=arguments.get("line"),
                     character=arguments.get("character"),
                     include_declaration=bool(arguments.get("includeDeclaration", True)),
+                    remote_world=remote_world,
                 )
             except (OSError, RuntimeError, ValueError) as exc:
                 return {"content": str(exc), "is_error": True, "outcome": "failed"}
@@ -3693,30 +4081,29 @@ class AtlasKernel:
                 "is_error": bool(result.get("is_error")) if isinstance(result, dict) else False,
                 "outcome": "failed" if isinstance(result, dict) and result.get("is_error") else "completed",
             }
-        if name in {"session_event_search", "session_trace", "session_event_trace", "session_event_read"}:
+        if name in {"session_event_search", "session_trace", "session_event_trace", "session_event_read",
+                    "session_context_search", "session_context_read"}:
             # Durable session reads. The handler derives the workspace gate from
             # the *session* row, never from model-supplied arguments, so a tool
             # call cannot widen its own authority. Registered here because these
             # existed only on the legacy agent path: the kernel advertised the
             # schemas and then answered "unknown tool" on every call.
-            from atlas.agent.session_queries import execute_query
+            from atlas.agent.session_queries import dispatch_session_query, reference_snapshot
             from atlas.config import DATA_ROOT
-            from atlas.engine.session_sync import _open_db
 
             workspace = str(getattr(runtime, "workspace", "") or "")
             try:
-                with _open_db(DATA_ROOT / "engine") as session_db:
-                    result = await asyncio.to_thread(
-                        execute_query, session_db, name, dict(arguments or {}),
-                        workspace=workspace,
-                        current_session=str(getattr(runtime, "conversation_id", "") or ""),
-                    )
+                result = await asyncio.to_thread(
+                    dispatch_session_query, DATA_ROOT / "engine", name, dict(arguments or {}),
+                    workspace=workspace,
+                    current_session=str(getattr(runtime, "conversation_id", "") or ""),
+                )
             except PermissionError as exc:
                 return {"content": str(exc), "is_error": True, "outcome": "denied"}
             except (ValueError, KeyError, OSError) as exc:
                 return {"content": f"{type(exc).__name__}: {exc}", "is_error": True,
                         "outcome": "failed"}
-            return {"content": json.dumps(result, ensure_ascii=False), "data": result,
+            return {"content": reference_snapshot(result), "data": result,
                     "outcome": "completed"}
         if name == "memory_search":
             from atlas.memory.library import get_library
@@ -4036,7 +4423,6 @@ class AtlasKernel:
                     "data": result, "outcome": "completed"}
         if name == "wait_for_environment":
             import time
-            from pathlib import Path
 
             target = Path(str(arguments.get("path") or getattr(runtime, "workspace", ""))).expanduser()
             timeout = max(0.0, min(60.0, float(arguments.get("timeout_seconds", 10))))
@@ -4248,10 +4634,19 @@ class AtlasKernel:
         if name in {"read_file", "read", "local_file"} and not event.get("is_error"):
             workspace = str(getattr(runtime, "workspace", "") or "")
             path = arguments.get("path") or arguments.get("file_path")
-            if workspace and path and not workspace.startswith("ssh://"):
+            if workspace and path:
                 try:
                     from atlas.tools.workspace_lsp import query_lsp
-                    verdict = await asyncio.to_thread(query_lsp, workspace, operation="diagnostics", path=str(path))
+                    remote_world = None
+                    if workspace.startswith("ssh://"):
+                        from atlas.ssh import ssh_workspaces
+                        remote_world = await ssh_workspaces.make_lsp_workspace(
+                            workspace, trusted=bool(getattr(runtime, "workspace_trusted", False)),
+                        )
+                    verdict = await asyncio.to_thread(
+                        query_lsp, workspace, operation="diagnostics", path=str(path),
+                        remote_world=remote_world,
+                    )
                     diagnostics = verdict.get("diagnostics", []) if verdict.get("available") else []
                     if diagnostics:
                         citation = str(verdict.get("path") or path)

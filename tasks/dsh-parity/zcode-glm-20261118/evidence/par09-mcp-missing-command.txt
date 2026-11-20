@@ -1,0 +1,16 @@
+SCENARIO missing-command
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+PHASE missing_command_start
+2026-11-19 05:09:14 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-exec05-mcp\.tmp\par09-mcp-real\data\missing-command\config\atlas.toml
+2026-11-19 05:09:14 [info     ] mcp.starting                   count=1 names=['missing']
+2026-11-19 05:09:14 [warning  ] mcp.background_start_failed    reason="启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)"
+PHASE missing_command_failed {"available": false, "blocking_reason": "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)", "servers": [{"name": "missing", "enabled": true, "connected": false, "state": "failed", "tool_discovery": "failed", "tool_count": 0, "blocking_reason": "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)"}]}
+CHECK PASS missing_command: settles to state=failed :: {'row': {'name': 'missing', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'failed', 'tool_discovery': 'failed', 'tool_count': 0, 'blocking_reason': "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)"}, 'elapsed': 0.7039999999979045}
+CHECK PASS missing_command: runtime fail-closed :: False
+CHECK PASS missing_command: blocking_reason present :: 启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)
+CHECK PASS missing_command: reason omits 'missing-command-secret' :: 启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)
+CHECK PASS missing_command: reason omits '--token' :: 启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)
+CHECK PASS missing_command: reason omits 'absolute-arg-path' :: 启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)
+CHECK PASS missing_command: startup progress ends failed :: {'server': 'missing', 'state': 'failed', 'message': "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)", 'transport': 'stdio', 'timestamp': '2026-11-18T21:09:14.525368+00:00'}
+CHECK PASS missing_command: state remains failed, never returns to starting :: {'name': 'missing', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'failed', 'tool_discovery': 'failed', 'tool_count': 0, 'blocking_reason': "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)"}
+RESULT missing-command checks=8 failed=0

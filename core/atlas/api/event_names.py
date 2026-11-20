@@ -63,6 +63,7 @@ DESKTOP_EVENTS: Final[tuple[str, ...]] = (
     "run.failed",
     "run.cancelled",
     "message.delta",
+    "message.rollback",
     "message.completed",
     "tool.preparing",
     "tool.started",

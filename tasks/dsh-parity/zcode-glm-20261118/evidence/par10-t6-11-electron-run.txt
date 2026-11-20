@@ -1,0 +1,7 @@
+esbuild exit: 0
+backend port: 62855
+backend ready: 1
+electron exit: 0
+backend exit: 143
+{"result": "PASS", "problems": [], "screenshots": ["par10-t6-11-electron-00-initial.png", "par10-t6-11-electron-01-real-key-open.png", "par10-t6-11-electron-02-overlay-blocks-app-shortcut.png", "par10-t6-11-electron-03-toggle-close.png", "par10-t6-11-electron-04-settings-open.png", "par10-t6-11-electron-05-embedded-open.png", "par10-t6-11-electron-06-search-diff.png", "par10-t6-11-electron-07-overlay-recorded.png", "par10-t6-11-electron-08-reference-closed.png", "par10-t6-11-electron-09-recording-suppressed.png", "par10-t6-11-electron-10-settings-closed.png", "par10-t6-11-electron-11-blocked-modal.png", "par10-t6-11-electron-12-overlay-blocks-settings-key.png", "par10-t6-11-electron-13-final-tasks-closed.png", "par10-t6-11-electron-14-anchor-disconnect.png"]}
+validate exit: 0

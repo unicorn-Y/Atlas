@@ -1,0 +1,4 @@
+SSH/LSP world 配对结论(ZC-DSH-WATCH-05)
+- tests/test_ssh_execution_world.py 与 tests/test_lsp_ssh_world.py 为在途未跟踪文件(干净 wave3@060071ab 无此文件),无法做同 nodeid 配对;
+- 在途树 4 项失败(cancel intent late handle×2 / disconnect unknown / LSP diagnostics forward)不能归因于在途改动,也不能归因于基线——记录为"仅在途树可观测";
+- 环境差异:在途树 core/atlas/ssh.py 为原作者未提交修改版;干净树为 HEAD 版本。

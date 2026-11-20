@@ -232,6 +232,145 @@ async def _resume_interrupted_runs(manager: Any) -> None:
 # Lifespan (replaces deprecated @app.on_event)
 # ---------------------------------------------------------------------------
 
+_LIFESPAN_SERVICE_DEPENDENCIES: dict[str, tuple[str, ...]] = {
+    # These edges mirror constructor arguments in this lifespan. Keep this list
+    # limited to references an object actually retains for its operation.
+    "computer_use": ("cua_backend",),
+    "orchestrator": (
+        "model_mgr", "memory", "mcp_client", "local_execution",
+        "computer_use", "agent_backend_host", "web_runtime", "skill_mgr",
+        "projects", "custom_tools",
+    ),
+    "gateway_bridge": ("channel_manager",),
+    "group_service": ("persistent_agents",),
+    "group_orchestrator": ("group_service",),
+    "skill_proposals": ("skill_registry", "agent_skill_collections"),
+}
+
+
+def _lifespan_service_disposer(name: str, value: Any) -> Any:
+    """Build the real resource disposer for a closeable AppServices entry."""
+    if name == "channel_manager":
+        return value.close
+    if name == "gateway_bridge":
+        return value.sessions.close
+    if name == "browser_use":
+        async def close_browser_sessions() -> None:
+            for session_id in list(value._sessions):
+                await value.close(session_id)
+        return close_browser_sessions
+    method_name = {
+        "computer_use": "shutdown",
+        "cua_backend": "close",
+        "heartbeat_service": "aclose",
+        "local_execution": "shutdown",
+        "agent_backend_host": "shutdown",
+        "durable": "stop",
+        "projects": "close",
+        "usage_ledger": "close",
+        "memory": "close",
+    }.get(name)
+    if method_name is not None:
+        return getattr(value, method_name)
+    if name == "mcp_client":
+        async def stop_mcp_client() -> None:
+            active = globals().get("mcp_client")
+            deferred_type = globals().get("_DeferredMCPClient")
+            target = active if active is not None and active is not value else value
+            if deferred_type is not None and isinstance(target, deferred_type):
+                return
+            stop = getattr(target, "stop", None)
+            if callable(stop):
+                result = stop()
+                if hasattr(result, "__await__"):
+                    await result
+        return stop_mcp_client
+    return None
+
+
+def _register_lifespan_services(services: AppServices) -> None:
+    """Register existing lifespan instances after their real dependencies."""
+    excluded = {
+        "service_registry", "session_projections", "tool_result_finalizers",
+        "startup", "runtime_mgr",
+    }
+    values = {
+        field.name: getattr(services, field.name, None)
+        for field in dataclasses.fields(services)
+        if field.name not in excluded and getattr(services, field.name, None) is not None
+    }
+    # Detect every provider/instance mismatch before adding any core entries;
+    # a failed composition root must not leave a partial graph behind.
+    for name, value in values.items():
+        if not services.service_registry.has(name):
+            continue
+        owner = services.service_registry.owner_for(name)
+        try:
+            registered_value = services.service_registry.resolve(name)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Lifespan service {name!r} conflicts with provider {owner!r}"
+            ) from exc
+        dependencies = tuple(_LIFESPAN_SERVICE_DEPENDENCIES.get(name, ()))
+        registered_dependencies = tuple(
+            services.service_registry.dependencies().get(name, ())
+        )
+        disposer = _lifespan_service_disposer(name, value)
+        if owner != "core:lifespan" or registered_value is not value:
+            raise RuntimeError(
+                f"Lifespan service {name!r} conflicts with provider {owner!r}; "
+                "the AppServices instance and registry authority must be identical"
+            )
+        if registered_dependencies != dependencies:
+            raise RuntimeError(
+                f"Lifespan service {name!r} registry dependencies do not match "
+                "its production constructor"
+            )
+        if services.service_registry.has_disposer(name) != (disposer is not None):
+            raise RuntimeError(
+                f"Lifespan service {name!r} registry teardown does not match "
+                "its production resource lifecycle"
+            )
+    pending = list(values)
+    registered = set(services.service_registry.snapshot())
+    while pending:
+        ready = [
+            name for name in pending
+            if all(dep in registered or dep not in values
+                   for dep in _LIFESPAN_SERVICE_DEPENDENCIES.get(name, ()))
+        ]
+        if not ready:
+            unresolved = {
+                name: [dep for dep in _LIFESPAN_SERVICE_DEPENDENCIES.get(name, ())
+                       if dep not in registered]
+                for name in pending
+            }
+            raise RuntimeError(f"Invalid lifespan service dependency graph: {unresolved}")
+        for name in ready:
+            dependencies = _LIFESPAN_SERVICE_DEPENDENCIES.get(name, ())
+            missing = [dep for dep in dependencies if dep not in registered]
+            if missing:
+                raise RuntimeError(f"Lifespan service {name!r} is missing dependencies {missing}")
+            if name in registered:
+                pending.remove(name)
+                continue
+            disposer = _lifespan_service_disposer(name, values[name])
+            try:
+                value = values[name]
+                services.service_registry.register(
+                    name, (lambda v=value: v), owner="core:lifespan",
+                    depends_on=dependencies,
+                    disposer=disposer,
+                )
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"Lifespan service {name!r} registration raced with another provider"
+                ) from exc
+            if services.service_registry.has(name):
+                registered.add(name)
+            pending.remove(name)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown lifecycle.
@@ -706,20 +845,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # the registry records who provided each one so a teardown can remove
         # exactly one contributor's services. Each factory returns the instance
         # already bound, so resolve() can never build a second copy.
-        for _field in dataclasses.fields(services):
-            _name = _field.name
-            if _name in {"service_registry", "session_projections",
-                         "tool_result_finalizers", "startup", "runtime_mgr"}:
-                continue
-            _value = getattr(services, _name, None)
-            if _value is None:
-                continue
-            try:
-                services.service_registry.register(
-                    _name, (lambda v=_value: v), owner="core:lifespan",
-                )
-            except ValueError:
-                pass  # a plugin already registered this name with its own owner
+        _register_lifespan_services(services)
         manager.services = services
 
         # At this point config/model managers, the orchestrator, and built-in
@@ -1019,11 +1145,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 app, locals(), routes_before_lifespan_extensions,
             )
         finally:
-            # Teardown hygiene: a stopped runtime must not keep advertising its
-            # services. Leaving ``manager.services`` pointing at the closed stores
-            # let late readers (and later TestClient lifespans in-process) consume
-            # dead components silently instead of failing on the missing seam.
-            manager.services = None
+            try:
+                # If shutdown_lifespan_components failed before reaching its
+                # owner closure, still await dependent plugin disposers before
+                # this lifespan makes its services unavailable.
+                await services.service_registry.unregister_owner_async("core:lifespan")
+            except ExceptionGroup:
+                log.exception("service_registry.final_teardown_failed")
+            finally:
+                # A stopped runtime must not advertise its closed services.
+                manager.services = None
         if cancelled:
             raise asyncio.CancelledError
 

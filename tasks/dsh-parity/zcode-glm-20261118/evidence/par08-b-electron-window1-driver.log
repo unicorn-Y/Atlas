@@ -1,0 +1,19 @@
+
+[2026-11-18T19:31:58.849Z] [window1] loading http://127.0.0.1:8814/
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[2026-11-18T19:31:59.479Z] [window1] console(2): %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+[2026-11-18T19:31:59.675Z] [window1] snapshot ready: status="点按键开始录入。Esc 取消，Backspace 或 Delete 清除当前绑定。" conflict=null revision=0a0dfafa80bc778d6694419b263228e6b19df813937dc35929d978c9f3c5ec9d
+[2026-11-18T19:31:59.677Z] [window1] window2 ready; clicking palette binding row
+[2026-11-18T19:31:59.682Z] [window1] click palette binding: {"ok":true,"label":"修改「搜索与命令」的第 1 组快捷键"}
+[2026-11-18T19:31:59.891Z] [window1] dispatch Ctrl+Alt+U: {"ok":true,"dispatched":false,"defaultPrevented":true,"label":"修改「搜索与命令」的第 1 组快捷键"}
+[2026-11-18T19:32:00.090Z] [window1] snapshot saved: status="快捷键已保存到 keybindings.json" conflict=null revision=b0124b826c92ace623ae221c125f6abbd3d332078c1a9a8cf497a44b8e9b3feb
+[2026-11-18T19:32:00.091Z] [window1] window1 save done; waiting for window2 retry
+[2026-11-18T19:32:00.845Z] [window1] snapshot after-window2-retry: status="快捷键已保存到 keybindings.json" conflict=null revision=17d2c1acd0777dff6a551e21bd2d9f0af44e4b09410640cc17e947427426f63e
+[2026-11-18T19:32:00.845Z] [window1] window1 complete

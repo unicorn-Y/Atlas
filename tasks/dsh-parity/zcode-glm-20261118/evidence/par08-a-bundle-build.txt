@@ -1,0 +1,5 @@
+
+  bundle.js  1.1mb
+
+Done in 1905ms
+PAR-08-A fixture bundle built -> D:\Atlas\.worktrees\zcode-exec06-csv-preview\.tmp\par08-probe\bundle.js

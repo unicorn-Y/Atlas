@@ -15,16 +15,20 @@ import sys
 import time
 import uuid
 
+import asyncssh
 import httpx
 import pytest
 import pytest_asyncio
 from websockets.asyncio.client import connect
 
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, StallMidStream, write_atlas_home
+from tests.fakes.fake_llm_provider import (
+    DropMidStream, FakeLLMServer, StallMidStream, Text, ToolCall, write_atlas_home,
+)
 
 
 class IsolatedBackend:
-    def __init__(self, root, fake, *, fake_mcp=False):
+    def __init__(self, root, fake, *, fake_mcp=False, extra_env=None, extra_config="",
+                 with_fallback_model=False):
         self.root, self.fake = root, fake
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -34,15 +38,41 @@ class IsolatedBackend:
         self.events = []
         data = root / "atlas"
         (data / "config").mkdir(parents=True)
-        (data / "config/atlas.toml").write_text(
-            '[models]\ndefault="fake-model"\n'
-            f'[models.gateway]\nbase_url="{fake.base_url}"\napi_key="sk-fake-e2e"\n'
-            '[[models.custom]]\nid="fake-model"\nname="Fake fixture"\nprovider="openai"\nlitellm_model="openai/fake-model"\nmax_output_tokens=512\n'
-            '[agent]\nengine="hermes"\nverify_before_stop=false\n'
-            '[tools]\nauto_start=[]\n[tools.servers]\n'
-            '[scheduler]\nenabled=false\n', encoding="utf-8",
+        (data / "data").mkdir()
+        (data / "data" / "user-settings.json").write_text(
+            json.dumps({"fallback_chain": []}), encoding="utf-8",
         )
-        write_atlas_home(data / "engine", fake.base_url, extra_config="auxiliary:\n  title_generation:\n    model_upgrade_enabled: false\n")
+        fallback = ["fallback-model"] if with_fallback_model else ["fake-model"]
+        custom_models = (
+            '[[models.custom]]\nid="fake-model"\nname="Fake fixture"\nprovider="openai"\n'
+            f'base_url="{fake.base_url}"\nlitellm_model="openai/fake-model"\nmax_output_tokens=512\n'
+        )
+        if with_fallback_model:
+            custom_models += (
+                '[[models.custom]]\nid="fallback-model"\nname="Fake fallback fixture"\nprovider="openai"\n'
+                f'base_url="{fake.base_url}"\nlitellm_model="openai/fallback-model"\nmax_output_tokens=512\n'
+            )
+        custom_models = (
+            '[[models.custom]]\nid="fake-model"\nname="Fake fixture"\nprovider="openai"\n'
+            f'base_url="{fake.base_url}"\nlitellm_model="openai/fake-model"\nmax_output_tokens=512\n'
+        )
+        if with_fallback_model:
+            custom_models += (
+                '[[models.custom]]\nid="fallback-model"\nname="Fake fallback fixture"\nprovider="openai"\n'
+                f'base_url="{fake.base_url}"\nlitellm_model="openai/fallback-model"\nmax_output_tokens=512\n'
+            )
+        (data / "config/atlas.toml").write_text(
+            f'[models]\ndefault="fake-model"\nfallback={json.dumps(fallback)}\n'
+            f'[models.gateway]\nbase_url="{fake.base_url}"\napi_key="sk-fake-e2e"\n'
+            + custom_models
+            + '[agent]\nengine="hermes"\nverify_before_stop=false\n'
+            '[tools]\nauto_start=[]\n[tools.servers]\n'
+            '[scheduler]\nenabled=false\n' + extra_config, encoding="utf-8",
+        )
+        write_atlas_home(data / "engine", fake.base_url, extra_config=(
+            "auxiliary:\n  title_generation:\n    model_upgrade_enabled: false\n"
+            "models:\n  fallback: []\n"
+        ))
         if fake_mcp:
             config_path = data / "config/atlas.toml"
             config_path.write_text(config_path.read_text().replace("auto_start=[]", 'auto_start=["c1-fake"]'), encoding="utf-8")
@@ -69,6 +99,15 @@ class IsolatedBackend:
         for key in list(env):
             if key.upper().endswith("_PROXY"):
                 env.pop(key, None)
+        # Keep the child process fail-closed if a model fallback escapes the
+        # loopback fixture. NO_PROXY preserves the local test provider/API.
+        env.update(
+            HTTP_PROXY="http://127.0.0.1:1", HTTPS_PROXY="http://127.0.0.1:1",
+            ALL_PROXY="http://127.0.0.1:1", NO_PROXY="127.0.0.1,localhost",
+            http_proxy="http://127.0.0.1:1", https_proxy="http://127.0.0.1:1",
+            all_proxy="http://127.0.0.1:1", no_proxy="127.0.0.1,localhost",
+        )
+        env.update(extra_env or {})
         for key in ("HERMES_SCRATCH_DIR",):
             env.pop(key, None)
         launch_root = root / "backend-cwd"
@@ -161,25 +200,549 @@ async def backend(tmp_path):
             await server.close()
 
 
+@pytest_asyncio.fixture
+async def retry_backend(tmp_path):
+    (tmp_path / "workspace").mkdir()
+    with FakeLLMServer() as fake:
+        server = IsolatedBackend(tmp_path, fake, extra_env={
+            "HERMES_STREAM_RETRIES": "1",
+            "ATLAS_MODEL_RETRY_BUDGET_ATTEMPTS": "2",
+            "ATLAS_MODEL_RETRY_BUDGET_SECONDS": "30",
+        })
+        try:
+            await server.ready()
+            yield server
+        finally:
+            await server.close()
+
+
+@pytest_asyncio.fixture
+async def fallback_backend(tmp_path):
+    (tmp_path / "workspace").mkdir()
+    with FakeLLMServer() as fake:
+        server = IsolatedBackend(
+            tmp_path, fake, with_fallback_model=True, extra_env={
+                "CLAUDE_CODE_MAX_RETRIES": "0",
+                "ATLAS_MODEL_RETRY_BUDGET_ATTEMPTS": "2",
+                "ATLAS_MODEL_RETRY_BUDGET_SECONDS": "30",
+            },
+        )
+        try:
+            await server.ready()
+            yield server
+        finally:
+            await server.close()
+
+
 @pytest.mark.asyncio
+@pytest.mark.unit
 async def test_websocket_multiturn_keeps_tool_transcript(backend):
     target = backend.root / "workspace/fixture.txt"
     target.write_text("TRANSCRIPT_FIXTURE", encoding="utf-8")
-    first = True
+    calls = 0
     def responder(record):
-        nonlocal first
-        if first:
-            first = False
-            return ToolCall("read_file", {"path": str(target)})
+        nonlocal calls
+        calls += 1
+        offered = {
+            item.get("function", {}).get("name")
+            for item in record.get("body", {}).get("tools", [])
+        }
+        if calls == 1:
+            assert "grep" in offered, f"fake provider must only call an offered tool; offered={sorted(offered)}"
+            return ToolCall("grep", {
+                "pattern": "TRANSCRIPT_FIXTURE", "path": "fixture.txt", "literal": True,
+            })
         return Text("first turn complete")
     backend.fake._responder = responder
-    conversation, events = await backend.run("read the fixture")
     before = len(backend.fake.main_requests())
+    conversation, events = await backend.run("read the fixture")
+    turn_requests = backend.fake.main_requests()[before:]
+    assert len(turn_requests) == 2
+    assert any(item["role"] == "tool" and "TRANSCRIPT_FIXTURE" in str(item["content"])
+               for item in turn_requests[1]["messages"])
     await backend.run("continue with prior evidence", conversation=conversation)
-    request = backend.fake.main_requests()[before]["messages"]
+    request = backend.fake.main_requests()[before + len(turn_requests)]["messages"]
     assert any(item.get("tool_calls") for item in request)
     assert any(item["role"] == "tool" and "TRANSCRIPT_FIXTURE" in str(item["content"]) for item in request)
     assert {"tool.started", "tool.completed", "message.delta", "run.completed"} <= {e["event"] for e in events}
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_websocket_read_file_is_offered_executed_and_replayed(backend):
+    target = backend.root / "workspace/fixture.txt"
+    target.write_text("FULL_FILE_READ_FIXTURE\nsecond line\n", encoding="utf-8")
+    calls = 0
+
+    def responder(record):
+        nonlocal calls
+        calls += 1
+        offered = {
+            item.get("function", {}).get("name")
+            for item in record.get("body", {}).get("tools", [])
+        }
+        if calls == 1:
+            assert "tool_search" in offered
+            return ToolCall("tool_search", {"query": "select:read_file"})
+        if calls == 2:
+            assert "read_file" in offered, f"tool_search must load read_file before invocation; offered={sorted(offered)}"
+            return ToolCall("read_file", {"path": str(target)})
+        return Text("read complete")
+
+    backend.fake._responder = responder
+    before = len(backend.fake.main_requests())
+    conversation, events = await backend.run("read the full fixture")
+    first_turn = backend.fake.main_requests()[before:]
+    assert len(first_turn) == 3
+    tool_messages = [item for item in first_turn[2]["messages"] if item.get("role") == "tool"]
+    read_result = next((str(item.get("content")) for item in tool_messages
+                        if item.get("name") == "read_file"), "<missing read result>")
+    trace = [line for line in (backend.root / "backend.log").read_text(
+        encoding="utf-8", errors="replace").splitlines()
+        if "read_file" in line or "Traceback" in line or "Exception" in line][-12:]
+    assert "FULL_FILE_READ_FIXTURE" in read_result and "second line" in read_result, (read_result, trace)
+
+    await backend.run("continue with the file contents", conversation=conversation)
+    replay = backend.fake.main_requests()[before + len(first_turn)]["messages"]
+    assert any(item.get("tool_calls") for item in replay)
+    assert any(item.get("role") == "tool" and "FULL_FILE_READ_FIXTURE" in str(item.get("content"))
+               for item in replay)
+    assert any(item["event"] == "tool.completed" and item["data"].get("name") == "read_file"
+               for item in events)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_websocket_read_file_denies_absolute_path_outside_workspace(backend):
+    private = backend.root / "outside.txt"
+    private.write_text("OUTSIDE_WORKSPACE_SECRET_FIXTURE", encoding="utf-8")
+    calls = 0
+
+    def responder(record):
+        nonlocal calls
+        calls += 1
+        offered = {
+            item.get("function", {}).get("name")
+            for item in record.get("body", {}).get("tools", [])
+        }
+        if calls == 1:
+            assert "tool_search" in offered
+            return ToolCall("tool_search", {"query": "select:read_file"})
+        if calls == 2:
+            assert "read_file" in offered
+            return ToolCall("read_file", {"path": str(private)})
+        return Text("denial observed")
+
+    backend.fake._responder = responder
+    _conversation, _events = await backend.run("try the file path outside the workspace")
+    requests = backend.fake.main_requests()
+    denied_request = requests[2]["messages"]
+    tool_results = [item for item in denied_request if item.get("role") == "tool"]
+    assert any("outside the active workspace" in str(item.get("content")) for item in tool_results)
+    assert all("OUTSIDE_WORKSPACE_SECRET_FIXTURE" not in str(item.get("content"))
+               for item in tool_results)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_websocket_ssh_read_file_uses_authority_and_replays_tool_result(backend):
+    key = asyncssh.generate_private_key("ssh-ed25519")
+    ssh_root = backend.root / "ssh-remote-root"
+    ssh_root.mkdir()
+    (ssh_root / "fixture.txt").write_text(
+        "SSH_API_READ_FIXTURE\nsecond remote line\n", encoding="utf-8",
+    )
+    private_key = backend.root / "userprofile" / ".ssh" / "id_ed25519"
+    private_key.parent.mkdir(parents=True, exist_ok=True)
+    private_key.write_bytes(key.export_private_key("openssh"))
+    host_key_line = key.export_public_key("openssh").decode("ascii").split()
+    known_hosts = private_key.parent / "known_hosts"
+    known_hosts.write_text(f"c1loop {host_key_line[0]} {host_key_line[1]}\n", encoding="utf-8")
+
+    class _APIReadSSHServer(asyncssh.SSHServer):
+        def public_key_auth_supported(self):
+            return True
+
+        def validate_public_key(self, username, client_key):
+            return username == "fixture" and client_key == key.convert_to_public()
+
+    acceptor = await asyncssh.listen(
+        "127.0.0.1", 0, server_host_keys=[key],
+        server_factory=_APIReadSSHServer, sftp_factory=True,
+    )
+    port = acceptor.sockets[0].getsockname()[1]
+    (private_key.parent / "config").write_text(
+        "Host c1loop\n"
+        "  HostName 127.0.0.1\n"
+        f"  Port {port}\n"
+        "  User fixture\n"
+        f"  IdentityFile {private_key.as_posix()}\n"
+        f"  UserKnownHostsFile {known_hosts.as_posix()}\n"
+        "  IdentitiesOnly yes\n"
+        "  HostKeyAlias c1loop\n",
+        encoding="utf-8",
+    )
+    workspace = f"ssh://c1loop/{ssh_root.as_posix()}"
+    calls = 0
+
+    def responder(record):
+        nonlocal calls
+        calls += 1
+        offered = {
+            item.get("function", {}).get("name")
+            for item in record.get("body", {}).get("tools", [])
+        }
+        if calls == 1:
+            assert "tool_search" in offered
+            return ToolCall("tool_search", {"query": "select:read_file"})
+        if calls == 2:
+            assert "read_file" in offered
+            return ToolCall("read_file", {"path": "fixture.txt"})
+        return Text("remote read complete")
+
+    backend.fake._responder = responder
+    try:
+        before = len(backend.fake.main_requests())
+        conversation, events = await backend.run(
+            "read the remote fixture", workspace=workspace,
+        )
+        first_turn = backend.fake.main_requests()[before:]
+        assert len(first_turn) == 3
+        tool_messages = [item for item in first_turn[2]["messages"] if item.get("role") == "tool"]
+        read_result = next((str(item.get("content")) for item in tool_messages
+                            if item.get("name") == "read_file"), "<missing read result>")
+        assert "SSH_API_READ_FIXTURE" in read_result and "second remote line" in read_result
+
+        await backend.run("continue from remote evidence", conversation=conversation, workspace=workspace)
+        replay = backend.fake.main_requests()[before + len(first_turn)]["messages"]
+        assert any(item.get("tool_calls") for item in replay)
+        assert any(item.get("role") == "tool" and "SSH_API_READ_FIXTURE" in str(item.get("content"))
+                   for item in replay)
+        assert any(item["event"] == "tool.completed" and item["data"].get("name") == "read_file"
+                   for item in events)
+
+        external_content = "SSH_API_EXTERNAL_FIXTURE\nsecond remote line\n"
+        (ssh_root / "fixture.txt").write_text(external_content, encoding="utf-8")
+
+        edit_calls = 0
+        edit_old = "SSH_API_READ_FIXTURE"
+        edit_new = "SSH_API_EDITED_FIXTURE"
+
+        def edit_responder(record):
+            nonlocal edit_calls
+            edit_calls += 1
+            offered = {
+                item.get("function", {}).get("name")
+                for item in record.get("body", {}).get("tools", [])
+            }
+            if edit_calls == 1:
+                return ToolCall("tool_search", {"query": "select:local_edit"})
+            if edit_calls == 2:
+                assert "local_edit" in offered, f"tool_search must load local_edit; offered={sorted(offered)}"
+                return ToolCall("local_edit", {
+                    "path": "fixture.txt", "old_string": edit_old,
+                    "new_string": edit_new,
+                })
+            return Text("remote edit complete")
+
+        async def approve_remote_edit(ws, event):
+            if event.get("event") == "approval.required":
+                await ws.send(json.dumps({
+                    "type": "approval.response", "run_id": event["run_id"],
+                    "event_id": event["data"]["approval_id"], "choice": "allow",
+                }))
+
+        backend.fake._responder = edit_responder
+        stale_conversation, stale_events = await backend.run(
+            "edit the remote file after it changed externally", conversation=conversation,
+            workspace=workspace, respond=approve_remote_edit,
+        )
+        assert stale_conversation == conversation
+        stale_tool = next(
+            item for item in reversed(backend.fake.main_requests()[-1]["messages"])
+            if item.get("role") == "tool" and item.get("name") == "local_edit"
+        )
+        assert "STALE_FILE" in str(stale_tool.get("content"))
+        assert "SSH_API_EXTERNAL_FIXTURE" not in str(stale_tool.get("content"))
+        assert (ssh_root / "fixture.txt").read_text(encoding="utf-8") == external_content
+        assert any(item.get("event") == "tool.completed" and item["data"].get("name") == "local_edit"
+                   for item in stale_events)
+
+        refresh_calls = 0
+
+        def refresh_responder(record):
+            nonlocal refresh_calls
+            refresh_calls += 1
+            offered = {
+                item.get("function", {}).get("name")
+                for item in record.get("body", {}).get("tools", [])
+            }
+            if refresh_calls == 1:
+                assert "tool_search" in offered
+                return ToolCall("tool_search", {"query": "select:read_file"})
+            if refresh_calls == 2:
+                assert "read_file" in offered
+                return ToolCall("read_file", {"path": "fixture.txt"})
+            return Text("remote content refreshed")
+
+        before_refresh = len(backend.fake.main_requests())
+        backend.fake._responder = refresh_responder
+        await backend.run("read the changed remote file", conversation=conversation, workspace=workspace)
+        refreshed = backend.fake.main_requests()[before_refresh:]
+        assert any(
+            item.get("role") == "tool" and "SSH_API_EXTERNAL_FIXTURE" in str(item.get("content"))
+            for request in refreshed for item in request["messages"]
+        )
+
+        edit_calls = 0
+        edit_old = "SSH_API_EXTERNAL_FIXTURE"
+        edit_new = "SSH_API_EDITED_FIXTURE"
+        backend.fake._responder = edit_responder
+        edit_conversation, edit_events = await backend.run(
+            "edit the remote fixture after reading it", conversation=conversation,
+            workspace=workspace, respond=approve_remote_edit,
+        )
+        assert edit_conversation == conversation
+        assert "SSH_API_EDITED_FIXTURE" in (ssh_root / "fixture.txt").read_text(encoding="utf-8")
+        assert any(item.get("event") == "tool.completed" and item["data"].get("name") == "local_edit"
+                   for item in edit_events)
+
+        outside = ssh_root.parent / "private.txt"
+        outside.write_text("SSH_API_PRIVATE_OUTSIDE_FIXTURE", encoding="utf-8")
+        escape_calls = 0
+
+        def escape_responder(record):
+            nonlocal escape_calls
+            escape_calls += 1
+            offered = {
+                item.get("function", {}).get("name")
+                for item in record.get("body", {}).get("tools", [])
+            }
+            if escape_calls == 1:
+                assert "tool_search" in offered
+                return ToolCall("tool_search", {"query": "select:read_file"})
+            if escape_calls == 2:
+                return ToolCall("read_file", {"path": "../private.txt"})
+            return Text("escape denied")
+
+        backend.fake._responder = escape_responder
+        _other_conversation, denied_events = await backend.run(
+            "try reading outside the remote workspace", workspace=workspace,
+        )
+        denied_request = backend.fake.main_requests()[-1]["messages"]
+        denied_tool = next(
+            item for item in reversed(denied_request)
+            if item.get("role") == "tool" and item.get("name") == "read_file"
+        )
+        assert "outside the active SSH workspace" in str(denied_tool.get("content"))
+        assert "SSH_API_PRIVATE_OUTSIDE_FIXTURE" not in str(denied_tool.get("content"))
+        assert any(item["event"] == "tool.completed" and item["data"].get("name") == "read_file"
+                   for item in denied_events)
+    finally:
+        acceptor.close()
+        await acceptor.wait_closed()
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_websocket_cancel_discards_consumed_partial_attempt_and_persists_only_audit(retry_backend):
+    retry_backend.fake._responder = lambda _record: StallMidStream("OLD answer", after_chars=3, seconds=30)
+    cancellation_sent = False
+
+    async def cancel_after_old(ws, event):
+        nonlocal cancellation_sent
+        if (not cancellation_sent and event.get("event") == "message.delta"
+                and str((event.get("data") or {}).get("content") or "").startswith("OLD")):
+            cancellation_sent = True
+            await ws.send(json.dumps({"type": "run.cancel", "run_id": event["run_id"]}))
+
+    conversation, events = await retry_backend.run(
+        "cancel once the first OLD bytes reach the runtime client",
+        respond=cancel_after_old, expected="run.cancelled",
+    )
+    assert cancellation_sent
+    assert events[-1]["event"] == "run.cancelled"
+    assert len(retry_backend.fake.main_requests()) == 1
+
+    from hermes_state import SessionDB
+
+    with SessionDB(db_path=retry_backend.root / "atlas" / "engine" / "state.db") as db:
+        transcript = db.get_messages_as_conversation(conversation)
+        audit = db.list_session_events(conversation, after_seq=0, limit=1000)
+    assistant_text = [str(item.get("content") or "") for item in transcript if item.get("role") == "assistant"]
+    attempt_rows = [item for item in audit if item.get("event_type") == "model/attempt"]
+    rollback_index = next((i for i, item in enumerate(events) if item["event"] == "message.rollback"), None)
+    assert rollback_index is not None, {
+        "event_types": [item.get("event") for item in events],
+        "attempt_audit": [{key: (item.get("payload") or {}).get(key) for key in
+                           ("status", "category", "partial_text", "attempt_id")}
+                          for item in attempt_rows],
+        "assistant_text": assistant_text,
+    }
+    attempt_id = events[rollback_index]["data"]["attempt_id"]
+    assert events[rollback_index]["data"].get("category") == "cancelled"
+    old_deltas = [(i, item) for i, item in enumerate(events)
+                  if item["event"] == "message.delta"
+                  and item["data"].get("attempt_id") == attempt_id]
+    assert old_deltas and "OLD" in "".join(str(item["data"].get("content") or "") for _, item in old_deltas)
+    assert all(index < rollback_index for index, _ in old_deltas)
+    assert all("OLD" not in text for text in assistant_text)
+    assert any(item["payload"].get("status") == "discarded"
+               and item["payload"].get("category") == "cancelled"
+               and item["payload"].get("attempt_id") == attempt_id
+               and str(item["payload"].get("partial_text") or "").startswith("OLD")
+               for item in attempt_rows)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_websocket_retry_rollback_and_reopened_session_db_contain_only_new_answer(retry_backend):
+    responses = iter([DropMidStream("OLD answer", after_chars=3), Text("NEW answer", chunk_chars=4)])
+    retry_backend.fake._responder = lambda _record: next(responses)
+
+    conversation, events = await retry_backend.run("exercise isolated retry persistence")
+
+    assert events[-1]["event"] == "run.completed"
+    rollback_index = next(i for i, item in enumerate(events) if item["event"] == "message.rollback")
+    attempt_id = events[rollback_index]["data"]["attempt_id"]
+    old_deltas = [(i, item) for i, item in enumerate(events)
+                  if item["event"] == "message.delta"
+                  and item["data"].get("attempt_id") == attempt_id]
+    new_deltas = [(i, item) for i, item in enumerate(events)
+                  if item["event"] == "message.delta"
+                  and item["data"].get("attempt_id") != attempt_id]
+    assert old_deltas and any("OLD" in str(item["data"].get("content")) for _, item in old_deltas)
+    assert all(index < rollback_index for index, _ in old_deltas)
+    assert new_deltas and all(index > rollback_index for index, _ in new_deltas)
+    completed = next(item for item in events if item["event"] == "message.completed")
+    assert completed["data"]["content"] == "NEW answer"
+
+    from hermes_state import SessionDB
+
+    with SessionDB(db_path=retry_backend.root / "atlas" / "engine" / "state.db") as db:
+        transcript = db.get_messages_as_conversation(conversation)
+        audit = db.list_session_events(conversation, after_seq=0, limit=1000)
+    assistant_text = [str(item.get("content") or "") for item in transcript if item.get("role") == "assistant"]
+    attempt_rows = [item for item in audit if item.get("event_type") == "model/attempt"]
+    assert assistant_text and assistant_text[-1] == "NEW answer"
+    assert all("OLD" not in text for text in assistant_text)
+    assert any(item["payload"].get("status") == "discarded"
+               and item["payload"].get("attempt_id") == attempt_id
+               and str(item["payload"].get("partial_text") or "").startswith("OLD")
+               for item in attempt_rows)
+
+    # Reopen the canonical transcript through the public history route after
+    # the direct SessionDB handle above has closed. The replay must not rebuild
+    # the failed stream attempt into successful assistant text.
+    replay = await retry_backend.http.get(f"/api/conversations/{conversation}/messages")
+    assert replay.status_code == 200, replay.text
+    replay_assistant = [str(item.get("content") or "") for item in replay.json()
+                        if item.get("role") == "assistant"]
+    assert replay_assistant and replay_assistant[-1] == "NEW answer"
+    assert all("OLD" not in text for text in replay_assistant)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_websocket_retry_keeps_normal_max_output_continuation(retry_backend):
+    responses = iter((
+        DropMidStream("OLD answer", after_chars=3),
+        Text("NEW answer", chunk_chars=4, finish_reason="length"),
+        Text("continuation completed", chunk_chars=5),
+    ))
+    retry_backend.fake._responder = lambda _record: next(responses)
+
+    conversation, events = await retry_backend.run("retry then continue a length-limited answer")
+
+    assert events[-1]["event"] == "run.completed"
+    rollback_index = next(i for i, item in enumerate(events) if item["event"] == "message.rollback")
+    failed_attempt_id = events[rollback_index]["data"]["attempt_id"]
+    deltas = [(i, item) for i, item in enumerate(events) if item["event"] == "message.delta"]
+    old_deltas = [(i, item) for i, item in deltas
+                  if i < rollback_index and item["data"].get("attempt_id") == failed_attempt_id]
+    accepted_deltas = [(i, item) for i, item in deltas
+                       if i > rollback_index and item["data"].get("attempt_id") != failed_attempt_id]
+    assert old_deltas and "OLD" in "".join(str(item["data"].get("content") or "") for _, item in old_deltas)
+    assert accepted_deltas
+    assert all(index < rollback_index for index, _ in old_deltas)
+    assert all(index > rollback_index for index, _ in accepted_deltas)
+    accepted_stream = "".join(str(item["data"].get("content") or "") for _, item in accepted_deltas)
+    assert "NEW answer" in accepted_stream
+    assert "continuation completed" in accepted_stream
+    completed = next(item for item in events if item["event"] == "message.completed")
+    assert "NEW answer" in completed["data"]["content"]
+    assert "continuation completed" in completed["data"]["content"]
+    assert "OLD" not in completed["data"]["content"]
+
+    requests = retry_backend.fake.main_requests()
+    assert len(requests) == 3
+    continuation_messages = requests[2]["messages"]
+    assert any(row.get("role") == "assistant" and "NEW answer" in str(row.get("content"))
+               for row in continuation_messages)
+    assert any(row.get("role") == "user" and "Output token limit hit" in str(row.get("content"))
+               for row in continuation_messages)
+
+    from hermes_state import SessionDB
+
+    with SessionDB(db_path=retry_backend.root / "atlas" / "engine" / "state.db") as db:
+        transcript = db.get_messages_as_conversation(conversation)
+        audit = db.list_session_events(conversation, after_seq=0, limit=1000)
+    assistant_text = [str(item.get("content") or "") for item in transcript if item.get("role") == "assistant"]
+    assert assistant_text
+    assert any("NEW answer" in text for text in assistant_text)
+    assert any("continuation completed" in text for text in assistant_text)
+    assert all("OLD" not in text for text in assistant_text)
+    attempt_rows = [item for item in audit if item.get("event_type") == "model/attempt"]
+    assert any(item["payload"].get("status") == "discarded"
+               and item["payload"].get("attempt_id") == failed_attempt_id
+               and str(item["payload"].get("partial_text") or "").startswith("OLD")
+               for item in attempt_rows)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_websocket_fallback_rolls_back_primary_and_persists_only_fallback(fallback_backend):
+    responses = iter((
+        Text("OLD filtered answer", finish_reason="content_filter"),
+        Text("NEW fallback answer", chunk_chars=4),
+    ))
+    fallback_backend.fake._responder = lambda _record: next(responses)
+
+    conversation, events = await fallback_backend.run("exercise websocket fallback isolation")
+
+    assert events[-1]["event"] == "run.completed"
+    rollback_index = next(i for i, item in enumerate(events) if item["event"] == "message.rollback")
+    attempt_id = events[rollback_index]["data"]["attempt_id"]
+    deltas = [(i, item) for i, item in enumerate(events) if item["event"] == "message.delta"]
+    old_deltas = [(i, item) for i, item in deltas
+                  if i < rollback_index and item["data"].get("attempt_id") == attempt_id]
+    new_deltas = [(i, item) for i, item in deltas
+                  if i > rollback_index and item["data"].get("attempt_id") != attempt_id]
+    assert "OLD filtered answer" in "".join(str(item["data"].get("content") or "") for _, item in old_deltas)
+    assert all(i < rollback_index for i, _ in old_deltas)
+    assert "NEW fallback answer" in "".join(str(item["data"].get("content") or "") for _, item in new_deltas)
+    assert all(i > rollback_index for i, _ in new_deltas)
+    completed = next(item for item in events if item["event"] == "message.completed")
+    assert completed["data"]["content"] == "NEW fallback answer"
+    assert [request["model"] for request in fallback_backend.fake.main_requests()] == [
+        "fake-model", "fallback-model",
+    ]
+
+    from hermes_state import SessionDB
+
+    with SessionDB(db_path=fallback_backend.root / "atlas" / "engine" / "state.db") as db:
+        transcript = db.get_messages_as_conversation(conversation)
+        audit = db.list_session_events(conversation, after_seq=0, limit=1000)
+    assistant_text = [str(item.get("content") or "") for item in transcript if item.get("role") == "assistant"]
+    assert assistant_text and assistant_text[-1] == "NEW fallback answer"
+    assert all("OLD filtered answer" not in text for text in assistant_text)
+    attempt_rows = [item for item in audit if item.get("event_type") == "model/attempt"]
+    assert any(
+        item["payload"].get("status") == "discarded"
+        and item["payload"].get("attempt_id") == attempt_id
+        and str(item["payload"].get("partial_text") or "").startswith("OLD filtered answer")
+        for item in attempt_rows
+    )
 
 
 @pytest.mark.asyncio

@@ -65,7 +65,8 @@ async def list_agent_processes(
              "status": "running" if item.state == "running" else "exited",
              "exit_code": item.exit_code, "started_at": item.started_at,
              "run_id": item.owner_run_id}
-            for item in runtime._processes.values()]
+            for item in runtime._processes.values()
+            if getattr(item, "terminal_owner_id", None) is None]
 
 
 @router.get("/api/processes/{process_id}/output")
@@ -75,7 +76,7 @@ async def get_agent_process_output(
 ) -> dict[str, Any]:
     runtime = _service("local_execution", services)
     record = runtime._processes.get(process_id) if runtime else None
-    if record is None:
+    if record is None or getattr(record, "terminal_owner_id", None) is not None:
         raise HTTPException(status_code=404, detail="Process not found")
     stdout_size = record.stdout_path.stat().st_size
     stream_path = record.stdout_path if after < stdout_size else record.stderr_path
@@ -94,7 +95,7 @@ async def kill_agent_process(
 ) -> dict[str, Any]:
     runtime = _service("local_execution", services)
     record = runtime._processes.get(process_id) if runtime else None
-    if record is None:
+    if record is None or getattr(record, "terminal_owner_id", None) is not None:
         raise HTTPException(status_code=404, detail="Process not found")
     await runtime._cancel_process(record)
     return {"id": process_id, "status": "exited", "exit_code": record.exit_code}
@@ -108,7 +109,7 @@ async def write_agent_process_stdin(
     """Send one line or raw text to a running process started with an open stdin."""
     runtime = _service("local_execution", services)
     record = runtime._processes.get(process_id) if runtime else None
-    if record is None:
+    if record is None or getattr(record, "terminal_owner_id", None) is not None:
         raise HTTPException(status_code=404, detail="Process not found")
     action = str(payload.get("action") or "submit_stdin")
     if action not in {"write_stdin", "submit_stdin", "close_stdin"}:
@@ -124,6 +125,11 @@ async def write_agent_process_stdin(
 
 @router.websocket("/ws/terminal")
 async def ws_terminal(ws: WebSocket, cwd: str = Query(...)) -> None:
+    # SSH workspaces must branch before importing the local Windows PTY provider or
+    # interpreting the remote POSIX root with pathlib on the Atlas host.
+    if cwd.startswith("ssh://"):
+        await _ws_terminal_ssh(ws, cwd)
+        return
     await ws.accept()
     try:
         from winpty import PtyProcess
@@ -166,6 +172,81 @@ async def ws_terminal(ws: WebSocket, cwd: str = Query(...)) -> None:
         if pty.isalive():
             pty.terminate(force=True)
         reader.cancel()
+
+
+async def _ws_terminal_ssh(ws: WebSocket, workspace: str) -> None:
+    import codecs
+
+    await ws.accept()
+    session = None
+    output_task: asyncio.Task | None = None
+    input_task: asyncio.Task | None = None
+    try:
+        manager = _server().ssh_workspaces
+        session = await manager.open_terminal(workspace)
+
+        async def _forward_output() -> None:
+            decoder = codecs.getincrementaldecoder("utf-8")("replace")
+            while chunk := await session.read(4096):
+                text = decoder.decode(chunk)
+                if text:
+                    await ws.send_json({"type": "output", "data": text})
+            tail = decoder.decode(b"", final=True)
+            if tail:
+                await ws.send_json({"type": "output", "data": tail})
+            code = await session.wait_closed()
+            await ws.send_json({"type": "exit", "code": code})
+            await ws.close(code=1000)
+
+        async def _receive_input() -> None:
+            while True:
+                item = await ws.receive_json()
+                if not isinstance(item, dict):
+                    continue
+                if item.get("type") == "input":
+                    value = item.get("data", "")
+                    if isinstance(value, str) and len(value) <= 16_000:
+                        await session.write(value.encode("utf-8"))
+                elif item.get("type") == "resize":
+                    try:
+                        rows = min(500, max(1, int(item.get("rows", 24))))
+                        cols = min(500, max(1, int(item.get("cols", 80))))
+                    except (TypeError, ValueError):
+                        continue
+                    await session.resize(rows, cols)
+
+        output_task = asyncio.create_task(_forward_output())
+        input_task = asyncio.create_task(_receive_input())
+        done, _pending = await asyncio.wait(
+            {output_task, input_task}, return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in done:
+            try:
+                task.result()
+            except WebSocketDisconnect:
+                if task is output_task:
+                    raise
+            except Exception:
+                raise
+    except Exception as exc:  # noqa: BLE001 — do not echo SSH configuration or credential details
+        try:
+            await ws.send_json({"type": "error", "error": f"SSH terminal unavailable ({type(exc).__name__})"})
+            await ws.close(code=1011)
+        except Exception:
+            pass
+    finally:
+        tasks = [task for task in (output_task, input_task) if task is not None]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        if session is not None:
+            try:
+                await asyncio.wait_for(asyncio.shield(session.close()), timeout=3.0)
+            except Exception:
+                # The manager retains unresolved terminal leases until transport shutdown.
+                pass
 
 
 @router.get("/api/tools")

@@ -1,0 +1,18 @@
+PAR-10-T6-5 packaged rejection: missing manifest (fresh build payload copy)
+2026-11-18T22:49:47Z
+tree=copy of frontend/windows-release/win-unpacked; removed resources/atlas/release-manifest.json
+remaining candidates checked: release-manifest.json, resources/release-manifest.json (absent)
+-----
+
+PID=60132
+ALIVE_AFTER_5s=True
+MAIN_WINDOW_TITLE=Error
+CHILDREN=Atlas.exe,Atlas.exe
+UIA_WINDOW_COUNT=1
+UIA_WINDOW_NAME=Error
+ERROR_DIALOG_TEXT=Atlas 启动失败
+ERROR_DIALOG_TEXT=Atlas 启动时出错，请把下面的信息发给维护者： |  | Error: Atlas 安装产物完整性检查失败（未找到清单），已拒绝启动。 | - manifest_missing [C:\Users\25011\AppData\Local\Temp\par10-t6-5\pkg-missing]: 安装目录中未找到 release-manifest.json（查找：resources/atlas/release-manifest.json、release-manifest.json、resources/release-manifest.json） |     at assertReleaseIntegrity (file:///C:/Users/25011/AppData/Local/Temp/par10-t6-5/pkg-missing/resources/app.asar/dist-electron/main/releaseIntegrity.js:539:15) |     at file:///C:/Users/25011/AppData/Local/Temp/par10-t6-5/pkg-missing/resources/app.asar/dist-electron/main/electron.js:2039:9 |     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+GRACEFUL_EXIT=true
+EXIT_CODE=1
+-----
+backend child check during/after:

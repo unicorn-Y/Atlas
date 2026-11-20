@@ -1,0 +1,47 @@
+COMMAND: PYTHONDONTWRITEBYTECODE=1 D:/Atlas/core/.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -o addopts= --tb=short --basetemp=D:/Atlas/.worktrees/zcode-par08-sdk-port/.tmp/pytest-par08-evidence314 tests/test_app_server_user_question_cancel.py tests/test_app_server_acp.py tests/test_app_server_sdk_lifecycle.py tests/test_event_contract.py tests/test_server.py::TestBackendParityWave1::test_ask_user_event_waits_for_a_response
+PYTHON: Python 3.14.7
+
+..........................................                               [100%]
+============================== warnings summary ===============================
+atlas\api\memory_library_router.py:431
+  D:\Atlas\.worktrees\zcode-par08-sdk-port\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+atlas\api\memory_library_router.py:438
+  D:\Atlas\.worktrees\zcode-par08-sdk-port\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+atlas\api\settings_export_router.py:45
+  D:\Atlas\.worktrees\zcode-par08-sdk-port\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+atlas\api\settings_export_router.py:55
+  D:\Atlas\.worktrees\zcode-par08-sdk-port\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+atlas\api\settings_export_router.py:62
+  D:\Atlas\.worktrees\zcode-par08-sdk-port\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+tests/test_app_server_acp.py::test_acp_kernel_attempt_stream_returns_only_committed_attempt
+  D:\Atlas\core\.venv\Lib\site-packages\huggingface_hub\file_download.py:1855: DeprecationWarning: hf_xet.download_files() is deprecated. Use XetSession().new_file_download_group().start_download_file() instead.
+    xet_get(
+
+tests/test_app_server_acp.py::test_acp_kernel_attempt_stream_returns_only_committed_attempt
+  D:\Atlas\core\.venv\Lib\site-packages\huggingface_hub\file_download.py:138: UserWarning: `huggingface_hub` cache-system uses symlinks by default to efficiently store duplicated files but your machine does not support them in D:\Atlas\.worktrees\zcode-par08-sdk-port\.tmp\pytest-par08-evidence314\test_acp_kernel_attempt_stream0\data\cache\fastembed\models--Qdrant--bge-small-zh-v1.5. Caching files will still work but in a degraded version that might require more space on your disk. This warning can be disabled by setting the `HF_HUB_DISABLE_SYMLINKS_WARNING` environment variable. For more details, see https://huggingface.co/docs/huggingface_hub/how-to-cache#limitations.
+  To support symlinks on Windows, you either need to activate Developer Mode or to run Python as an administrator. In order to activate developer mode, see this article: https://docs.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development
+    warnings.warn(message)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+42 passed, 7 warnings in 26.66s
+EXIT=0

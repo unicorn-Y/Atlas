@@ -15,6 +15,10 @@ from typing import Any
 from atlas.websearch import WebSearchService, get_service
 
 
+class WebPolicyError(RuntimeError):
+    """A web request was denied by URL or redirect policy."""
+
+
 def _str_list(value: Any) -> list[str]:
     return [str(item).strip() for item in (value or []) if isinstance(item, str) and str(item).strip()]
 
@@ -45,6 +49,8 @@ class WebRuntime:
                 )
             else:
                 return self._error(f"Unknown web tool: {name}")
+        except WebPolicyError as exc:
+            return self._error(f"{name} failed: {exc}", error_category="policy")
         except (ValueError, RuntimeError, OSError, TypeError) as exc:
             return self._error(f"{name} failed: {exc}")
         return {
@@ -90,22 +96,30 @@ class WebRuntime:
             raise ValueError("url must start with http:// or https://")
         page = (await self.service.extract([url], char_limit=max_chars))[0]
         if page.get("error"):
+            if page.get("error_category") == "policy":
+                raise WebPolicyError(str(page["error"]))
             raise RuntimeError(str(page["error"]))
         text = str(page.get("content") or "")
         meta = page.get("metadata") or {}
         payload: dict[str, Any] = {
             "url": page.get("url") or url, "title": page.get("title", ""), "text": text,
-            "length": len(text), "truncated": bool(page.get("truncated")),
+            "length": len(text),
+            "truncated": bool(page.get("truncated") or meta.get("truncated")),
             "provider": meta.get("served_by", ""),
         }
+        if isinstance(page.get("status_code"), int):
+            payload["status_code"] = page["status_code"]
         if meta.get("fallbacks"):
             payload["fallbacks"] = meta["fallbacks"]
         return payload
 
     @staticmethod
-    def _error(message: str) -> dict[str, Any]:
+    def _error(message: str, *, error_category: str | None = None) -> dict[str, Any]:
+        data = {"error": message}
+        if error_category:
+            data["error_category"] = error_category
         return {
-            "data": {"error": message},
+            "data": data,
             "content": [{"type": "text", "text": message}],
             "is_error": True,
         }

@@ -1,0 +1,923 @@
+diff --git a/core/atlas/api/u6_router.py b/core/atlas/api/u6_router.py
+index ff7f33c8..9dd1f7da 100644
+--- a/core/atlas/api/u6_router.py
++++ b/core/atlas/api/u6_router.py
+@@ -2,10 +2,12 @@
+ 
+ from __future__ import annotations
+ 
++import hashlib
+ import json
+ import os
+ import shutil
+ import subprocess
++import threading
+ import time
+ from datetime import datetime, timezone
+ from pathlib import Path
+@@ -105,27 +107,104 @@ async def put_retention(request: dict[str, Any]) -> dict[str, Any]:
+     return await get_retention()
+ 
+ 
++_KEYBINDINGS_LOCK = threading.Lock()
++
++
++def _keybindings_path() -> Path:
++    from atlas.config import DATA_ROOT
++
++    return DATA_ROOT / "data" / "keybindings.json"
++
++
++def _keybindings_revision(raw: bytes | None) -> str | None:
++    """Opaque content revision: survives mtime collisions and process restarts."""
++    return hashlib.sha256(raw).hexdigest() if raw is not None else None
++
++
++def _validate_keybindings(value: Any) -> dict[str, list[str]]:
++    if not isinstance(value, dict) or any(
++        not isinstance(key, str) or not isinstance(combo, list)
++        or not all(isinstance(item, str) for item in combo)
++        for key, combo in value.items()
++    ):
++        raise ValueError("期望 action id → 字符串数组")
++    return value
++
++
+ @router.get("/api/u6/keybindings")
+ async def get_keybindings() -> dict[str, Any]:
+-    from atlas.config import DATA_ROOT
+-    path = DATA_ROOT / "data" / "keybindings.json"
+-    if not path.exists(): return {"bindings": {}, "updated_at": -1}
+-    try:
+-        value = json.loads(path.read_text(encoding="utf-8"))
+-        if not isinstance(value, dict) or any(not isinstance(k, str) or not isinstance(v, list) or not all(isinstance(x, str) for x in v) for k, v in value.items()): raise ValueError("期望 action id → 字符串数组")
+-        return {"bindings": value, "updated_at": path.stat().st_mtime_ns}
+-    except (OSError, json.JSONDecodeError, ValueError) as exc:
+-        raise HTTPException(status_code=422, detail=f"keybindings.json 格式错误：{exc}") from exc
++    path = _keybindings_path()
++    with _KEYBINDINGS_LOCK:
++        try:
++            raw = path.read_bytes()
++        except FileNotFoundError:
++            return {"bindings": {}, "updated_at": -1, "revision": None}
++        except OSError as exc:
++            raise HTTPException(status_code=422, detail=f"keybindings.json 无法读取：{exc}") from exc
++        try:
++            value = _validate_keybindings(json.loads(raw.decode("utf-8")))
++            return {
++                "bindings": value,
++                "updated_at": path.stat().st_mtime_ns,
++                "revision": _keybindings_revision(raw),
++            }
++        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
++            raise HTTPException(status_code=422, detail=f"keybindings.json 格式错误：{exc}") from exc
+ 
+ 
+ @router.put("/api/u6/keybindings")
+ async def put_keybindings(request: dict[str, Any]) -> dict[str, Any]:
+-    value = request.get("bindings")
+-    if not isinstance(value, dict) or any(not isinstance(k, str) or not isinstance(v, list) or not all(isinstance(x, str) for x in v) for k, v in value.items()): raise HTTPException(status_code=422, detail="期望 action id → 字符串数组")
+-    from atlas.config import DATA_ROOT
+-    path = DATA_ROOT / "data" / "keybindings.json"; path.parent.mkdir(parents=True, exist_ok=True)
+-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+-    return {"bindings": value, "updated_at": path.stat().st_mtime_ns}
++    try:
++        value = _validate_keybindings(request.get("bindings"))
++    except ValueError as exc:
++        raise HTTPException(status_code=422, detail=str(exc)) from exc
++    expected = request.get("expected_revision", ...)
++    if expected is not ... and expected is not None and not isinstance(expected, str):
++        raise HTTPException(status_code=422, detail="expected_revision 必须是字符串或 null")
++    path = _keybindings_path()
++    with _KEYBINDINGS_LOCK:
++        try:
++            current_raw = path.read_bytes()
++        except FileNotFoundError:
++            current_raw = None
++        except OSError as exc:
++            raise HTTPException(status_code=500, detail=f"keybindings.json 无法读取：{exc}") from exc
++        current_revision = _keybindings_revision(current_raw)
++        # Optimistic concurrency: a caller that read a revision must not overwrite a newer file.
++        if expected is not ... and expected != current_revision:
++            raise HTTPException(
++                status_code=409,
++                detail="keybindings.json 已被其他窗口修改，请重新加载后再保存",
++            )
++        path.parent.mkdir(parents=True, exist_ok=True)
++        try:
++            os.chmod(path.parent, 0o700)
++        except OSError:
++            pass
++        payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
++        temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
++        try:
++            with open(temporary, "w", encoding="utf-8", newline="\n") as handle:
++                handle.write(payload)
++                handle.flush()
++                os.fsync(handle.fileno())
++            try:
++                os.chmod(temporary, 0o600)
++            except OSError:
++                pass
++            os.replace(temporary, path)
++        except OSError as exc:
++            try:
++                temporary.unlink()
++            except OSError:
++                pass
++            raise HTTPException(status_code=500, detail=f"keybindings.json 写入失败：{exc}") from exc
++        raw = path.read_bytes()
++        return {
++            "bindings": value,
++            "updated_at": path.stat().st_mtime_ns,
++            "revision": _keybindings_revision(raw),
++        }
+ 
+ 
+ @router.get("/api/u6/whatsnew")
+diff --git a/core/tests/test_u6_keybindings.py b/core/tests/test_u6_keybindings.py
+new file mode 100644
+index 00000000..4830eb08
+--- /dev/null
++++ b/core/tests/test_u6_keybindings.py
+@@ -0,0 +1,134 @@
++"""Keybindings persistence: content revision CAS and atomic replacement."""
++
++import hashlib
++import json
++from pathlib import Path
++
++import pytest
++from fastapi import FastAPI
++from fastapi.testclient import TestClient
++
++from atlas.api import u6_router
++
++pytestmark = pytest.mark.unit
++
++
++@pytest.fixture
++def client(tmp_path: Path, monkeypatch) -> TestClient:
++    monkeypatch.setattr("atlas.config.DATA_ROOT", tmp_path)
++    app = FastAPI()
++    app.include_router(u6_router.router)
++    return TestClient(app)
++
++
++@pytest.fixture
++def keybindings_path(tmp_path: Path) -> Path:
++    return tmp_path / "data" / "keybindings.json"
++
++
++def test_missing_file_reads_empty_with_null_revision(client: TestClient) -> None:
++    response = client.get("/api/u6/keybindings")
++    assert response.status_code == 200
++    assert response.json() == {"bindings": {}, "updated_at": -1, "revision": None}
++
++
++def test_create_with_null_revision_is_atomic_and_stale_create_conflicts(
++    client: TestClient, keybindings_path: Path,
++) -> None:
++    first = client.put("/api/u6/keybindings", json={
++        "bindings": {"palette": ["Ctrl+K"]}, "expected_revision": None,
++    })
++    assert first.status_code == 200
++    revision = first.json()["revision"]
++    assert isinstance(revision, str) and len(revision) == 64
++    assert json.loads(keybindings_path.read_text(encoding="utf-8")) == {"palette": ["Ctrl+K"]}
++    assert not list(keybindings_path.parent.glob(f".{keybindings_path.name}.*.tmp"))
++
++    stale = client.put("/api/u6/keybindings", json={
++        "bindings": {"palette": ["Ctrl+Shift+K"]}, "expected_revision": None,
++    })
++    assert stale.status_code == 409
++    assert json.loads(keybindings_path.read_text(encoding="utf-8")) == {"palette": ["Ctrl+K"]}
++    assert client.get("/api/u6/keybindings").json()["revision"] == revision
++
++
++def test_stale_revision_is_rejected_and_matching_revision_updates(
++    client: TestClient, keybindings_path: Path,
++) -> None:
++    created = client.put("/api/u6/keybindings", json={"bindings": {"palette": ["Ctrl+K"]}}).json()
++    winner = client.put("/api/u6/keybindings", json={
++        "bindings": {"palette": ["Ctrl+P"]}, "expected_revision": created["revision"],
++    })
++    assert winner.status_code == 200
++    loser = client.put("/api/u6/keybindings", json={
++        "bindings": {"palette": ["Ctrl+O"]}, "expected_revision": created["revision"],
++    })
++    assert loser.status_code == 409
++    assert "其他窗口" in loser.json()["detail"]
++    assert json.loads(keybindings_path.read_text(encoding="utf-8")) == {"palette": ["Ctrl+P"]}
++    latest = client.get("/api/u6/keybindings").json()
++    assert latest["revision"] == winner.json()["revision"]
++    assert latest["revision"] != created["revision"]
++
++
++def test_legacy_keybindings_file_stays_readable_and_updatable(
++    client: TestClient, keybindings_path: Path,
++) -> None:
++    """A file written by the pre-revision client (plain action -> array map) remains usable."""
++    keybindings_path.parent.mkdir(parents=True)
++    legacy = {"palette": ["Ctrl+Shift+K"], "newTask": ["Ctrl+Alt+N"]}
++    raw = (json.dumps(legacy, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
++    keybindings_path.write_bytes(raw)
++
++    response = client.get("/api/u6/keybindings")
++    assert response.status_code == 200
++    body = response.json()
++    assert body["bindings"] == legacy
++    assert body["updated_at"] == keybindings_path.stat().st_mtime_ns
++    assert body["revision"] == hashlib.sha256(raw).hexdigest()
++
++    saved = client.put("/api/u6/keybindings", json={
++        "bindings": {"palette": ["Ctrl+K"]}, "expected_revision": body["revision"],
++    })
++    assert saved.status_code == 200
++    assert saved.json()["revision"] != body["revision"]
++    assert json.loads(keybindings_path.read_text(encoding="utf-8")) == {"palette": ["Ctrl+K"]}
++
++
++def test_invalid_shape_writes_nothing(client: TestClient, keybindings_path: Path) -> None:
++    response = client.put("/api/u6/keybindings", json={"bindings": {"palette": "Ctrl+K"}})
++    assert response.status_code == 422
++    assert not keybindings_path.exists()
++    invalid_expected = client.put("/api/u6/keybindings", json={
++        "bindings": {}, "expected_revision": 7,
++    })
++    assert invalid_expected.status_code == 422
++    assert not keybindings_path.exists()
++
++
++def test_replace_failure_keeps_previous_file_and_cleans_temp(
++    client: TestClient, keybindings_path: Path, monkeypatch,
++) -> None:
++    client.put("/api/u6/keybindings", json={"bindings": {"palette": ["Ctrl+K"]}})
++    before = keybindings_path.read_text(encoding="utf-8")
++
++    def fail_replace(*_args, **_kwargs):
++        raise OSError("disk full")
++
++    monkeypatch.setattr(u6_router.os, "replace", fail_replace)
++    response = client.put("/api/u6/keybindings", json={"bindings": {"palette": ["Ctrl+P"]}})
++    assert response.status_code == 500
++    assert "写入失败" in response.json()["detail"]
++    assert keybindings_path.read_text(encoding="utf-8") == before
++    assert not list(keybindings_path.parent.glob(f".{keybindings_path.name}.*.tmp"))
++
++
++def test_malformed_existing_file_is_reported_but_repairable(
++    client: TestClient, keybindings_path: Path,
++) -> None:
++    keybindings_path.parent.mkdir(parents=True)
++    keybindings_path.write_text("{not json", encoding="utf-8")
++    assert client.get("/api/u6/keybindings").status_code == 422
++    repaired = client.put("/api/u6/keybindings", json={"bindings": {"palette": ["Ctrl+K"]}})
++    assert repaired.status_code == 200
++    assert json.loads(keybindings_path.read_text(encoding="utf-8")) == {"palette": ["Ctrl+K"]}
+\ No newline at end of file
+diff --git a/frontend/src/renderer/pages/ShortcutsPanel.test.tsx b/frontend/src/renderer/pages/ShortcutsPanel.test.tsx
+new file mode 100644
+index 00000000..2ea4d4b8
+--- /dev/null
++++ b/frontend/src/renderer/pages/ShortcutsPanel.test.tsx
+@@ -0,0 +1,132 @@
++import { act, create, type ReactTestRenderer } from 'react-test-renderer';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import ShortcutsPanel from './ShortcutsPanel';
++import type { KeybindingsDocument, KeybindingsMap } from '../services/keybindings';
++
++let state: KeybindingsDocument;
++let writes: Array<{ bindings: KeybindingsMap; expected: string | null }>;
++let version: number;
++
++function response(body: unknown, status = 200): Response {
++  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
++}
++
++const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
++  if (init?.method === 'PUT') {
++    const body = JSON.parse(String(init.body)) as { bindings: KeybindingsMap; expected_revision: string | null };
++    writes.push({ bindings: body.bindings, expected: body.expected_revision });
++    if (body.expected_revision !== state.revision) {
++      return response({ detail: 'keybindings.json 已被其他窗口修改，请重新加载后再保存' }, 409);
++    }
++    state = {
++      bindings: body.bindings,
++      revision: `rev-${++version}`,
++      updated_at: version,
++    };
++    return response(state);
++  }
++  return response({
++    bindings: state.bindings,
++    updated_at: state.revision === null ? -1 : state.updated_at,
++    revision: state.revision,
++  });
++});
++
++function installStorage(): Map<string, string> {
++  const values = new Map<string, string>();
++  vi.stubGlobal('localStorage', {
++    getItem: (key: string) => values.get(key) ?? null,
++    setItem: (key: string, value: string) => { values.set(key, value); },
++    removeItem: (key: string) => { values.delete(key); },
++    clear: () => values.clear(),
++  });
++  return values;
++}
++
++async function renderPanel(): Promise<ReactTestRenderer> {
++  let view!: ReactTestRenderer;
++  await act(async () => { view = create(<ShortcutsPanel apiBaseUrl="http://127.0.0.1:8765" />); });
++  return view;
++}
++
++/** Records Ctrl+Alt+U for the first binding of the palette action. */
++async function changePaletteBinding(view: ReactTestRenderer): Promise<void> {
++  const label = { 'aria-label': '修改「搜索与命令」的第 1 组快捷键' };
++  act(() => { view.root.findByProps(label).props.onClick(); });
++  // Ctrl+Alt+U is free in SHORTCUTS and is not a reserved combo.
++  const native = {
++    key: 'u', ctrlKey: true, altKey: true, metaKey: false, shiftKey: false,
++    isComposing: false, keyCode: 85,
++  };
++  const event = { ...native, nativeEvent: native, preventDefault: vi.fn(), stopPropagation: vi.fn() };
++  await act(async () => { view.root.findByProps(label).props.onKeyDown(event); });
++}
++
++function buttonWithText(view: ReactTestRenderer, text: string) {
++  return view.root.findAllByType('button').find((button) => button.children.includes(text));
++}
++
++beforeEach(() => {
++  version = 1;
++  state = { bindings: { palette: ['Ctrl+K'], newTask: ['Ctrl+N'] }, revision: 'rev-1', updated_at: 1 };
++  writes = [];
++  vi.stubGlobal('window', new EventTarget());
++  installStorage();
++  vi.stubGlobal('fetch', fetchMock);
++});
++
++afterEach(() => {
++  vi.unstubAllGlobals();
++  vi.clearAllMocks();
++});
++
++describe('ShortcutsPanel keybindings CAS', () => {
++  it('keeps the local edit on 409 and reloads the file instead of overwriting another window', async () => {
++    const view = await renderPanel();
++    // The other window saves after this panel read revision rev-1.
++    state = { bindings: { palette: ['Ctrl+P'], newTask: ['Ctrl+N'] }, revision: 'rev-2', updated_at: 2 };
++
++    await changePaletteBinding(view);
++
++    expect(writes.at(-1)?.expected).toBe('rev-1');
++    expect(writes.at(-1)?.bindings.palette).toEqual(['Ctrl+Alt+U']);
++    expect(writes.at(-1)?.bindings.newTask).toEqual(['Ctrl+N']);
++    expect(state.bindings.palette).toEqual(['Ctrl+P']);
++    expect(JSON.stringify(view.toJSON())).toContain('保存冲突');
++    expect(JSON.stringify(view.toJSON())).toContain('用本机改动重试保存');
++    // The pending local preference stays in the localStorage cache.
++    const cached = JSON.parse(localStorage.getItem('atlas.shortcuts') ?? '{}') as Record<string, string[]>;
++    expect(cached.palette).toEqual(['Ctrl+Alt+U']);
++
++    const reload = buttonWithText(view, '重新加载');
++    expect(reload).toBeDefined();
++    await act(async () => { reload!.props.onClick(); });
++
++    const reloaded = JSON.parse(localStorage.getItem('atlas.shortcuts') ?? '{}') as Record<string, string[]>;
++    expect(reloaded.palette).toEqual(['Ctrl+P']);
++    expect(JSON.stringify(view.toJSON())).not.toContain('保存冲突');
++    expect(JSON.stringify(view.toJSON())).toContain('已重新加载 keybindings.json');
++    expect(state.bindings.palette).toEqual(['Ctrl+P']);
++    act(() => view.unmount());
++  });
++
++  it('refreshes the revision and retries the pending local edit after the user asks for it', async () => {
++    const view = await renderPanel();
++    state = { bindings: { palette: ['Ctrl+P'], newTask: ['Ctrl+N'] }, revision: 'rev-2', updated_at: 2 };
++    await changePaletteBinding(view);
++
++    const retry = buttonWithText(view, '用本机改动重试保存');
++    expect(retry).toBeDefined();
++    await act(async () => { retry!.props.onClick(); });
++
++    expect(writes.at(-1)?.expected).toBe('rev-2');
++    expect(writes.at(-1)?.bindings.palette).toEqual(['Ctrl+Alt+U']);
++    expect(writes.at(-1)?.bindings.newTask).toEqual(['Ctrl+N']);
++    expect(state.bindings.palette).toEqual(['Ctrl+Alt+U']);
++    const cached = JSON.parse(localStorage.getItem('atlas.shortcuts') ?? '{}') as Record<string, string[]>;
++    expect(cached.palette).toEqual(['Ctrl+Alt+U']);
++    expect(JSON.stringify(view.toJSON())).not.toContain('保存冲突');
++    expect(JSON.stringify(view.toJSON())).toContain('已按本机改动重新保存');
++    act(() => view.unmount());
++  });
++});
+\ No newline at end of file
+diff --git a/frontend/src/renderer/pages/ShortcutsPanel.tsx b/frontend/src/renderer/pages/ShortcutsPanel.tsx
+index 30f88189..c114b68a 100644
+--- a/frontend/src/renderer/pages/ShortcutsPanel.tsx
++++ b/frontend/src/renderer/pages/ShortcutsPanel.tsx
+@@ -1,6 +1,7 @@
+-import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
++import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+ import { Plus, RotateCcw, X } from 'lucide-react';
+ import {
++  applyFileBindings,
+   comboFromEvent,
+   defaultBindings,
+   findDuplicateBinding,
+@@ -17,7 +18,11 @@ import {
+ } from '../services/shortcuts';
+ import { Kbd } from '../ui/Kbd';
+ import { cn } from '../ui/cn';
+-import { api } from '../services/api';
++import {
++  createHttpKeybindingsTransport,
++  KeybindingsConflictError,
++  KeybindingsSync,
++} from '../services/keybindings';
+ import type { ModelInfo } from '@atlas/backend-adapter';
+ 
+ type RecordingTarget = { action: ShortcutAction; bindingIndex: number | null };
+@@ -25,7 +30,27 @@ type RecordingTarget = { action: ShortcutAction; bindingIndex: number | null };
+ /** Manage app shortcuts: search, record one or more bindings, clear, or restore defaults. */
+ export default function ShortcutsPanel({ models = [], apiBaseUrl }: { models?: ModelInfo[]; apiBaseUrl: string }) {
+   const [bindings, setBindings] = useState<ShortcutBindings>(loadBindings);
++  const sync = useMemo(() => new KeybindingsSync(createHttpKeybindingsTransport(apiBaseUrl)), [apiBaseUrl]);
++  const [conflict, setConflict] = useState<{ bindings: ShortcutBindings; message: string } | null>(null);
+   useEffect(() => { const updateFromFile = () => setBindings(loadBindings()); window.addEventListener('atlas:shortcuts', updateFromFile); return () => window.removeEventListener('atlas:shortcuts', updateFromFile); }, []);
++  useEffect(() => {
++    let active = true;
++    void sync.refresh().then((file) => {
++      if (!active || file.revision === null) return;
++      const local = loadBindings();
++      const defaults = defaultBindings();
++      // Local rebinds from older builds win over the file; only adopt the file
++      // when this machine has no preferences of its own yet.
++      const localUntouched = SHORTCUTS.every(({ action }) => sameBindings(local[action], defaults[action]));
++      if (localUntouched && Object.keys(file.bindings).length > 0) {
++        applyFileBindings(file.bindings);
++        setBindings(loadBindings());
++      }
++    }).catch((error) => {
++      if (active) setNote((current) => current || `keybindings.json 无法读取：${error instanceof Error ? error.message : String(error)}`);
++    });
++    return () => { active = false; };
++  }, [sync]);
+   const [recording, setRecording] = useState<RecordingTarget | null>(null);
+   const [query, setQuery] = useState('');
+   const [keyFilter, setKeyFilter] = useState('');
+@@ -35,8 +60,49 @@ export default function ShortcutsPanel({ models = [], apiBaseUrl }: { models?: M
+   const [cycleModels, setCycleModels] = useState<string[]>(() => { try { const value: unknown = JSON.parse(localStorage.getItem('atlas.model-cycle') ?? '[]'); return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
+ 
+   const update = (next: ShortcutBindings) => {
++    if (conflict) { setNote('请先重新加载或重试保存，解决冲突后再修改快捷键'); return; }
+     setBindings(next); saveBindings(next);
+-    void api(apiBaseUrl, '/api/u6/keybindings', { method: 'PUT', json: { bindings: next } }).then(() => setNote('快捷键已保存到 keybindings.json')).catch((error) => setNote(`已在本机保存；文件同步失败：${error instanceof Error ? error.message : String(error)}`));
++    void sync.save(next).then(() => {
++      setConflict(null);
++      setNote('快捷键已保存到 keybindings.json');
++    }).catch((error) => {
++      if (error instanceof KeybindingsConflictError) {
++        setConflict({ bindings: next, message: error.message });
++        setNote(`保存冲突：${error.message}`);
++        return;
++      }
++      setNote(`已在本机保存；文件同步失败：${error instanceof Error ? error.message : String(error)}`);
++    });
++  };
++  const reloadFromFile = () => {
++    void sync.refresh().then((file) => {
++      if (file.revision === null) {
++        setConflict(null);
++        setNote('keybindings.json 不存在，已保留本机快捷键');
++        return;
++      }
++      applyFileBindings(file.bindings);
++      setBindings(loadBindings());
++      setConflict(null);
++      setNote('已重新加载 keybindings.json');
++    }).catch((error) => setNote(`重新加载失败：${error instanceof Error ? error.message : String(error)}`));
++  };
++  const retrySave = () => {
++    const pending = conflict?.bindings;
++    if (!pending) return;
++    void sync.retry(pending).then((file) => {
++      applyFileBindings(file.bindings);
++      setBindings(loadBindings());
++      setConflict(null);
++      setNote('已按本机改动重新保存');
++    }).catch((error) => {
++      if (error instanceof KeybindingsConflictError) {
++        setConflict({ bindings: pending, message: error.message });
++        setNote(`再次冲突：${error.message}`);
++        return;
++      }
++      setNote(`重试失败：${error instanceof Error ? error.message : String(error)}`);
++    });
+   };
+   const defaults = defaultBindings();
+   const changed = SHORTCUTS.some(({ action }) => !sameBindings(bindings[action], defaults[action]));
+@@ -135,6 +201,14 @@ export default function ShortcutsPanel({ models = [], apiBaseUrl }: { models?: M
+       <label className="flex items-center gap-2 text-[12.5px] text-fg-2"><input type="checkbox" checked={showHints} onChange={(event) => { const enabled = event.target.checked; setShowHints(enabled); try { localStorage.setItem('atlas.shortcut-hints', String(enabled)); } catch { /* storage unavailable */ } window.dispatchEvent(new Event('atlas:shortcut-hints')); }} />在输入框下方显示按键提示</label>
+       <div className="grid gap-1.5"><span className="text-[12.5px] font-medium text-fg-2">Ctrl+P 模型循环</span><p className="m-0 text-[11.5px] text-fg-3">勾选常用模型；未选时会循环所有已配置模型。</p>{models.map((model) => <label key={model.id} className="flex items-center gap-2 text-[12px] text-fg-2"><input type="checkbox" checked={cycleModels.includes(model.id)} onChange={(event) => { const next = event.target.checked ? [...cycleModels, model.id] : cycleModels.filter((id) => id !== model.id); setCycleModels(next); try { localStorage.setItem('atlas.model-cycle', JSON.stringify(next)); } catch { /* storage unavailable */ } }} />{model.name ?? model.id}</label>)}</div>
+     </div>
++    {conflict && <div role="alert" data-keybindings-conflict className="mb-2 grid gap-2 rounded-xl border border-danger/30 bg-danger-soft px-3 py-2 text-[12.5px] text-fg">
++      <p className="m-0 font-medium text-danger">保存冲突：{conflict.message}</p>
++      <p className="m-0 text-fg-3">本机改动仍在缓存中。重新加载会采用 keybindings.json 的最新内容；重试会先读取最新版本，再用本机改动覆盖保存。</p>
++      <div className="flex flex-wrap gap-2">
++        <button type="button" onClick={reloadFromFile} className="rounded-md border border-danger/30 px-2 py-1 text-[11.5px] hover:bg-danger/10">重新加载</button>
++        <button type="button" onClick={retrySave} className="rounded-md border border-danger/30 px-2 py-1 text-[11.5px] hover:bg-danger/10">用本机改动重试保存</button>
++      </div>
++    </div>}
+     <div className="mb-2 grid gap-2 px-2">
+       <input
+         type="search"
+diff --git a/frontend/src/renderer/services/keybindings.test.ts b/frontend/src/renderer/services/keybindings.test.ts
+new file mode 100644
+index 00000000..d17150f6
+--- /dev/null
++++ b/frontend/src/renderer/services/keybindings.test.ts
+@@ -0,0 +1,168 @@
++import { describe, expect, it } from 'vitest';
++import {
++  createHttpKeybindingsTransport,
++  KeybindingsConflictError,
++  KeybindingsSync,
++  normalizeKeybindingsDocument,
++  type KeybindingsDocument,
++  type KeybindingsMap,
++  type KeybindingsTransport,
++} from './keybindings';
++
++/** Small stateful stand-in for the FastAPI keybindings routes (content-revision CAS). */
++class FakeKeybindingsServer {
++  bindings: KeybindingsMap | null = null;
++  revision: string | null = null;
++  updated_at = -1;
++  writes: Array<{ bindings: KeybindingsMap; expected: string | null }> = [];
++  reads = 0;
++  private version = 0;
++
++  constructor(initial?: KeybindingsMap) {
++    if (initial) {
++      this.bindings = JSON.parse(JSON.stringify(initial)) as KeybindingsMap;
++      this.revision = this.nextRevision();
++      this.updated_at = this.version;
++    }
++  }
++
++  private nextRevision(): string {
++    this.version += 1;
++    return `rev-${this.version}`;
++  }
++
++  read(): KeybindingsDocument {
++    this.reads += 1;
++    return {
++      bindings: this.bindings ? JSON.parse(JSON.stringify(this.bindings)) as KeybindingsMap : {},
++      updated_at: this.updated_at,
++      revision: this.revision,
++    };
++  }
++
++  write(bindings: KeybindingsMap, expected: string | null): KeybindingsDocument {
++    this.writes.push({ bindings, expected });
++    if (expected !== this.revision) throw new KeybindingsConflictError();
++    this.bindings = JSON.parse(JSON.stringify(bindings)) as KeybindingsMap;
++    this.revision = this.nextRevision();
++    this.updated_at = this.version;
++    return {
++      bindings: JSON.parse(JSON.stringify(this.bindings)) as KeybindingsMap,
++      updated_at: this.updated_at,
++      revision: this.revision,
++    };
++  }
++}
++
++function transportFor(server: FakeKeybindingsServer): KeybindingsTransport {
++  return {
++    read: async () => server.read(),
++    write: async (bindings, expected) => server.write(bindings, expected),
++  };
++}
++
++describe('KeybindingsSync compare-and-swap', () => {
++  it('rejects the second writer that started from the same revision and keeps the winner', async () => {
++    const server = new FakeKeybindingsServer({ palette: ['Ctrl+K'] });
++    const first = new KeybindingsSync(transportFor(server));
++    const second = new KeybindingsSync(transportFor(server));
++    await first.refresh();
++    await second.refresh();
++    const baseline = server.revision;
++
++    await first.save({ palette: ['Ctrl+P'] });
++    await expect(second.save({ palette: ['Ctrl+O'] })).rejects.toBeInstanceOf(KeybindingsConflictError);
++
++    expect(server.writes).toHaveLength(2);
++    expect(server.writes[0].expected).toBe(baseline);
++    expect(server.writes[1].expected).toBe(baseline);
++    expect(server.bindings).toEqual({ palette: ['Ctrl+P'] });
++    expect(second.needsReload).toBe(true);
++  });
++
++  it('succeeds after refresh adopts the winning revision, and retry does the read before writing', async () => {
++    const server = new FakeKeybindingsServer({ palette: ['Ctrl+K'] });
++    const first = new KeybindingsSync(transportFor(server));
++    const second = new KeybindingsSync(transportFor(server));
++    await first.refresh();
++    await second.refresh();
++    await first.save({ palette: ['Ctrl+P'] });
++    await expect(second.save({ palette: ['Ctrl+O'] })).rejects.toBeInstanceOf(KeybindingsConflictError);
++
++    const latest = await second.refresh();
++    expect(latest.bindings).toEqual({ palette: ['Ctrl+P'] });
++    expect(second.needsReload).toBe(false);
++    const retried = await second.retry({ palette: ['Ctrl+O'] });
++    expect(retried.revision).toBe(server.revision);
++    expect(server.bindings).toEqual({ palette: ['Ctrl+O'] });
++    expect(server.writes.at(-1)?.expected).toBe(latest.revision);
++  });
++
++  it('sends expected_revision null for the first create', async () => {
++    const server = new FakeKeybindingsServer();
++    const sync = new KeybindingsSync(transportFor(server));
++
++    await sync.save({ palette: ['Ctrl+K'] });
++
++    expect(server.reads).toBe(1);
++    expect(server.writes).toEqual([{ bindings: { palette: ['Ctrl+K'] }, expected: null }]);
++    expect(sync.currentRevision).toBe(server.revision);
++  });
++
++  it('reads a legacy document without a revision field and treats it as the null baseline', async () => {
++    const legacy = normalizeKeybindingsDocument({
++      bindings: { palette: ['Ctrl+Shift+K'], newTask: [] },
++      updated_at: 123,
++    });
++    expect(legacy).toEqual({
++      bindings: { palette: ['Ctrl+Shift+K'], newTask: [] },
++      updated_at: 123,
++      revision: null,
++    });
++
++    const expectations: Array<string | null> = [];
++    const sync = new KeybindingsSync({
++      read: async () => legacy,
++      write: async (bindings, expected) => {
++        expectations.push(expected);
++        return { bindings, updated_at: 124, revision: 'rev-new' };
++      },
++    });
++
++    const read = await sync.refresh();
++    expect(read.bindings).toEqual({ palette: ['Ctrl+Shift+K'], newTask: [] });
++    await sync.save({ palette: ['Ctrl+Alt+K'] });
++    expect(expectations).toEqual([null]);
++  });
++});
++
++describe('HTTP keybindings transport', () => {
++  it('PUTs bindings together with the expected revision and maps 409 to a conflict error', async () => {
++    const calls: Array<{ input: string; init?: RequestInit }> = [];
++    const fetchImpl = async (input: string, init?: RequestInit): Promise<Response> => {
++      calls.push({ input, init });
++      if (!init) {
++        return new Response(JSON.stringify({
++          bindings: { palette: ['Ctrl+K'] }, updated_at: 7, revision: 'rev-1',
++        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
++      }
++      return new Response(JSON.stringify({ detail: 'keybindings.json 已被其他窗口修改，请重新加载后再保存' }), {
++        status: 409,
++        headers: { 'Content-Type': 'application/json' },
++      });
++    };
++    const transport = createHttpKeybindingsTransport('http://127.0.0.1:8765', fetchImpl);
++
++    const document = await transport.read();
++    expect(document.revision).toBe('rev-1');
++    await expect(transport.write({ palette: ['Ctrl+P'] }, 'rev-1')).rejects.toBeInstanceOf(KeybindingsConflictError);
++
++    const put = calls[1];
++    expect(put?.input).toBe('http://127.0.0.1:8765/api/u6/keybindings');
++    expect(put?.init?.method).toBe('PUT');
++    expect(JSON.parse(String(put?.init?.body))).toEqual({
++      bindings: { palette: ['Ctrl+P'] },
++      expected_revision: 'rev-1',
++    });
++  });
++});
+\ No newline at end of file
+diff --git a/frontend/src/renderer/services/keybindings.ts b/frontend/src/renderer/services/keybindings.ts
+new file mode 100644
+index 00000000..82f01470
+--- /dev/null
++++ b/frontend/src/renderer/services/keybindings.ts
+@@ -0,0 +1,172 @@
++/**
++ * Device-level keybindings persisted to data/keybindings.json.
++ *
++ * The backend exposes a content-hash `revision` (sha256 of the file bytes) and
++ * accepts `expected_revision` on PUT. Passing the revision that was read makes
++ * the write compare-and-swap: another window that saved in between gets a 409
++ * instead of silently replacing the newer file. A null revision means the file
++ * does not exist yet, so the first save must send null.
++ *
++ * localStorage stays the local cache; this module only owns the file contract.
++ */
++export type KeybindingsMap = Record<string, string[]>;
++
++export type KeybindingsDocument = {
++  bindings: KeybindingsMap;
++  updated_at: number;
++  revision: string | null;
++};
++
++export const KEYBINDINGS_CONFLICT_MESSAGE = 'keybindings.json 已被其他窗口修改，请重新加载后再保存';
++
++export class KeybindingsConflictError extends Error {
++  constructor(message = KEYBINDINGS_CONFLICT_MESSAGE) {
++    super(message);
++    this.name = 'KeybindingsConflictError';
++  }
++}
++
++export class KeybindingsRequestError extends Error {
++  readonly status: number;
++
++  constructor(status: number, message: string) {
++    super(message);
++    this.name = 'KeybindingsRequestError';
++    this.status = status;
++  }
++}
++
++export interface KeybindingsTransport {
++  read(): Promise<KeybindingsDocument>;
++  write(bindings: KeybindingsMap, expectedRevision: string | null): Promise<KeybindingsDocument>;
++}
++
++/** Keeps only action id -> string[] entries so a malformed document cannot break the UI. */
++export function normalizeKeybindings(value: unknown): KeybindingsMap {
++  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
++  const bindings: KeybindingsMap = {};
++  for (const [action, combos] of Object.entries(value)) {
++    if (Array.isArray(combos) && combos.every((combo) => typeof combo === 'string')) {
++      bindings[action] = [...combos];
++    }
++  }
++  return bindings;
++}
++
++/** Accepts current responses and legacy responses that predate the revision field. */
++export function normalizeKeybindingsDocument(value: unknown): KeybindingsDocument {
++  const source = value && typeof value === 'object' && !Array.isArray(value)
++    ? value as Record<string, unknown>
++    : {};
++  return {
++    bindings: normalizeKeybindings(source.bindings),
++    updated_at: typeof source.updated_at === 'number' ? source.updated_at : -1,
++    revision: typeof source.revision === 'string' && source.revision ? source.revision : null,
++  };
++}
++
++type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
++
++async function parseKeybindingsResponse(response: Response): Promise<KeybindingsDocument> {
++  if (!response.ok) {
++    let detail = '';
++    try {
++      const body = await response.json() as { detail?: unknown };
++      detail = typeof body?.detail === 'string' ? body.detail : JSON.stringify(body?.detail ?? body);
++    } catch { /* non-JSON error */ }
++    if (response.status === 409) throw new KeybindingsConflictError(detail || KEYBINDINGS_CONFLICT_MESSAGE);
++    throw new KeybindingsRequestError(
++      response.status,
++      detail ? `HTTP ${response.status}：${detail}` : `HTTP ${response.status}`,
++    );
++  }
++  return normalizeKeybindingsDocument(await response.json());
++}
++
++export function createHttpKeybindingsTransport(
++  apiBaseUrl: string,
++  fetchImpl: FetchLike = fetch,
++): KeybindingsTransport {
++  const url = `${apiBaseUrl}/api/u6/keybindings`;
++  return {
++    read: async () => parseKeybindingsResponse(await fetchImpl(url)),
++    write: async (bindings, expectedRevision) => parseKeybindingsResponse(await fetchImpl(url, {
++      method: 'PUT',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify({ bindings, expected_revision: expectedRevision }),
++    })),
++  };
++}
++
++/**
++ * Serialized compare-and-swap writer for one renderer window.
++ *
++ * Saves are queued so rapid edits cannot race each other with the same
++ * revision. A 409 marks the instance as needing a reload; subsequent saves
++ * refuse until `refresh()`/`retry()` adopts the newer revision, so the
++ * conflicted local change is never written implicitly.
++ */
++export class KeybindingsSync {
++  private revision: string | null | undefined;
++  private stale = false;
++  private queue: Promise<unknown> = Promise.resolve();
++
++  constructor(private readonly transport: KeybindingsTransport) {}
++
++  /** undefined = never read; null = file missing at last read. */
++  get currentRevision(): string | null | undefined { return this.revision; }
++
++  get needsReload(): boolean { return this.stale; }
++
++  private enqueue<T>(task: () => Promise<T>): Promise<T> {
++    const result = this.queue.then(task, task);
++    this.queue = result.then(() => undefined, () => undefined);
++    return result;
++  }
++
++  /** Reads the file and adopts its revision. */
++  refresh(): Promise<KeybindingsDocument> {
++    return this.enqueue(async () => {
++      const document = await this.transport.read();
++      this.revision = document.revision;
++      this.stale = false;
++      return document;
++    });
++  }
++
++  /** PUT with the revision read earlier. First create sends null. */
++  save(bindings: KeybindingsMap): Promise<KeybindingsDocument> {
++    return this.enqueue(async () => {
++      if (this.stale) throw new KeybindingsConflictError();
++      if (this.revision === undefined) {
++        const loaded = await this.transport.read();
++        this.revision = loaded.revision;
++      }
++      try {
++        const document = await this.transport.write(bindings, this.revision ?? null);
++        this.revision = document.revision;
++        return document;
++      } catch (error) {
++        if (error instanceof KeybindingsConflictError) this.stale = true;
++        throw error;
++      }
++    });
++  }
++
++  /** Explicit user-approved retry: read the latest revision, then write local changes. */
++  retry(bindings: KeybindingsMap): Promise<KeybindingsDocument> {
++    return this.enqueue(async () => {
++      const latest = await this.transport.read();
++      this.revision = latest.revision;
++      this.stale = false;
++      try {
++        const document = await this.transport.write(bindings, this.revision);
++        this.revision = document.revision;
++        return document;
++      } catch (error) {
++        if (error instanceof KeybindingsConflictError) this.stale = true;
++        throw error;
++      }
++    });
++  }
++}
+\ No newline at end of file
+diff --git a/frontend/src/renderer/services/shortcuts.test.ts b/frontend/src/renderer/services/shortcuts.test.ts
+index 28982acf..929edc87 100644
+--- a/frontend/src/renderer/services/shortcuts.test.ts
++++ b/frontend/src/renderer/services/shortcuts.test.ts
+@@ -1,5 +1,5 @@
+ import { afterEach, describe, expect, it, vi } from 'vitest';
+-import { comboFromEvent, defaultBindings, matchShortcut, SHORTCUTS } from './shortcuts';
++import { comboFromEvent, defaultBindings, loadBindings, matchShortcut, SHORTCUTS } from './shortcuts';
+ 
+ describe('focus view shortcut', () => {
+   afterEach(() => { vi.restoreAllMocks(); });
+@@ -27,4 +27,20 @@ describe('focus view shortcut', () => {
+       expect(matchShortcut(event, defaultBindings())).toBeNull();
+     }
+   });
++
++  it('keeps the legacy single-string localStorage format readable as the local cache', () => {
++    vi.stubGlobal('localStorage', {
++      getItem: (key: string) => key === 'atlas.shortcuts'
++        ? JSON.stringify({ palette: 'Ctrl+Alt+K', newTask: ['Ctrl+Alt+N', 'Ctrl+Alt+N'] })
++        : null,
++    });
++    try {
++      const loaded = loadBindings();
++      expect(loaded.palette).toEqual(['Ctrl+Alt+K']);
++      expect(loaded.newTask).toEqual(['Ctrl+Alt+N']);
++      expect(loaded.closeTab).toEqual(['Ctrl+W']);
++    } finally {
++      vi.unstubAllGlobals();
++    }
++  });
+ });

@@ -1,0 +1,121 @@
+{
+  "scenario": "existing",
+  "window1_exit": 0,
+  "window2_exit": 0,
+  "backend_exit_after_sigterm": 143,
+  "final_bindings": {
+    "palette": [
+      "Ctrl+Alt+U"
+    ],
+    "newTask": [
+      "Ctrl+Alt+N"
+    ],
+    "temporaryChat": [
+      "Ctrl+Shift+Y"
+    ],
+    "settings": [
+      "Ctrl+,"
+    ],
+    "nextTab": [
+      "Ctrl+Tab"
+    ],
+    "prevTab": [
+      "Ctrl+Shift+Tab"
+    ],
+    "closeTab": [
+      "Ctrl+W"
+    ],
+    "closeWindow": [
+      "Ctrl+Shift+W"
+    ],
+    "tab1": [
+      "Ctrl+1"
+    ],
+    "tab2": [
+      "Ctrl+2"
+    ],
+    "tab3": [
+      "Ctrl+3"
+    ],
+    "tab4": [
+      "Ctrl+4"
+    ],
+    "tab5": [
+      "Ctrl+5"
+    ],
+    "tab6": [
+      "Ctrl+6"
+    ],
+    "tab7": [
+      "Ctrl+7"
+    ],
+    "tab8": [
+      "Ctrl+8"
+    ],
+    "tab9": [
+      "Ctrl+9"
+    ],
+    "toggleSidebar": [
+      "Ctrl+B"
+    ],
+    "toggleInspector": [
+      "Ctrl+."
+    ],
+    "focusComposer": [
+      "Ctrl+L"
+    ],
+    "toggleFocus": [
+      "Ctrl+Shift+O"
+    ],
+    "stopRun": [
+      "Ctrl+Shift+Backspace"
+    ],
+    "sendNow": [
+      "Ctrl+Enter"
+    ],
+    "stashInput": [
+      "Ctrl+Shift+S"
+    ],
+    "sidebarSearch": [
+      "Ctrl+Shift+F"
+    ],
+    "sidebarProjectPicker": [
+      "Ctrl+Alt+P"
+    ],
+    "sidebarNextGroup": [
+      "Ctrl+Alt+J"
+    ],
+    "sidebarPreviousGroup": [
+      "Ctrl+Alt+K"
+    ],
+    "focusNextPane": [
+      "Ctrl+Alt+ArrowRight"
+    ],
+    "focusPreviousPane": [
+      "Ctrl+Alt+ArrowLeft"
+    ],
+    "openSideChat": [
+      "Ctrl+;"
+    ],
+    "openDiff": [
+      "Ctrl+Alt+D"
+    ],
+    "diffPreviousHunk": [
+      "Ctrl+Alt+ArrowUp"
+    ],
+    "diffNextHunk": [
+      "Ctrl+Alt+ArrowDown"
+    ],
+    "diffCollapseHunks": [
+      "Ctrl+Alt+["
+    ],
+    "diffExpandHunks": [
+      "Ctrl+Alt+]"
+    ]
+  },
+  "final_revision_sha256": "17d2c1acd0777dff6a551e21bd2d9f0af44e4b09410640cc17e947427426f63e",
+  "backend_put_200": 2,
+  "backend_put_409": 1,
+  "problems": [],
+  "result": "PASS"
+}

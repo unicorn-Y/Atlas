@@ -1,0 +1,21 @@
+SCENARIO node-bundled
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 05:52:28 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-par10-mcp-recovery\.tmp\par10-final2\data\node-bundled\config\atlas.toml
+2026-11-19 05:52:28 [info     ] mcp.starting                   count=1 names=['nodesrv']
+2026-11-19 05:52:29 [info     ] mcp.server_initialized         protocol=2025-11-25 server=nodesrv server_info="name='par10-node-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:52:29 [info     ] mcp.server_ready               server=nodesrv tools=['node_echo']
+CHECK PASS node: packaged Node server connected :: {'available': True, 'blocking_reason': None, 'servers': [{'name': 'nodesrv', 'enabled': True, 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}]}
+CHECK PASS node: tool discovered :: ['nodesrv__node_echo']
+2026-11-19 05:52:29 [info     ] mcp.call_tool                  args={'text': 'before'} tool=nodesrv__node_echo
+CHECK PASS node: tool call round-trips :: {'content': [{'type': 'text', 'text': 'node:before'}], 'is_error': False}
+2026-11-19 05:52:30 [warning  ] mcp.connection_lost            reason='MCP server failed during launch or initialization (ConnectionError)' server=nodesrv
+2026-11-19 05:52:31 [info     ] mcp.server_initialized         protocol=2025-11-25 server=nodesrv server_info="name='par10-node-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:52:31 [info     ] mcp.server_ready               server=nodesrv tools=['node_echo']
+2026-11-19 05:52:31 [info     ] mcp.server_reconnected         attempts=1 server=nodesrv
+CHECK PASS node: packaged Node child recovers :: {'killed': 64032, 'new': 63024}
+CHECK PASS node: marker proves the packaged node.exe executed :: ['D:\\Atlas\\frontend\\windows-release\\win-unpacked\\resources\\atlas\\runtime\\node\\node.exe', 'D:\\Atlas\\frontend\\windows-release\\win-unpacked\\resources\\atlas\\runtime\\node\\node.exe']
+CHECK PASS node: status connected after recovery :: {'name': 'nodesrv', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}
+2026-11-19 05:52:31 [warning  ] mcp.owner_cancelled            server=nodesrv
+2026-11-19 05:52:31 [info     ] mcp.server_stopped             server=nodesrv
+CHECK PASS node: stop kills packaged Node child :: 63024
+RESULT node-bundled checks=7 failed=0

@@ -1,0 +1,10 @@
+PAR-10-T2 packaged Electron launch (valid manifest) 2026-11-18T21:48:21Z
+exe: D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\windows-release\win-unpacked\Atlas.exe
+env: ATLAS_DESKTOP_USER_DATA_DIR/ATLAS_DATA_DIR/ATLAS_LOG_ROOT=temp, ATLAS_PORT=18765
+command: powershell -File run-packaged.ps1 -Exe <win-unpacked>\Atlas.exe -WaitSeconds 12
+PID=62068
+ALIVE_AFTER_12s=True
+MAIN_WINDOW_TITLE=ÐÂÈÎÎñ ¡ª Atlas
+CHILDREN=Atlas.exe,Atlas.exe,Atlas.exe,atlas_backend.exe
+GRACEFUL_EXIT=false
+EXIT_CODE=-1

@@ -1,0 +1,147 @@
+===== IN-FLIGHT MCP 失败原文(脱敏,前 120 行)=====
+
+_________ test_node_release_manifest_pins_official_binary_and_sha256 __________
+tests\test_mcp_client.py:44: in test_node_release_manifest_pins_official_binary_and_sha256
+    assert manifest["version"] == NODE_VERSION.removeprefix("v")
+E   AssertionError: assert '24.21.0' == '22.23.3'
+E     
+E     - 22.23.3
+E     + 24.21.0
+________ test_start_records_runtime_config_discovery_and_restart_state ________
+tests\test_mcp_client.py:100: in test_start_records_runtime_config_discovery_and_restart_state
+    assert state["servers"][0]["connected"] is True
+E   assert False is True
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 08:31:45 [info     ] mcp.starting                   count=1 names=['filesystem']
+-------------------------- Captured stdout teardown ---------------------------
+2026-11-18 08:31:45 [warning  ] mcp.owner_cancelled            server=filesystem
+_ test_failed_configured_server_blocks_mcp_runtime_without_echoing_arguments __
+tests\test_mcp_client.py:121: in test_failed_configured_server_blocks_mcp_runtime_without_echoing_arguments
+    assert status["available"] is False
+E   assert True is False
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 08:31:45 [info     ] mcp.starting                   count=1 names=['broken']
+-------------------------- Captured stdout teardown ---------------------------
+2026-11-18 08:31:45 [warning  ] mcp.background_start_failed    reason='MCP server failed during launch or initialization (RuntimeError)'
+______ test_ssh_cancel_intent_applies_to_late_process_handle[operation] _______
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\tasks.py:500: in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\locks.py:213: in wait
+    await fut
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+tests\test_ssh_execution_world.py:373: in test_ssh_cancel_intent_applies_to_late_process_handle
+    await asyncio.wait_for(client.create_entered.wait(), timeout=1.0)
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\tasks.py:502: in wait_for
+    raise exceptions.TimeoutError() from exc
+E   TimeoutError
+______ test_ssh_cancel_intent_applies_to_late_process_handle[start_task] ______
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\tasks.py:500: in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\locks.py:213: in wait
+    await fut
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+tests\test_ssh_execution_world.py:373: in test_ssh_cancel_intent_applies_to_late_process_handle
+    await asyncio.wait_for(client.create_entered.wait(), timeout=1.0)
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\tasks.py:502: in wait_for
+    raise exceptions.TimeoutError() from exc
+E   TimeoutError
+___ test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry ____
+tests\test_ssh_execution_world.py:984: in test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry
+    assert client.create_calls == 1
+E   assert 0 == 1
+E    +  where 0 = <tests.test_ssh_execution_world.test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry.<locals>.DroppedTransport object at 0x00000265910E6450>.create_calls
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 08:32:11 [debug    ] agent.tool_call_failed         error="test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry.<locals>.process_command() got an unexpected keyword argument 'expected_authority_id'" tool=local_process
+┌───────────────────── Traceback (most recent call last) ─────────────────────┐
+│ D:\Atlas\core\atlas\agent\tool_node.py:1856 in execute_tools_node           │
+│                                                                             │
+│   1853 │   │   │   │   │   │   # A delegated run inherits the parent's call │
+│   1854 │   │   │   │   │   │   # its remote process ownership and cancellat │
+│   1855 │   │   │   │   │   │   # child run currently executing this tool.   │
+│ > 1856 │   │   │   │   │   │   result = await ssh_tool_callback(fn_name, fn │
+│   1857 │   │   │   │   │   else:                                            │
+│   1858 │   │   │   │   │   │   result = await ssh_tool_callback(fn_name, fn │
+│   1859 │   │   │   │   elif (getattr(ctx, "acp_filesystem", None) is not No │
+│                                                                             │
+│ ┌──────────────────────────────── locals ─────────────────────────────────┐ │
+│ │                          agent = <atlas.agent.AgentOrchestrator object  │ │
+│ │                                  at 0x00000265910E6D50>                 │ │
+│ │                  allowed_paths = []                                     │ │
+│ │                  allowed_tools = None                                   │ │
+│ │                  atlas_options = {                                      │ │
+│ │                                  │   'model': 'test-model',             │ │
+│ │                                  │   'permission_mode': 'full_access',  │ │
+│ │                                  │   'allowed_paths': [],               │ │
+│ │                                  │   'tool_allow': None,                │ │
+│ │                                  │   'available_tools': [],             │ │
+│ │                                  │   'tool_deny': [],                   │ │
+│ │                                  │   'cancel_event': None,              │ │
+│ │                                  │   'approval_callback': <function     │ │
+│ │                                  execute_tools_node.<locals>.child_app… │ │
+│ │                                  at 0x00000265903C8400>,                │ │
+│ │                                  │   'user_hook_callback': None,        │ │
+│ │                                  │   'ssh_tool_callback': <function     │ │
+│ │                                  test_kernel_exec_manager_ssh_start_di… │ │
+│ │                                  at 0x00000265918CBEC0>,                │ │
+│ │                                  │   ... +13                            │ │
+│ │                                  }                                      │ │
+│ │                available_tools = []                                     │ │
+│ │                call_started_at = '2026-11-18T00:32:11.014+00:00'        │ │
+│ │              call_started_mono = 127122.281                             │ │
+│ │                            ctx = AgentRunContext(                       │ │
+│ │                                  │   tool_mode='native',                │ │
+│ │                                  │   cancel_event=None,                 │ │
+│ │                                  │   pause_event=None,                  │ │
+│ │                                  │   approval_callback=None,            │ │
+│ │                                  │   event_queue=<Queue at              │ │
+│ │                                  0x265910bee10 maxsize=0>,              │ │
+│ │                                  │   run_id='kernel-ssh-disconnect',    │ │
+│ │                                  │   goal=None,                         │ │
+│ │                                  │                                      │ │
+│ │                                  conversation_id='kernel-ssh-disconnec… │ │
+│ │                                  │   stable_system_prefix=None,         │ │
+│ │                                  │   memory_scope_id='',                │ │
+│ │                                  │   project_id=None,                   │ │
+│ │                                  │                                      │ │
+│ │                                  reminders=<atlas.agent.enrichment.Sys… │ │
+│ │                                  object at 0x000002659029AD10>,         │ │
+│ │                                  │   maintenance_snapshot=None,         │ │
+│ │                                  │   maintenance_context={              │ │
+│ │                                  │   │   'active_tool_refs': [          │ │
+│ │                                  │   │   │   {                          │ │
+│ │                                  │   │   │   │   'name':                │ │
+│ │                                  'local_process',                       │ │
+│ │                                  │   │   │   │   'tool_call_id':        │ │
+│ │                                  'kernel-ssh-disconnect-call'           │ │
+
+===== CLEAN@060071ab MCP 失败原文(脱敏,前 120 行)=====
+
+_________ test_node_release_manifest_pins_official_binary_and_sha256 __________
+tests\test_mcp_client.py:44: in test_node_release_manifest_pins_official_binary_and_sha256
+    assert manifest["version"] == NODE_VERSION.removeprefix("v")
+E   AssertionError: assert '24.21.0' == '22.23.3'
+E     
+E     - 22.23.3
+E     + 24.21.0
+________ test_start_records_runtime_config_discovery_and_restart_state ________
+tests\test_mcp_client.py:100: in test_start_records_runtime_config_discovery_and_restart_state
+    assert state["servers"][0]["connected"] is True
+E   assert False is True
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 08:33:21 [info     ] mcp.starting                   count=1 names=['filesystem']
+-------------------------- Captured stdout teardown ---------------------------
+2026-11-18 08:33:22 [warning  ] mcp.owner_cancelled            server=filesystem
+_ test_failed_configured_server_blocks_mcp_runtime_without_echoing_arguments __
+tests\test_mcp_client.py:121: in test_failed_configured_server_blocks_mcp_runtime_without_echoing_arguments
+    assert status["available"] is False
+E   assert True is False
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 08:33:22 [info     ] mcp.starting                   count=1 names=['broken']
+-------------------------- Captured stdout teardown ---------------------------
+2026-11-18 08:33:22 [warning  ] mcp.background_start_failed    reason='MCP server failed during launch or initialization (RuntimeError)'

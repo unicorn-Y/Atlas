@@ -1,0 +1,36 @@
+SCENARIO recovery
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 05:51:26 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-par10-mcp-recovery\.tmp\par10-final2\data\recovery\config\atlas.toml
+2026-11-19 05:51:26 [info     ] mcp.starting                   count=2 names=['real', 'other']
+2026-11-19 05:51:29 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:51:29 [info     ] mcp.server_ready               server=real tools=['echo']
+2026-11-19 05:51:29 [info     ] mcp.server_initialized         protocol=2025-11-25 server=other server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:51:29 [info     ] mcp.server_ready               server=other tools=['echo']
+CHECK PASS recovery: both servers connected :: {'available': True, 'blocking_reason': None, 'servers': [{'name': 'real', 'enabled': True, 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}, {'name': 'other', 'enabled': True, 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}]}
+CHECK PASS recovery: both tools indexed :: ['real__echo', 'other__echo']
+CHECK PASS recovery: killed child is gone :: 64524
+2026-11-19 05:51:29 [warning  ] mcp.connection_lost            reason='MCP server failed during launch or initialization (ConnectionError)' server=real
+CHECK PASS recovery: status becomes reconnecting within 8s :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'reconnecting', 'tool_discovery': 'pending', 'tool_count': 0, 'blocking_reason': 'MCP connection lost; reconnecting'}
+CHECK PASS recovery: reconnecting clears connected :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'reconnecting', 'tool_discovery': 'pending', 'tool_count': 0, 'blocking_reason': 'MCP connection lost; reconnecting'}
+CHECK PASS recovery: dead server tools leave the index :: ['other__echo']
+CHECK PASS recovery: other server tools stay indexed :: ['other__echo']
+2026-11-19 05:51:30 [info     ] mcp.call_tool                  args={'text': 'while-real-down'} tool=other__echo
+CHECK PASS recovery: other server still callable during real reconnect :: {'content': [{'type': 'text', 'text': 'echo:while-real-down'}], 'is_error': False}
+CHECK PASS recovery: other server process untouched :: {'before': 64140, 'now': 64140}
+2026-11-19 05:51:32 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:51:32 [info     ] mcp.server_ready               server=real tools=['echo']
+2026-11-19 05:51:32 [info     ] mcp.server_reconnected         attempts=1 server=real
+CHECK PASS recovery: supervisor spawns a replacement child :: {'available': True, 'blocking_reason': None, 'servers': [{'name': 'real', 'enabled': True, 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}, {'name': 'other', 'enabled': True, 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}]}
+CHECK PASS recovery: replacement child is a new live PID :: {'killed': 64524, 'new': 56900}
+CHECK PASS recovery: tool index refreshed :: ['other__echo', 'real__echo']
+2026-11-19 05:51:33 [info     ] mcp.call_tool                  args={'text': 'after-recovery'} tool=real__echo
+CHECK PASS recovery: recovered server serves tool calls :: {'content': [{'type': 'text', 'text': 'echo:after-recovery'}], 'is_error': False}
+CHECK PASS recovery: startup progress records reconnecting :: ['initializing', 'discovering_tools', 'ready', 'reconnecting', 'reconnecting', 'initializing', 'discovering_tools', 'ready']
+CHECK PASS recovery: startup progress records ready after reconnect :: ['initializing', 'discovering_tools', 'ready', 'reconnecting', 'reconnecting', 'initializing', 'discovering_tools', 'ready']
+2026-11-19 05:51:33 [warning  ] mcp.owner_cancelled            server=other
+2026-11-19 05:51:33 [info     ] mcp.server_stopped             server=other
+2026-11-19 05:51:33 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 05:51:33 [info     ] mcp.server_stopped             server=real
+CHECK PASS recovery: stop leaves no live children :: []
+CHECK PASS recovery: stop records stopped :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'stopped', 'tool_discovery': 'complete', 'tool_count': 0, 'blocking_reason': None}
+RESULT recovery checks=17 failed=0

@@ -1,7 +1,80 @@
-import { describe, expect, it } from 'vitest';
-import { applyRuntimeEvent, normalizeRuntimeEvent } from './runtimeEvents';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { applyRuntimeEvent, normalizeRuntimeEvent, reduceAttemptText } from './runtimeEvents';
 import { useAtlasStore } from '../store/useAtlasStore';
+import ConversationActivity from '../components/ConversationActivity';
+
+afterEach(() => vi.unstubAllGlobals());
 import type { AgentEvent, AgentRun } from '../../types/runtime';
+
+describe('attempt-scoped streamed text', () => {
+  it('removes only failed output on rollback and preserves successful continuation text', () => {
+    const failed = reduceAttemptText({ text: '', attemptChunks: {} }, 'message.delta', {
+      content: 'OLD', attempt_id: 'attempt-old',
+    });
+    const unrelatedRollback = reduceAttemptText(failed, 'message.rollback', { attempt_id: 'other' });
+    expect(unrelatedRollback).toEqual(failed);
+    const withdrawn = reduceAttemptText(unrelatedRollback, 'message.rollback', { attempt_id: 'attempt-old' });
+    expect(withdrawn).toEqual({ text: '', attemptChunks: {} });
+    const successful = reduceAttemptText(withdrawn, 'message.delta', {
+      content: 'NEW prefix', attempt_id: 'attempt-new',
+    });
+    const continued = reduceAttemptText(successful, 'message.delta', {
+      content: ' continuation', attempt_id: 'attempt-continuation',
+    });
+    expect(continued.text).toBe('NEW prefix continuation');
+    expect(reduceAttemptText(continued, 'message.rollback', {
+      attempt_id: 'attempt-continuation',
+    }).text).toBe('NEW prefix');
+  });
+
+  it('normalizes the rollback event through the renderer wire gate', () => {
+    expect(normalizeRuntimeEvent({
+      type: 'agent_event', event_id: 'rollback-1', run_id: 'run-1', sequence: 1,
+      timestamp: new Date(0).toISOString(), event: 'message.rollback',
+      data: { attempt: 1, attempt_id: 'attempt-old' },
+    })).toMatchObject({ type: 'message.rollback', data: { attempt_id: 'attempt-old' } });
+  });
+
+  it('renders the real runtime envelope sequence without rolled-back text and keeps cancelled state', () => {
+    vi.stubGlobal('window', new EventTarget());
+    const timestamp = new Date(0).toISOString();
+    const run: AgentRun = {
+      id: 'run-cancel-visible', conversationId: 'conversation-cancel-visible', title: 'cancelled attempt',
+      status: 'running', phase: 'execution', startedAt: timestamp, updatedAt: timestamp,
+      lastEventSequence: 0, events: [],
+    };
+    useAtlasStore.setState({ runs: [run], activeRunId: run.id, activeConversationId: run.conversationId, busy: true });
+
+    const envelopes = [
+      { event: 'run.started', data: { content: 'prompt' } },
+      { event: 'message.delta', data: { content: 'OLD answer', attempt_id: 'attempt-old' } },
+      { event: 'message.rollback', data: { attempt_id: 'attempt-old', category: 'cancelled' } },
+      { event: 'message.delta', data: { content: 'NEW answer', attempt_id: 'attempt-new' } },
+      { event: 'run.cancelled', data: { category: 'cancelled' } },
+    ] as const;
+    envelopes.forEach(({ event, data }, index) => {
+      const normalized = normalizeRuntimeEvent({
+        type: 'agent_event', event_id: `run-cancel-visible:${index + 1}`, run_id: run.id,
+        sequence: index + 1, timestamp, event, data,
+      });
+      expect(normalized).not.toBeNull();
+      if (normalized) useAtlasStore.getState().appendEvent(normalized);
+    });
+
+    const finalRun = useAtlasStore.getState().getRun(run.id)!;
+    expect(finalRun.status).toBe('cancelled');
+    expect(finalRun.events.map((event) => event.type)).toEqual([
+      'run.started', 'message.delta', 'message.rollback', 'message.delta', 'run.cancelled',
+    ]);
+    const markup = renderToStaticMarkup(React.createElement(ConversationActivity, {
+      events: finalRun.events, store: useAtlasStore.getState(), username: 'Atlas', setTab: () => undefined,
+    }));
+    expect(markup).toContain('NEW answer');
+    expect(markup).not.toContain('OLD answer');
+  });
+});
 
 describe('session title runtime events', () => {
   it('updates the conversation list only for an accepted automatic title', () => {

@@ -64,3 +64,76 @@
 | 失败可重放 | `attempt/failed` 事件含 category/detail/model/run_id |
 | 协议错误 | 坏帧返回 `protocol.error` 含字段名 |
 | 前端 tsc | renderer 0 错误 |
+
+---
+
+# WAVE 7（2026-11-15 晚）：把「超越」从清单变成实测
+
+前六轮证明的是**能力覆盖**。这一轮回答另一个问题：覆盖了，跑起来是不是真的更好？
+
+## 先让 DSH 真的能跑
+
+DSH 之前一直起不来（`MISSING_CREDENTIAL`，`deepseek-official` 路由缺 key）。定位到
+`~/.dsh/profiles/headless/cordis.patch.yml` 只补了 provider，没改默认模型选择：
+
+```yaml
+- id: agent-default-model
+  config:
+    provider: d1api
+    model: deepseek-v4.1-flash
+```
+
+补上后 DSH 跑通，与 Atlas 走**同一个网关、同一个模型**，差异只可能来自 harness。
+
+## 配对实测结果
+
+见 `BENCH.md`（脚本生成）和 `BENCH-ANALYSIS.md`（人工解读）。
+
+| 指标 | Atlas | DSH | 结论 |
+|---|---:|---:|---|
+| 单轮 prompt tokens | 8,900 | 17,377 | **Atlas 少 49%** |
+| 单轮 wall clock（扣 DSH 启动） | 4,171 | 4,516 | **Atlas 略快 8%** |
+| 8 轮后 prompt tokens | 19,337 | 17,442 | **DSH 反超** |
+
+第三行是这一轮最重要的发现：单轮优势**会消失**。Atlas 每轮 +1,600，DSH 因缓存几乎不涨，
+第 8 轮交叉。所以「Atlas 上下文效率是 DSH 两倍」这句话只在单轮成立。
+
+## 修掉的真实缺陷
+
+**坏 hook 每次 run 白烧 2.9 秒。** `~/.codex/hooks.json` 里两条指向
+`D:/MemoryOS/adapters/codex/hooks/*.py`，文件早已不存在，但 Atlas 仍然为每条起一个
+Python 进程去失败。`_missing_script`（`core/atlas/runtime/hooks.py`）现在在 spawn 前
+检查脚本是否存在，不存在直接返回 127（0 ms）。7 个测试覆盖。
+
+这条之前把 Atlas 的单轮延迟从 4.2s 抬到 8.3s，一度让我误判「Atlas 比 DSH 慢 1.7 倍」。
+
+**`tool_node.py` 硬取 `ctx.conversation_id`。** 任何 proxy / 测试替身缺这个属性就整轮
+崩掉。改成 `getattr` 兜底，`test_agent.py` 的截图测试随之转绿。
+
+## 服务组合根补上依赖排序
+
+`service_registry` 之前只有 owner + 可撤销。补了 DSH Cordis 有而这里没有的两点：
+
+- `depends_on` 声明，`resolve` 按声明顺序构建依赖树，缺失依赖在**注册时**就报错
+- 销毁按反向依赖顺序：先拆依赖方，再拆被依赖方；`unregister` 会连带拆掉依赖它的服务
+- 环检测：`a → b → a` 抛 `ValueError` 而不是无限递归
+
+**但生产代码目前没有声明任何依赖边**（`depends_on: {}`）。能力就位，接线未做——这一点
+如实记在自省输出里，不假装已经有了一张图。
+
+## 测试基线（关键）
+
+| | failed | passed |
+|---|---:|---:|
+| HEAD（stash 后） | 143 | 3,051 |
+| 本轮改动后 | **133** | **3,077** |
+
+净减 10 个失败、净增 26 个通过。剩下 133 个是既有环境/依赖问题（`openpyxl` 缺失已修，
+其余是 `AtlasKernel requires an Atlas agent` 一类的 HEAD 原有失败），不是本轮引入。
+
+## 这一轮不许说的话
+
+- ❌「Atlas 各方面都超越 DSH」—— 延迟只是持平，多轮上下文 DSH 反超
+- ❌「服务依赖图已建立」—— 机制在，接线没做
+- ✅ 可以说：「单轮上下文效率 2×，8 轮后打平」
+- ✅ 可以说：「坏 hook 浪费的 2.9 秒/轮已消除」

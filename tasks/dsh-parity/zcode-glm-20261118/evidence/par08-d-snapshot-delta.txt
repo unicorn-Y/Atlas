@@ -1,0 +1,12 @@
+2026-11-19 03:32:47 [warning  ] config.not_found               path=D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\.tmp\route-snapshot-data3\config\atlas.toml
+C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Lib\site-packages\fastapi\openapi\utils.py:254: UserWarning: Duplicate Operation ID update_custom_model_api_models_custom__model_id__put for function update_custom_model at D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\models_settings_router.py
+  warnings.warn(message, stacklevel=1)
+C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Lib\site-packages\fastapi\openapi\utils.py:254: UserWarning: Duplicate Operation ID delete_custom_model_api_models_custom__model_id__delete for function delete_custom_model at D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\models_settings_router.py
+  warnings.warn(message, stacklevel=1)
+probe removed from app router: [('/api/conversations/{conversation_id}/worktree/recovery', ['GET']), ('/api/conversations/{conversation_id}/worktree/recovery', ['POST'])]
+unique operations before: 858 current: 860
+added by this change: [('GET', '/api/conversations/{conversation_id}/worktree/recovery'), ('POST', '/api/conversations/{conversation_id}/worktree/recovery')]
+removed by this change: []
+all other route entries unchanged: True
+shadow_order unchanged: True
+components unchanged: True

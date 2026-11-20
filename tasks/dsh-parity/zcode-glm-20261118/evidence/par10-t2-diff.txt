@@ -1,0 +1,193 @@
+PAR-10-T2 candidate diff/status 2026-11-18T21:49:49Z
+worktree: /d/Atlas/.worktrees/zcode-par10-release-startup
+HEAD: 060071ab2ecf86d41cab90e98160183ce126bc69
+
+=== git status --short ===
+ M frontend/package.json
+ M frontend/scripts/write-release-manifest.mjs
+ M frontend/src/main/electron.ts
+?? frontend/scripts/after-pack-release-manifest.cjs
+?? frontend/scripts/after-pack.cjs
+?? frontend/src/main/releaseIntegrity.test.ts
+?? frontend/src/main/releaseIntegrity.ts
+
+=== git diff --stat ===
+ frontend/package.json                       |  2 +-
+ frontend/scripts/write-release-manifest.mjs | 22 ++++++++++++++++++++++
+ frontend/src/main/electron.ts               | 13 +++++++++++++
+ 3 files changed, 36 insertions(+), 1 deletion(-)
+
+=== tracked diff ===
+diff --git a/frontend/package.json b/frontend/package.json
+index 0b77fe82..4c954934 100644
+--- a/frontend/package.json
++++ b/frontend/package.json
+@@ -177,6 +177,6 @@
+       "createStartMenuShortcut": true,
+       "shortcutName": "Atlas"
+     },
+-    "afterPack": "scripts/after-pack-icon.cjs"
++    "afterPack": "scripts/after-pack.cjs"
+   }
+ }
+diff --git a/frontend/scripts/write-release-manifest.mjs b/frontend/scripts/write-release-manifest.mjs
+index 9d575d21..9d564927 100644
+--- a/frontend/scripts/write-release-manifest.mjs
++++ b/frontend/scripts/write-release-manifest.mjs
+@@ -2,8 +2,16 @@ import crypto from 'node:crypto';
+ import fs from 'node:fs';
+ import path from 'node:path';
+ import { spawnSync } from 'node:child_process';
++import { createRequire } from 'node:module';
+ import { fileURLToPath } from 'node:url';
+ 
++const require = createRequire(import.meta.url);
++const {
++  RUNTIME_MANIFEST_FIELDS,
++  RUNTIME_MANIFEST_RELATIVE,
++  valueAt,
++} = require('./after-pack-release-manifest.cjs');
++
+ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+ const frontendDir = path.resolve(scriptDir, '..');
+ const repoRoot = path.resolve(frontendDir, '..');
+@@ -83,6 +91,20 @@ const manifest = {
+ };
+ 
+ const destination = path.join(releaseDir, 'release-manifest.json');
++const embeddedPath = path.join(releaseDir, 'win-unpacked', RUNTIME_MANIFEST_RELATIVE);
++if (!fs.statSync(embeddedPath, { throwIfNoEntry: false })?.isFile()) {
++  throw new Error(`Runtime release manifest is missing from the packaged payload: ${embeddedPath}`);
++}
++const embeddedManifest = JSON.parse(fs.readFileSync(embeddedPath, 'utf8'));
++for (const field of RUNTIME_MANIFEST_FIELDS) {
++  const embedded = valueAt(embeddedManifest, field);
++  const release = valueAt(manifest, field);
++  if (embedded !== release) {
++    throw new Error(`Release manifest drift at ${field}: runtime=${String(embedded)} release=${String(release)}`);
++  }
++}
++// The sidecar keeps the payload's build time so both manifests describe one build.
++manifest.build.time_utc = embeddedManifest.build.time_utc;
+ fs.writeFileSync(destination, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+ console.log(`Release manifest written: ${destination}`);
+ console.log(`Installer SHA-256: ${manifest.installer.sha256}`);
+diff --git a/frontend/src/main/electron.ts b/frontend/src/main/electron.ts
+index 2e693898..8f44042b 100644
+--- a/frontend/src/main/electron.ts
++++ b/frontend/src/main/electron.ts
+@@ -10,6 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
+ import { ensureBackendRunning, readRunningBackendPid, stopManagedBackend, terminateBackendPid } from './backendProcess.js';
+ import { checkSourceUpdate, launchSourceUpdater, sourceRoot } from './sourceUpdate.js';
+ import { checkReleaseUpdate, downloadVerifiedInstaller, launchVerifiedInstaller, setReleasePreference } from './releaseUpdate.js';
++import { assertReleaseIntegrity } from './releaseIntegrity.js';
+ import {
+   BACKEND_LIFECYCLE_CHANNEL,
+   BACKEND_STARTUP_CHANNEL,
+@@ -1809,6 +1810,18 @@ app.whenReady().then(async () => {
+     process.env.ATLAS_NPM_PACKAGE_VERSIONS = JSON.stringify(
+       Object.fromEntries(selectedPackages.map((name) => [name, packageJson.dependencies?.[name]])),
+     );
++    // Fail closed before any window, token, or backend process exists: a packaged tree
++    // whose release manifest is missing or disagrees with the bytes on disk must not run.
++    // Development runs (`app.isPackaged === false`) never enter this branch.
++    assertReleaseIntegrity({
++      installRoot: path.dirname(process.execPath),
++      expected: {
++        appVersion: packageJson.version,
++        electronVersion: process.versions.electron,
++        platform: process.platform,
++        architecture: process.arch,
++      },
++    });
+   }
+   prepareSharedApiToken();
+   attachBackendToken();
+
+=== new files: line counts and sha256 ===
+720 /d/Atlas/.worktrees/zcode-par10-release-startup/frontend/src/main/releaseIntegrity.ts
+02e79e3df135988f2031960e3b8d9ea50af22a1a4413d1ad01b88df0a7d4c261 */d/Atlas/.worktrees/zcode-par10-release-startup/frontend/src/main/releaseIntegrity.ts
+616 /d/Atlas/.worktrees/zcode-par10-release-startup/frontend/src/main/releaseIntegrity.test.ts
+5f526e1da2af767454b46dcb39e74365569845c383675c294fe06be4a908fadf */d/Atlas/.worktrees/zcode-par10-release-startup/frontend/src/main/releaseIntegrity.test.ts
+176 /d/Atlas/.worktrees/zcode-par10-release-startup/frontend/scripts/after-pack-release-manifest.cjs
+401561e16ced169c1d0c291f7d1e83623b30c0c37a6c998c936d64a020a2c92f */d/Atlas/.worktrees/zcode-par10-release-startup/frontend/scripts/after-pack-release-manifest.cjs
+10 /d/Atlas/.worktrees/zcode-par10-release-startup/frontend/scripts/after-pack.cjs
+406e23ab2c55cb9393c6558189433e34ff57a0fea6af7bd70066b2f73345cf14 */d/Atlas/.worktrees/zcode-par10-release-startup/frontend/scripts/after-pack.cjs
+
+=== source sha256 (par09) ===
+02db0ff1b194363f56fcd8a3bbca70c62ac57f213e1b67fd425c7b72669a72b8 */d/Atlas/.worktrees/zcode-par09-release-integrity/frontend/src/main/releaseIntegrity.ts
+2fa53025f5f9365cc43aac2c88ea019ab7b3fa113a717633e60098ca57ac783d */d/Atlas/.worktrees/zcode-par09-release-integrity/frontend/src/main/releaseIntegrity.test.ts
+
+=== semantic adaptation diff: par09 module -> candidate module (installer optional only) ===
+--- /d/Atlas/.worktrees/zcode-par09-release-integrity/frontend/src/main/releaseIntegrity.ts	2026-11-19 04:40:36.961289300 +0800
++++ /d/Atlas/.worktrees/zcode-par10-release-startup/frontend/src/main/releaseIntegrity.ts	2026-11-19 05:26:18.565938400 +0800
+@@ -1,11 +1,22 @@
+ /**
+  * Fail-closed integrity verification for an installed Atlas tree.
+  *
+- * The build writes `frontend/windows-release/release-manifest.json` (see
+- * `scripts/write-release-manifest.mjs`). This module re-reads that manifest at
+- * startup, hashes the installed backend/executable/sqlite binaries, and refuses
+- * to continue when the manifest is absent, malformed, escapes the install root,
+- * or disagrees with the bytes on disk.
++ * Two manifests describe the same build:
++ *
++ * - the runtime manifest embedded in the install tree
++ *   (`resources/atlas/release-manifest.json`, written by the electron-builder
++ *   `afterPack` hook while the payload is complete but before the installer
++ *   exists), and
++ * - the release-side manifest written after packaging
++ *   (`frontend/windows-release/release-manifest.json`, see
++ *   `scripts/write-release-manifest.mjs`), which additionally records the NSIS
++ *   installer's file name and SHA-256.
++ *
++ * This module re-reads the installed manifest at startup, hashes the installed
++ * backend/executable/sqlite binaries, and refuses to continue when the manifest
++ * is absent, malformed, escapes the install root, or disagrees with the bytes
++ * on disk. `installer` is optional because an installer cannot embed its own
++ * hash; when present it is still fully validated.
+  *
+  * Deliberately has no Electron imports: the caller passes the install root and
+  * the expected identity, which keeps the whole check usable from unit tests and
+@@ -73,7 +84,12 @@
+     source: string;
+     canonical_archive_sha256: string;
+   };
+-  installer: {
++  /**
++   * Release-side only: the NSIS installer is created after the payload is
++   * packed, so the embedded runtime manifest omits this object. When it is
++   * present both fields are required and validated.
++   */
++  installer?: {
+     file: string;
+     sha256: string;
+   };
+@@ -234,8 +250,13 @@
+   const nodePlatform = readString('bundled_node.platform');
+   const nodeSource = readString('bundled_node.source', URL_PATTERN, '必须是 https 源地址');
+   const nodeArchiveHash = readHash('bundled_node.canonical_archive_sha256');
+-  const installerFile = readString('installer.file');
+-  const installerHash = readHash('installer.sha256');
++  const installerValue = record.installer;
++  const installer = installerValue === undefined ? null : asRecord(installerValue);
++  if (installerValue !== undefined && !installer) {
++    add('manifest_invalid', 'installer', 'installer 必须是 JSON 对象');
++  }
++  const installerFile = installer ? readString('installer.file') : '';
++  const installerHash = installer ? readHash('installer.sha256') : '';
+   const executableHash = readHash('unpacked_executable_sha256');
+   const buildTime = readString('build.time_utc');
+   const buildPlatform = readString('build.platform');
+@@ -277,10 +298,7 @@
+       source: nodeSource,
+       canonical_archive_sha256: nodeArchiveHash,
+     },
+-    installer: {
+-      file: installerFile,
+-      sha256: installerHash,
+-    },
++    ...(installer ? { installer: { file: installerFile, sha256: installerHash } } : {}),
+     unpacked_executable_sha256: executableHash,
+     build: {
+       time_utc: buildTime,

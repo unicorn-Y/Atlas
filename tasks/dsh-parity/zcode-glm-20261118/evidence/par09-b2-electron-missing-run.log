@@ -1,0 +1,17 @@
+scenario: missing
+date: 2026-11-19T04:40:20+08:00
+worktree: D:/Atlas/.worktrees/zcode-exec06-keybindings-cas
+branch: zcode/exec06-keybindings-cas
+head: 060071ab2ecf86d41cab90e98160183ce126bc69
+panel_sha256: d41c8a3594eb601554bc8391d7ba4b89ec338924bdeaf395f7d6c33d39455de6
+service_sha256: 78941bb80c7f4cd2fb93a928624d8da0cb0bc545e6f8a538ea744284939b5727
+bundle_sha256: 33b6d1e8062b71a36a512457c237ffaf375403d8a841789052e4bd78373c8dac
+backend: uvicorn host app with atlas.api.u6_router, ATLAS_DATA_DIR=D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par09b2-run/missing/data-root
+port: 28857
+electron: 
+v44.7.0
+window1 argv: --user-data-dir=D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par09b2-run/missing/userdata-window1 driver.cjs --role=window1 --scenario=missing --url=http://127.0.0.1:28857/ --out=D:/Atlas/tasks/dsh-parity/zcode-glm-20261118/evidence --run=D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par09b2-run/missing
+window2 argv: --user-data-dir=D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par09b2-run/missing/userdata-window2 driver.cjs --role=window2 --scenario=missing --url=http://127.0.0.1:28857/ --out=D:/Atlas/tasks/dsh-parity/zcode-glm-20261118/evidence --run=D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par09b2-run/missing
+window1 exit: 0
+window2 exit: 0
+validate exit: 0

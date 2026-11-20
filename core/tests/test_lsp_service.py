@@ -247,6 +247,9 @@ def test_workspace_lsp_implementation_uses_implementation_request(tmp_path, monk
     requests = []
 
     class Client:
+        from atlas.lsp.client import file_uri
+        _uri_for_path = staticmethod(file_uri)
+
         async def open_file(self, _path, *, language_id):
             assert language_id == "python"
             return 1

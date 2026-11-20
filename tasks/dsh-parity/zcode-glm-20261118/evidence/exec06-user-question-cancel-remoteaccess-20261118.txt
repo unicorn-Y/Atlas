@@ -1,0 +1,232 @@
+EXEC-06 · user-question.cancelled 发射/消费与 remoteAccess 公开定义对 Atlas 取消路径
+基准: DSH git tag dsh-v0.2.2-rc.4 = 3f321d32bfe382212a8ed8785c1d47a5a300aa23
+Atlas 快照: wave3@060071ab + 141 项在途改动(只读核对;未触碰用户数据)
+采集时间: 2026-11-18
+
+================================================================================
+A. DSH user-question.cancelled —— 不是 session event，而是 SDK JSON-RPC 通知
+================================================================================
+
+A1 协议定义(server→client 通知)
+- packages/sdk/protocol/src/types.ts:51-57
+  interface SdkUserQuestionCancelled { requestId: string; sessionId: string }
+  注释:Runtime cancellation of a pending host question. Late answers are ignored.
+- packages/sdk/protocol/src/types.ts:194-195
+  HarnessSdkNotificationMap['user-question.cancelled'] = SdkUserQuestionCancelled
+- packages/sdk/protocol/README.md:52,76
+  摘要表与语义段:通知标识“停止等待的请求”;host 取消自己的工作并丢弃问题;
+  runtime 放弃挂起 RPC 并忽略迟到的回答;不需要 GUI。
+- packages/sdk/protocol/src/index.ts:29 导出该类型。
+
+A2 发射点(唯一)
+- packages/sdk/server/src/user-questions.ts:34-57
+  SdkUserQuestionBridge.ask():
+  - :35 params = { requestId: randomUUID(), sessionId, questions }
+  - :36-37 signal = AbortSignal.any([request.signal, this.questionShutdown.signal])
+  - :39-46 cancelled() = transport.notify('user-question.cancelled', { requestId, sessionId })
+    监听 signal abort,{ once: true };通知写失败只 logger.warn,不中断取消(:42-44)
+  - :47-49 正常返回走 transport.request('user-question/ask', params, signal) 并强校验宿主回答
+  - :50-56 UserQuestionError 原样抛出;在途取消/关闭 → ASK_ABORTED;传输失败 → PROVIDER_ERROR
+- packages/sdk/server/src/user-questions.ts:27-32 close(): enabled=false、注销 handler、
+  questionShutdown.abort(UserQuestionError('SDK server is shutting down','ASK_ABORTED'))
+  → 所有未决请求都会走同一 abort 监听器,各自发出 user-question.cancelled。
+- 进入条件 packages/sdk/server/src/user-questions.ts:20-24,34-38:
+  仅 initialize.capabilities.userQuestions=true + ownsAgent(agent) 时桥接接管;
+  否则 ctx.on('user-questions/request') 继续 next() 交给进程内回答方。
+
+A3 消费者(两套官方 SDK)
+- TS SDK: packages/sdk/client/src/client.ts:305-309
+  transport.onNotification: 若 method === 'user-question.cancelled' 且 params.requestId 为字符串,
+  取 this.userQuestions.get(requestId)?.abort(new Error('SDK runtime cancelled the user question'))
+  再 dispatchNotification 原样广播。挂起表在 :279-302(requestId → AbortController,
+  Promise.race(handler, cancelled.promise)),finally 删除。
+- Python SDK: python/sdk/src/deepseek_harness/client.py:475-478
+  _handle_message 命中 'user-question.cancelled' 时,按 requestId 找 _question_tasks 并 set 取消 Event。
+- Python SDK 问题线程: client.py:513-561
+  取消 Event 置位后不再 respond(incoming.id),迟到的宿主回答被丢弃;
+  进程失败/关闭时 _fail_waiters 先 set 所有取消 Event(:483-487)。
+
+A4 DSH 验证证据(源码级测试)
+- packages/sdk/server/tests/user-questions.spec.ts:97-118
+  it.each(['tool','shutdown'])('cancels an outstanding host request on %s cancellation')
+  断言 transport.notify 收到 'user-question.cancelled',payload
+  { requestId: expect.any(String), sessionId: 'main' };abort 后 ask 以 ASK_ABORTED 拒绝。
+- packages/sdk/server/tests/user-questions.spec.ts:121-140
+  通知写失败被包含:仅 warn“cancellation could not reach the host”,取消仍完成。
+- packages/sdk/server/tests/user-questions.spec.ts:45,93
+  未取消/正常应答路径断言“不应发 user-question.cancelled”。
+
+================================================================================
+B. Atlas 实际取消路径(当前 wave3 + 在途)
+================================================================================
+
+B1 Desktop / WebSocket 运行路径(Atlas 自己的产品入口)
+- 发起: core/atlas/api/run_drive.py:3522-3545 input_callback()
+  - event_id = f"input:{run.run_id}:{call_id}"(:3527)
+  - run.input_futures[event_id]=future + run.status="waiting"(:3529-3530)
+  - emit("input.required", {event_id, question, options, **details})(:3531-3535)
+  - 轮询 run.cancel_event,每 0.1s;取消时 pop future 并 raise asyncio.CancelledError(:3536-3539)
+  - 没有独立取消帧;不区分“用户取消”与“空回答”。
+- 回答: core/atlas/api/runtime_ws_router.py:186-190
+  msg_type == "input.response" → 遍历所有 run,按 event_id 找 future 并 set_result(text)。
+  未命中时静默跳过(无错误回执);不校验 run_id/是否已失效。
+- 事件面: core/atlas/api/event_names.py:75 只登记 "input.required";无 input.cancelled /
+  input.responded。run.cancelled 在 :64,是运行终态帧。
+- 前端: frontend/src/renderer/components/timeline.ts:779-781 把 input.required 投影为 question 卡;
+  run.cancelled 在 :828-831 另起 cancelled 条目,不显式收尾 question 卡。
+  frontend/src/renderer/store/useAtlasStore.ts:840-845 answerInput → backend.respondToInput。
+- 现有测试: core/tests/test_server.py:1137-1189
+  TestBackendParityWave1::test_ask_user_event_waits_for_a_response
+  仅覆盖“发 input.required + 回答 A 后完成”,不覆盖取消。
+
+B2 SDK / ACP app-server 路径(DSH 对等协议面)
+- 发起: core/atlas/tools/app_server.py:475-503 ask_user()
+  - record_pending_request(request_id, session_id, "input", call_id, {prompt, options})(:483-486)
+  - notify("input/request", {session_id, call_id, request_id, prompt, options})(:487-490)
+  - answer = await _wait_with_cancel(future, cancel)(:491)
+  - if cancel.is_set(): return ""(:492-493) ← 取消被折叠成空字符串,不是 ASK_ABORTED
+  - finally: set_pending_request_state(request_id, "invalidated" if not future.done() or
+    cancel.is_set() else "resolved")(:496-500)
+- 取消原语: core/atlas/tools/app_server.py:19-31 _wait_with_cancel()
+  cancel.wait() 与 future 竞争;取消时 future.cancel() 并返回 None。
+- 持久审计: app_server.py:187-228 record_pending_request / set_pending_request_state
+  写 session 事件 appserver.request(state=pending|resolved|invalidated),
+  字段仅 request_id/session_id/kind/state/instance_id。
+- 断连/关闭: app_server.py:1576-1584 把全部 pending_request_meta 置 invalidated,
+  pending_inputs 统一 set_result("")。
+- 迟到回答: 段 app_server.py 中 input/response(:1488-1508)
+  若 future 已不存在/已完成 → JSON-RPC error -32602 "input request is no longer pending";
+  但服务端从不主动通知客户端“该问题已取消”。
+- 事件面: app_server.py 的 notify 调用(:457,:487,:559,:571,:613,:629,:638,:652,:664,
+  :671,:681,:708,:718,:774,:795,:814)无 "user-question.cancelled"。
+  Atlas Python SDK sdk/python/atlas_sdk/app_server.py 也没有该通知的消费逻辑。
+- 现有测试(全部通过,2026-11-18 本批复跑):
+  - test_app_server_sdk_subprocess_attempts.py:1095-1141
+    test_app_server_pending_request_reconnects_in_same_process[input]:
+    pending → respond_input("B") → 事件 state [pending, resolved]。
+  - test_app_server_sdk_subprocess_attempts.py:1146-1196
+    test_app_server_task_cancel_waits_for_worker_cleanup_and_cancels_queued_item:
+    有 pending input 时 cancel_task → task [queued,running,cancelling,cancelled],
+    pending request 变 invalidated,后续第二个请求不执行。
+  - test_app_server_sdk_subprocess_attempts.py:1385-1444
+    test_app_server_invalidates_old_pending_request_after_process_restart[input]:
+    进程崩溃重启后 old pending 变 invalidated,迟到 respond_input 报
+    "no longer pending"。
+  复跑命令见本文件末尾 C 节。
+
+B3 差距(相对 DSH)
+G1 无协议级取消通知:Atlas app_server 取消 pending question 时不发
+   user-question.cancelled{requestId,sessionId};客户端只能等 run/task 终态。
+G2 取消语义丢失:ask_user 取消返回 ""(B2),工具层无法区分“用户取消”(DSH ASK_ABORTED)
+   与“用户提交空字符串”;DSH 明确规定取消不是回答、不是 provider failure。
+G3 桌面面无问题级取消帧:只有 run.cancelled;question 卡不会收到自己的终态,
+   取消后 answerInput 仍显示已回答(store 乐观写入 answers),wire 侧静默丢弃。
+G4 无请求身份关联:desktop event_id 内含 run_id+call_id,但取消时不按该 id 发通知;
+   app_server 有 request_id,但不外发。
+G5 Atlas 的 durable pending 审计是本地记录(appserver.request),不是可观察 wire 契约;
+   DSH 的通知是 server→client 的显式协议帧。
+
+B4 验收标准(二值、可复验)
+A-1 app_server 对齐:
+    - 在 `ask_user` 被 cancel 时,transport 恰好发一次
+      `user-question.cancelled` {requestId: 原 ask 的 requestId, sessionId};
+      工具以取消语义结束(不得返回 "")。
+    - 取消后对同一 request_id 的 `input/response` 必须被拒绝(-32602),且不得投递答案。
+    - 复验:真实 app_server 子进程 + FakeLLM 工具 `ask_user`,cancel_task 后读取 stdout
+      通知序列;断言通知先于/独立于终态、payload 精确、迟到回答被拒。
+      (拟落 `core/tests/test_app_server_user_question_cancel.py::test_*`)
+A-2 desktop 对齐(二选一,需与三真源同步):
+    - 新增 `input.cancelled` DESKTOP_EVENT(event_names.py / runtimeEvents.ts / runtime.ts),
+      载荷 {event_id,run_id,call_id},在 run.cancelled 之前发出;
+      renderer 把对应 question 卡置为 cancelled;取消后的 input.response 必须被丢弃并回执。
+    - 或扩展 `input.required` 的终态(不推荐:同一事件承担两种语义)。
+    - 复验:pytest 断言事件顺序 + frontend vitest timeline 投影。
+A-3 Atlas 独有保留:run.cancelled / task terminal 仍必须发出;不得为对齐而压制终态。
+
+注:实现位置 core/atlas/tools/app_server.py 与 core/atlas/api/run_drive.py 当前均为
+在途改动文件(git status M,归原作者),本批不并写;按纪律登记为 blocked-on-author,
+验收命令与断言已冻结,待文件归属解除后实施。
+
+================================================================================
+C. 本批复跑命令(Atlas,私有 basetemp,未触碰 8765/用户数据)
+================================================================================
+cd D:/Atlas/core
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider -o addopts= --tb=short \
+  --basetemp=D:/ENGINE-V3-UPSTREAM-20261118/tmp/pytest-resume02-qcore \
+  tests/test_app_server_sdk_subprocess_attempts.py::test_app_server_pending_request_reconnects_in_same_process \
+  tests/test_app_server_sdk_subprocess_attempts.py::test_app_server_task_cancel_waits_for_worker_cleanup_and_cancels_queued_item \
+  tests/test_server.py::TestBackendParityWave1::test_ask_user_event_waits_for_a_response
+
+结果: 4 passed, 5 warnings in 15.83s;EXIT=0 (2026-11-18)
+说明: 4 项 = 2 个参数化(input/approval) + 取消测试 + desktop 问答测试。
+
+================================================================================
+D. DSH remoteAccess 公开定义(host 服务 + client 面)
+================================================================================
+D1 Host 服务(public class)
+- packages/api/remote-access/src/index.ts:125 class RemoteAccessService extends TypertRemoteService
+  - :153-172 registerPolicy(kind, policy): 每 principal kind 一个 policy;注册/卸载都 invalidate
+  - :175-186 invalidate(principal?): bindings/条件变化后重算所有打开的 snapshot 代
+  - :199-225 decide({principal,action,resources,args}): owner 与 remoteAccess/follow 恒允许;
+    无 policy → no-allow;每资源都要有匹配 binding(role 含 action + condition 允许);
+    条件拒绝原因优先,其次 explain(),否则 no-allow;bindings/condition/explain 抛错 →
+    policy-failed(每 policy 在两次 invalidate 之间只记一次日志)
+  - :235-247 allows(resource): 供 Remote 方法做列表逐项过滤;owner/Remote 外恒真
+  - :253-257 snapshotFor(principal): owner→{type:'baseline',owner:true};
+    非 owner→{type:'baseline',owner:false,grants}
+  - :270-300 @Remote({mode:'stream'}) follow(signal): 每 Peer 读自己的快照;
+    baseline → invalidate 后 upsert/remove 差量帧;服务卸载/信号中止结束代
+  - :355-377 grantsFor: 每资源一条 grant,actions 为 decide() 无参时允许的 endpoint 集合,
+    事件 action 不进快照
+- types.ts:89-105 RemoteAccessPolicy{bindings(principal), explain?(request)};
+  :107-121 RemoteAccessDeniedDetails{action,reason} + RemoteErrorDetailsMap
+  'remote-access/denied';:125-146 RemoteAccessGrant/RemoteAccessFrame(baseline/upsert/remove)
+- snapshot.ts:8 REMOTE_ACCESS_SNAPSHOT_KEY='__DSH_REMOTE_ACCESS__';
+  index.ts:138-142 在 webserver/index-inject 注入首帧快照。
+- 执行侧强制:packages/api/gateway/src/index.ts:633(转发事件逐帧 decide,
+  deny 直接 continue)、:814-822(非 owner 调用 decide,deny 抛
+  RemoteError('remote-access/denied', ..., {action,reason}));
+  packages/api/session-controller/src/index.ts:284,298,636,641 用 allows() 过滤列表/流。
+
+D2 Client 面
+- packages/api/remote-access/src/client/mount.ts:43 source(kind,id,action)、
+  :55 whenAccess(action, callback)、:95-105 实现、:120 mountAccess;
+- client/index.ts:35 从注入的 baseline 挂载;client/state.ts:95 resource(...)。
+- 业务方示例:docs/config-catalog.md:41/224/264(inject remoteAccess);
+  .agents/notes/implemented/architecture/2026-10-21-when-access.md:59-63
+  (ui-schedule/ui-plugin-manager/ui-settings-*/directory-picker 用 whenAccess 条件挂载)。
+
+D3 Atlas 对应面(实际代码)
+- core/atlas/remote_access.py:38-50 create_remote_session(ttl, token, sha256),
+  :53-66 remote_token_valid, :69-81 revoke_remote_session, :84-89 status。
+  这是“短期 bearer 会话”,不是分方法/分资源 ACL。
+- core/atlas/origin_guard.py:59-66:token 有效即 is_trusted=True,
+  放行该请求的全部 HTTP/WS 面(粗粒度布尔闸);无资源/方法维度。
+- core/atlas/api/remote_router.py:16-43 remote 页面/start/status/stop;
+  :46-58 /api/remote/tasks 直接列全部会话(不做逐会话授权过滤)。
+- 没有:registerPolicy/bindings/condition、decide/allows、remote-access/denied、
+  snapshotFor/follow 快照流、client source/whenAccess 条件能力面。
+
+D4 差距与验收
+- 现状定性:部分(有远程访问凭据与撤销,无分资源访问控制/快照/条件 UI)。
+- 可验收目标(Atlas):
+  1) 远程会话附带 principal(owner/mobile/viewer)与授权快照;每个敏感 API/WS 读取按
+     (action, resource) 判定,拒绝返回统一 reason。
+  2) 授权变更可推送到已连接客户端(等价 follow),不要求重载页面。
+  3) UI 能力入口按快照条件挂载(等价 whenAccess),撤权即关闭。
+  4) 验收命令:隔离后端 + 两个 token(owner 全权 / limited 仅只读某会话)配对测试:
+     limited 读其他会话 → 拒绝码与 reason;撤销令牌后已连接流收到 remove/拒绝;
+     事件流中未授权帧被丢弃。落 F10-cloud 批次。
+- 边界:DSH Relay/LiveShare 服务端私有实现仍为观察边界;本节只对齐本机 remoteAccess
+  的可观察契约(公开源码 + 测试)。
+
+================================================================================
+E. 结论
+================================================================================
+- user-question.cancelled:DSH 是协议级“请求已停止等待”通知,发射点唯一、两套 SDK 均消费、
+  测试覆盖取消与通知失败包含。Atlas 有实际取消路径(app_server/task cancel/进程重启),
+  但(1)不发该通知,(2)取消被折叠成空回答,(3)桌面只有 run 级终态。状态:部分。
+- remoteAccess:DSH 是完整的分资源访问控制服务 + 快照流 + 条件 UI。Atlas 仅有
+  短期 bearer 令牌与布尔 origin 闸。状态:部分(粗粒度)。
+- 实施受在途文件归属限制(app_server.py/run_drive.py),本批只落精确引用、差距与
+  可复验验收;实现项登记 blocked-on-author。

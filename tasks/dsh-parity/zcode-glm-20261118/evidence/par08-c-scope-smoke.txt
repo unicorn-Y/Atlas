@@ -1,0 +1,34 @@
+2026-11-19 03:55:07 [info     ] config.created_from_example    path=D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\.tmp\par08-smoke-data\config\atlas.toml
+2026-11-19 03:55:07 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\.tmp\par08-smoke-data\config\atlas.toml
+root=C:\Users\25011\AppData\Local\Temp\par08-smoke-zpq5xzyj
+2026-11-19 03:55:07 [info     ] skills.scanned                 count=1 sources=1
+2026-11-19 03:55:07 [info     ] skills.changed                 revision=1 skills=1
+base manager visible: ['base-only']
+2026-11-19 03:55:07 [info     ] skills.change_invalidated
+2026-11-19 03:55:07 [info     ] skills.change_invalidated
+2026-11-19 03:55:07 [info     ] skills.change_invalidated
+2026-11-19 03:55:07 [warning  ] skills.duplicate_name          existing=C:\Users\25011\AppData\Local\Temp\par08-smoke-zpq5xzyj\ws-a\.agents\skills\shared\SKILL.md name=shared new=C:\Users\25011\AppData\Local\Temp\par08-smoke-zpq5xzyj\ws-a\.dsh\skills\shared\SKILL.md
+2026-11-19 03:55:07 [info     ] skills.scanned                 count=3 sources=4
+2026-11-19 03:55:07 [info     ] skills.changed                 revision=1 skills=3
+A shared -> ('project-dsh', 'A dsh', 'C:\\Users\\25011\\AppData\\Local\\Temp\\par08-smoke-zpq5xzyj\\ws-a\\.dsh\\skills\\shared')
+A unique -> ('project-dsh', 'A only', 'C:\\Users\\25011\\AppData\\Local\\Temp\\par08-smoke-zpq5xzyj\\ws-a\\.dsh\\skills\\only-a')
+A visible: ['base-only', 'only-a', 'shared']
+2026-11-19 03:55:07 [info     ] skills.activated               name=shared
+2026-11-19 03:55:07 [info     ] skills.activated               name=only-a
+A resolved: [('shared', 'A DSH BODY'), ('only-a', 'A ONLY BODY')]
+2026-11-19 03:55:07 [info     ] skills.change_invalidated
+2026-11-19 03:55:07 [info     ] skills.change_invalidated
+2026-11-19 03:55:07 [info     ] skills.change_invalidated
+2026-11-19 03:55:07 [info     ] skills.scanned                 count=3 sources=4
+2026-11-19 03:55:07 [info     ] skills.changed                 revision=1 skills=3
+B shared -> ('project-dsh', 'B dsh', 'C:\\Users\\25011\\AppData\\Local\\Temp\\par08-smoke-zpq5xzyj\\ws-b\\.dsh\\skills\\shared')
+B unique -> ('project-agents', 'B only', 'C:\\Users\\25011\\AppData\\Local\\Temp\\par08-smoke-zpq5xzyj\\ws-b\\.agents\\skills\\only-b')
+B visible: ['base-only', 'only-b', 'shared']
+2026-11-19 03:55:07 [info     ] skills.activated               name=shared
+2026-11-19 03:55:07 [info     ] skills.activated               name=only-b
+B resolved: [('shared', 'B DSH BODY'), ('only-b', 'B ONLY BODY')]
+cross-workspace: Skill not found: only-a
+no-workspace: Skill not found: only-a
+2026-11-19 03:55:07 [info     ] skills.activated               name=base-only
+no-workspace base: [('base-only', 'BASE BODY')]
+base manager after runs: ['base-only']

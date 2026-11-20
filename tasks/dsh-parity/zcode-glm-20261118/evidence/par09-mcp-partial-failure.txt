@@ -1,0 +1,19 @@
+SCENARIO partial-failure
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 05:13:21 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-exec05-mcp\.tmp\par09-mcp-real\data\partial-failure\config\atlas.toml
+2026-11-19 05:13:21 [info     ] mcp.starting                   count=2 names=['real', 'broken']
+2026-11-19 05:13:22 [warning  ] mcp.background_start_failed    reason="启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)"
+2026-11-19 05:13:23 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par09-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:13:23 [info     ] mcp.server_ready               server=real tools=['echo']
+PHASE partial_failure {"available": false, "blocking_reason": "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)", "servers": [{"name": "real", "enabled": true, "connected": true, "state": "connected", "tool_discovery": "complete", "tool_count": 1, "blocking_reason": null}, {"name": "broken", "enabled": true, "connected": false, "state": "failed", "tool_discovery": "failed", "tool_count": 0, "blocking_reason": "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)"}]}
+CHECK PASS partial failure settles: real connected, broken failed :: {'available': False, 'blocking_reason': "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)", 'servers': [{'name': 'real', 'enabled': True, 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}, {'name': 'broken', 'enabled': True, 'connected': False, 'state': 'failed', 'tool_discovery': 'failed', 'tool_count': 0, 'blocking_reason': "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)"}]}
+CHECK PASS one failed server fail-closes the whole MCP runtime :: False
+CHECK PASS partial failure blocker is present and scrubbed :: 启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)
+CHECK PASS connected server tools remain discoverable despite runtime block :: ['real__echo']
+2026-11-19 05:13:23 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 05:13:23 [info     ] mcp.server_stopped             server=real
+PHASE partial_failure_stopped {"available": false, "blocking_reason": "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)", "servers": [{"name": "real", "enabled": true, "connected": false, "state": "stopped", "tool_discovery": "complete", "tool_count": 0, "blocking_reason": null}, {"name": "broken", "enabled": true, "connected": false, "state": "failed", "tool_discovery": "failed", "tool_count": 0, "blocking_reason": "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)"}]}
+CHECK PASS partial failure: real stopped :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'stopped', 'tool_discovery': 'complete', 'tool_count': 0, 'blocking_reason': None}
+CHECK PASS partial failure: broken stays failed :: {'name': 'broken', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'failed', 'tool_discovery': 'failed', 'tool_count': 0, 'blocking_reason': "启动命令 'par09-command-that-does-not-exist' 失败：MCP server failed during launch or initialization (FileNotFoundError)"}
+CHECK PASS partial failure: real child gone :: 59940
+RESULT partial-failure checks=7 failed=0

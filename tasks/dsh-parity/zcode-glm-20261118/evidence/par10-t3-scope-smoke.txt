@@ -1,0 +1,32 @@
+2026-11-19 06:14:42 [info     ] config.created_from_example    path=D:\Atlas\.worktrees\zcode-par10-skill-runtime\config\atlas.toml
+2026-11-19 06:14:42 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-par10-skill-runtime\config\atlas.toml
+2026-11-19 06:14:43 [info     ] skills.change_invalidated
+2026-11-19 06:14:43 [info     ] skills.scanned                 count=0 sources=1
+2026-11-19 06:14:43 [info     ] skills.change_invalidated
+2026-11-19 06:14:43 [info     ] skills.change_invalidated
+2026-11-19 06:14:43 [info     ] skills.change_invalidated
+2026-11-19 06:14:43 [warning  ] skills.duplicate_name          existing=.tmp\par10-smoke\ws-a\.agents\skills\shared\SKILL.md name=shared new=.tmp\par10-smoke\ws-a\.dsh\skills\shared\SKILL.md
+2026-11-19 06:14:43 [info     ] skills.scanned                 count=2 sources=4
+2026-11-19 06:14:43 [info     ] skills.changed                 revision=1 skills=2
+2026-11-19 06:14:43 [info     ] skills.change_invalidated
+2026-11-19 06:14:43 [info     ] skills.change_invalidated
+2026-11-19 06:14:43 [info     ] skills.change_invalidated
+2026-11-19 06:14:43 [info     ] skills.scanned                 count=2 sources=4
+2026-11-19 06:14:43 [info     ] skills.changed                 revision=1 skills=2
+base visible: []
+A shared -> ('project-dsh', '.tmp\\par10-smoke\\ws-a\\.dsh\\skills\\shared\\SKILL.md')
+A list -> ['only-a', 'shared']
+A list sources -> ['project-dsh']
+B shared -> ('project-dsh', '.tmp\\par10-smoke\\ws-b\\.dsh\\skills\\shared\\SKILL.md')
+B list -> ['only-b', 'shared']
+B list sources -> ['project-agents', 'project-dsh']
+2026-11-19 06:14:43 [info     ] skills.activated               name=shared
+use_skill A shared -> A DSH BODY
+2026-11-19 06:14:43 [info     ] skills.activated               name=shared
+use_skill B shared -> B DSH BODY
+use_skill B-cross only-a -> ERROR Unknown skill: only-a
+2026-11-19 06:14:43 [info     ] skills.activated               name=only-b
+use_skill B only-b -> B ONLY BODY
+base after runs: []
+orchestrator after runs: base
+SMOKE_EXIT:0

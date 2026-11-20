@@ -1,0 +1,53 @@
+PAR-10-T6-5 real launch from isolated installed tree after upgrade overlay
+2026-11-18T23:20:16Z
+Exe=D:\Atlas\.worktrees\zcode-par10-win-release-repro\.par10-t6-5-sandbox\install-0.1.0-upgrade\Atlas.exe
+env: ATLAS_DESKTOP_USER_DATA_DIR=sandbox\userdata-installed ATLAS_DATA_DIR=sandbox\datadir-installed
+-----
+
+PID=59880
+ALIVE_AFTER_15s=True
+MAIN_WINDOW_TITLE=ÐÂÈÎÎñ ¡ª Atlas
+CHILDREN=Atlas.exe,Atlas.exe,Atlas.exe,atlas_backend.exe
+UIA_WINDOW_COUNT=1
+UIA_WINDOW_NAME=ÐÂÈÎÎñ ¡ª Atlas
+GRACEFUL_EXIT=false
+EXIT_CODE=-1
+-----
+isolated data tree:
+backend log tail:
+
+leftover processes:
+
+== corrected-env rerun (Windows-style isolated paths) ==
+2026-11-18T23:22:26Z
+env: ATLAS_DESKTOP_USER_DATA_DIR=D:\Atlas\.worktrees\zcode-par10-win-release-repro\.par10-t6-5-sandbox\userdata-installed ATLAS_DATA_DIR=D:\Atlas\.worktrees\zcode-par10-win-release-repro\.par10-t6-5-sandbox\datadir-installed
+-----
+
+PID=34360
+ALIVE_AFTER_20s=True
+MAIN_WINDOW_TITLE=ÐÂÈÎÎñ ¡ª Atlas
+CHILDREN=Atlas.exe,Atlas.exe,Atlas.exe,atlas_backend.exe
+UIA_WINDOW_COUNT=1
+UIA_WINDOW_NAME=ÐÂÈÎÎñ ¡ª Atlas
+GRACEFUL_EXIT=false
+EXIT_CODE=-1
+-----
+sandbox data tree:
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/datadir-installed
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/datadir-installed/config
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/datadir-installed/config/atlas.toml
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/datadir-installed/data
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/datadir-installed/data/atlas.db
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/datadir-installed/data/channels.sqlite
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/datadir-installed/data/channels.sqlite-shm
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/datadir-installed/data/channels.sqlite-wal
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/datadir-installed/data/dbos-startup.json
+/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/datadir-installed/data/dbos.sqlite
+backend log tail:
+MCP server 'playwright' failed initial connection after 3 attempts, parking until a reconnect is requested (state: connecting â†’ parked): MCPError: Connection closed
+MCP server 'chrome-devtools' failed initial connection after 3 attempts, parking until a reconnect is requested (state: connecting â†’ parked): MCPError: Connection closed
+Failed to connect to MCP server 'playwright' (command=D:\Atlas\.worktrees\zcode-par10-win-release-repro\.par10-t6-5-sandbox\install-0.1.0-upgrade\resources\atlas\runtime\node\node.exe): Connection closed
+Failed to connect to MCP server 'chrome-devtools' (command=D:\Atlas\.worktrees\zcode-par10-win-release-repro\.par10-t6-5-sandbox\install-0.1.0-upgrade\resources\atlas\runtime\node\node.exe): Connection closed
+2026-11-19 07:22:41 [info     ] startup.component              component=engine_registrations state=ready
+
+leftover processes:

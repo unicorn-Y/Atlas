@@ -1,0 +1,369 @@
+capability_id	atlas_entry	atlas_implementation	atlas_snapshot	state	evidence	gap	next_batch
+B-F02-DESKTOP-TRAY-01	frontend/src/main/electron.ts:257 createTray	持久托盘:打开 Atlas/后台组件状态(禁用态)/安全模式重启/退出;window-all-closed 不退出	wave3@060071ab(在途 electron.ts 有未提交改动,归原作者)	对齐已验	DSH-GAP-LEDGER D21(W4-Z7 electron.lifecycle.test.ts)	无显著缺口;rc.4 托盘若新增菜单项需复核	F02-desktop
+B-F03-WEB-BOOT-01	frontend/src/renderer/main.tsx:13-15 + frontend/index.html:14(#root);Electron frontend/src/main/electron.ts:603-623,1124-1132(装载 dev URL/dist index.html),1791-1839(app ready/startBackend/失败错误框);preload index.cts:8,180(apiBaseUrl+atlasDesktop)	仅 Electron 桌面渲染;Vite dev server 只服务桌面开发;后端 /remote 是独立极简移动页	wave3@060071ab	部分	当前树逐行核对(evidence/exec06-f03-boot-render-20261118.txt §A);main.tsx 直接 createRoot;electron.ts 装载/启动分支	缺独立浏览器完整应用模式与 boot 握手(ready/injections/streamBaseUrl、__DSH_BOOT_READY__、boot-failed 上报);后端不托管完整 SPA。验收: 浏览器无 Electron 加载完整 UI+就绪门闩+可见失败面(evidence §A)	F03-web
+B-F04-CLI-PROFILE-01	无独立 dsh 型 CLI;现有 `atlas plugins dump-config` 子命令	plugins_runtime dump_config_preview+GET /api/plugins/config-layers(scrub)	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)	缺 profile/plugin/dump-config-schema 四模式 CLI 入口与 StartupError 诊断面	F04-cli-sdk
+B-F05-HOST-INBOX-01	core/atlas/engine/kernel/inbox.py	持久化两条 lane 并回放/确认;inject 写 inbox 不唤醒 steer 队列	wave3@060071ab	对齐已验	E5(单测关闭); 当前锚点:core/atlas/engine/kernel/inbox.py:11/:102/:110(两 lane inject/inject_with_receipt,本会话 grep)	DSH 投影含 seq 级无效历史拒绝与 stateVersion=1 语义;Atlas 等价语义需对照确认	F05-host
+B-F04-SDK-PROTOCOL-01	core/atlas/tools/app_server.py	方法面含 initialize/tools/list/session(new|enqueue|retry_recovery|events|pending_requests|task_status|task_cancel|list|resume)+wait/shutdown/status;与 ACP 契约分离	wave3@060071ab(app_server.py 带在途未提交改动,归原作者)	部分	X25(W4-Z6 stdio 实证)+ 当前快照 :752-1137 方法枚举复核	working-directory get/set 缺失(当前树 grep 为空);enqueue/retry_recovery/task_* 为在途未集成,不得计为已发布;subagent.started/finished 通知缺失	F04-cli-sdk
+B-F04-SDK-PY-CLIENT-01	sdk/python/atlas_sdk(app_server.py,在途)	Python 异步 SDK 客户端	wave3@060071ab(+在途 sdk/python 未提交改动,归原作者)	部分	X25+在途 sdk/python 未提交改动,归原作者	DSH 同步封装/start_session/resume_session/run/user-question 外呼/office 三函数为已定位缺口;实施因在途暂缓	F04-cli-sdk
+B-F06-LLM-IFACE-01	core/atlas/models/router.py+engine/kernel/model_call.py	请求装配/typed 失败原因/流式分片	wave3@060071ab(model_call.py、router.py 在途改动,归原作者)	对齐已验	E2/E3(ledger 闭合)+锚点在;在途文件注; 当前锚点:kernel/model_call.py 请求装配+typed 失败原因(本会话测试契约覆盖)	逐字段对 call-config 语义需 F06 批次复核	F06-model
+B-F06-DEEPSEEK-ADAPTER-01	core/atlas/models/router.py:166-180(provider 路由)/:598-624(Anthropic image block inline base64)/:797-804(authorization 头);core/atlas/agent/__init__.py:1135(image_url);core/atlas/models/catalog.py:54-61(deepseek provider 元数据)	DeepSeek/OpenAI 兼容 API-key 路由;图像以 data URL/base64 内联发送;无 Files API	wave3@060071ab	部分	当前树逐行(evidence/exec06-f06-adapter-credentials-20261118.txt);grep file_id/files-api=0;inline image 路径实测于 router.py:598-624	无 Files API 上传/复用/过期(file-id)/配额清理;无 32MiB/图、128MiB/上传、10k 文件/25GiB 限额;无 DeepSeek 图像 token 网格计价(单图 1024 上限);account 凭据路由缺失(仅 API-key/custom)。验收见 evidence §D	F06-model
+B-F06-LLM-RETRY-01	core/atlas/engine/kernel/model_call.py:82-140(env/watchdog)/:477-503(backoff)/:1192-1360(will_retry/auth rotation/529/预算)	重试与回退预算	wave3@060071ab	对齐已验	Task2/Task3 相关闭合+在途注; test_retry_attempt_isolation 属 38 项批次并通过(2026-11-18,真实 SDK 子进程)	逐参数映射:DSH normal/always+retryableCodes+maxRetries+providerRetryAfterMs vs Atlas 全局/任务预算+watchdog+auth rotation+529 cap;能力等价、数值/模式不同。证据 §B	F06-model
+B-F06-TOKEN-METER-01	engine/agent/token_meter.py(price_surface_nodes:164)+usage.py(cache_hit_rate=cached/input)	逐 surface 计价+usage 记录	wave3@060071ab	对齐已验	S25(WAVE5 闭合)+当前锚点在;BENCH-ANALYSIS 已实测口径差异并归一	四桶口径差异(实测):Atlas 折 cache 入 input_tokens 并单记 cached 子集;DSH inputTokens=未缓存余量+cacheReadTokens 独立桶,totalTokens 汇总四桶(token-meter index.ts:59,192);benchmark 已按 harness 归一 Sample.prompt_tokens。图像定价回调缺失仍开放(实施因 router.py 在途暂缓)	F06-model
+B-F06-CREDENTIALS-01	core/atlas/secrets_store.py:51-111(keyring+encrypted-file fallback)/:126-260(redact/scrub);core/atlas/models/routes.py:214-260(/api/providers/{pid}/keys 增/列/删);Windows 凭据管理器实证	本机 keyring/加密文件 + provider key 槽位;无账户 OAuth/授权状态	wave3@060071ab	部分	当前树逐行(evidence/exec06-f06-adapter-credentials-20261118.txt §B);keyring fallback 与 scrub 代码;routes.py 密钥端点	无 DeepSeek account 浏览器授权/登录尝试/登出重试/通知;无 account token 失效/配额错误码;仅 API-key 槽位。验收见 evidence §D	F06-model
+B-F07-SESSION-FORMAT-01	core/atlas/engine/state/atlas_state_common.py:284(SCHEMA_VERSION=32)+atlas_state_schema.py:993-1126(_run_data_migrations v16/18/20/22/23/25/29/30+SchemaTooNew)+atlas_state_errors.py:186;session_migration_gate.py+session_sync.py:1122-1267(legacy transcript 迁移,另层)	SQLite state schema 前向数据迁移链(1→32);row>SCHEMA_VERSION→SchemaTooNewError 拒绝打开;迁移失败不推进版本	wave3@060071ab	对齐已验	当前树逐行(evidence/exec06-f07-format-chain-20261118.txt §B);state_schema_refusal 第二批 28 项通过+本批锚点	形态差异:Atlas 迁移内联于 _run_data_migrations 单函数,无独立 vN→vN+1 模块/disposition 清单;无 DSH 式只读 unsupported 投影(直接 open 抛错);无纯事件日志格式链。核心不变量一致。验收 A-1..A-4 见 evidence §C	F07-session
+B-F07-PERSISTENCE-01	engine/session_handle.py:42 SessionHandle+hold_turn_lease	acquire fail-closed/租约/flush	wave3@060071ab	对齐已验	S5(W4-Z3 真机租约实证)+当前锚点在; 第二批 28 项定向重验通过(2026-11-18)	JSONL 双写形态差异(Atlas 为 SQLite+事件)记录为等价实现	F07-session
+B-F07-CHECKPOINT-01	run_checkpoints.py:209+engine/kernel/loop.py:1031	require_checkpoint 三屏障 fail-closed	wave3@060071ab(loop.py 在途改动)	对齐已验	S6(本轮关闭)+当前锚点在; 第二批 28 项定向重验通过(2026-11-18)	阶段覆盖面与 DSH checkpoint-policy 逐屏障对照待做	F07-session
+B-F07-PROJECTION-01	engine/state/atlas_state_common.py:506 session_projcache+触发器失效	投影缓存+revision 失效	wave3@060071ab	对齐已验	S11/S12(W4-Z3 实证)+当前锚点在; 第二批 28 项定向重验通过(kernel_durable_inbox,2026-11-18)	注册表形态差异记录(Atlas 为 DB 缓存视图)	F07-session
+B-F07-COMPACTION-01	engine/kernel/context.py:164(threshold_ratio 0.8/retain_ratio 0.16)+per-provider override	压缩策略与剪枝	wave3@060071ab	对齐已验	S8/S9(W4-Z3 真机实证)+当前锚点在; 第二批 28 项定向重验通过(w3_session_compaction+kernel_compaction_surface,2026-11-18)	image-offload 无(S10 被 S19 取代,保留历史口径)	F07-session
+B-F07-TITLE-01	core/atlas/engine/kernel/toolkit/title_generator.py:178-290(generate/apply_instant/auto_title)+core/atlas/engine/atlas_runtime.py:1041-1095(<=3 用户回合,task 并行)+core/atlas/agent/run_phases.py:1401-1428(session.title 事件/accepted)+core/atlas/engine/session_titles.py:9-16(pin/unpin)+core/atlas/api/conversations_router.py:1389-1419	derived 立即标题+可选 LLM upgrade(默认关闭,model_router title,max 128,reasoning off);用户改名 pin/unpin;仅 AtlasRuntime.run_turn 路径;AgentOrchestrator.run(app-server/SDK)未接线	wave3@060071ab	部分	当前树逐行(evidence/exec06-f07-title-20261118.txt §B);实测 4 failed/7 passed,基线同 4 failed/7 passed → 非在途回归,是 app-server 路径缺标题;记录 exec06-title-*.txt	AgentOrchestrator.run/app-server/SDK 无自动标题;无 session/title-llm-request 精确请求事件;无 provider 插件面(first/all-prompts)与 targetWords/targetCjkCharacters/maxTitleBytes 配置;无 title-invalid;all-prompts 语义缺失(只取当前 message)。验收 A-1..A-5 见 evidence §E;实施受 agent/__init__.py+run_phases.py 在途限制	F07-session
+B-F07-WORKINGDIR-01	core/atlas/tools/workspace_workflows.py(working-directory 事件)+kernel/loop.py 引用	会话 cwd 持久化	wave3@060071ab	部分	E21(WAVE5-A 闭合);当前树 grep 命中 workspace_workflows.py+loop.py	行级核对入口签名与沙箱写根语义待 F07 批次	F07-session
+B-F07-LOG-DEEPSEEK-01	无(dsh_session_log 字段无实现)	HARD:DSH 自有 wire extension,无公开契约	wave3@060071ab	缺失	S26 历史口径+README 公开契约(ZC-EXEC-03 更新:非无契约)	可验收目标同 B-F10-SYNC-01;owner 侧可本地验收	F10-cloud
+B-F10-OTEL-01	run_checkpoints.py:233(atlas.run_checkpoint.write)+atlas_state_timeline.py:180(atlas.session.turn_outline)	生产 span+会话轮廓投影	wave3@060071ab	对齐已验	S22(WAVE5 闭合)+当前锚点在	普通事件/session-log 双独立队列语义对照待做	F10-cloud
+B-F10-SESSION-TELEMETRY-01	core/atlas/session_telemetry.py(session_telemetry 表+INSERT OR IGNORE 去重)+atlas_state_portability.py:57 mirror_session_event	会话事件 ledger 去重	wave3@060071ab	对齐已验	S23(WAVE5 闭合)+当前锚点 session_telemetry.py:17-29	(seq,formatVersion) 去重键逐字段对照待做	F10-cloud
+B-F05-LIFECYCLE-01	engine/kernel/loop.py(typed terminal reason,在途)	turn/step 生命周期与逐步结束原因	wave3@060071ab(loop.py 在途改动)	对齐已验	E2(W3-X1 真实模型回合)+38 项批次含事件契约通过;本会话逐段读 agent.ts:88-96,420-432	DSH turn/end reason=cancel cause 的可序列化字段拷贝(AgentCancelCause,显式剔除 stack)+LlmError→failure{message,code};Atlas reason 字段集与该形状的逐字段对照待 F05	F05-host
+B-F05-PIPELINE-01	engine/kernel/tools.py ToolScheduler(pre_execute/post_execute/result_stage,在途)+tool_finalize.py	工具流水线三瀑布	wave3@060071ab(tools.py 在途改动)	对齐已验	E3(W2-V2)+28 项重验;本会话逐段读 pipeline.ts:27-52,126,186-207	DSH 独有语义:① settlement 二分——post-result 接受 post-execute、final-result 绕过(pipeline.ts:32);② executor 拒绝先于扩展策略(:126);③ 快照输入+correlation token 的有序 pre-execute(:186-201);④ dispatch 域融合信号+body settle 后清理(:52)。四点为 F05 实施批次评估项	F05-host
+B-F05-CONTRACT-01	registry 工具输出 schema 校验+kernel 契约查找	输出契约注册期校验	wave3@060071ab	对齐已验	E4(W4-Z1,别名工具语义 schema)	render/presentationMeta 消费面与 presentation.ts 对照待做	F05-host
+B-F05-BATCH-01	core/atlas/engine/kernel/tools.py:687-718(分类+dispatch 前复检)/:892-1035(_execute_parallel/_gather_parallel/run/_apply_batch_verdict)	并发安全调度	wave3@060071ab(tools.py 在途改动)	对齐已验	当前树逐段核对(evidence/exec06-f05-batch-retry-sandbox-20261118.txt §A);E7+28 项批次+本批行级对照	核心语义等价;差异:① scheduler failure 被 _failed_result 降为单调用 failed receipt,DSH 抛给 step 记录恢复结果;② Atlas _batch_lock 串行化整个 batch,DSH 单 pipeline 滚动。验收 A-1/A-2 见 evidence §D	F05-host
+B-F05-CANCEL-SYNTH-01	engine/kernel/tools.py _cancelled_result(覆盖未开始与进行中)	取消合成回执	wave3@060071ab	对齐已验	E34(tools.py:920,952,1020,1087); B 节三场景 38 项已验(取消回滚等)	有序合成结果与 batch.ts:227 顺序语义对照待做	F05-host
+B-F05-CONCLUDE-01	kernel concludeTurn 工具(收束 final response)	工具声明收束本轮	wave3@060071ab	对齐已验	E19(W3-X1 真实模型 concludeTurn)	—	F05-host
+B-F05-SANDBOX-01	core/atlas/sandbox.py:15-270(Docker per-run/read-only 一次性容器/workspace-write exec/danger-full-access 拒绝)+windows_job_sandbox.py(Job fallback)+ssh.py:1677-1870(bwrap)	两档真实隔离:read-only 只读 bind mount+network none;workspace-write 进 rw 容器;danger-full-access 在沙箱内显式拒绝;未开沙箱走本地执行;结果报 sandbox_backend/sandbox_enforced	wave3@060071ab(sandbox.py 在途改动)	部分	当前树逐行(evidence/exec06-f05-batch-retry-sandbox-20261118.txt §C);E14/E18 历史收据	缺 per-call danger-full-access(沙箱内拒绝,只能整体不开沙箱);无 denial-signature/runner-failure 分类与后台 runnerFailed;无 enforcement/denied 字段。验收 A-5/A-6 见 evidence §D	F08-tools
+B-F05-SANDBOX-ESC-01	单次 justification/approval(E18;host 无 executor 路径 fail-closed)	按调用沙箱升级审批	wave3@060071ab	对齐已验	E18(WAVE6)+真实模型观察;本会话逐段读 ptc.ts:344-365	DSH 契约逐字段:description 非空强制;timeoutMs 需 runtime 支持且为正有限数;升级需 standingPolicy 存在否则显式 unavailable;approveEscalation{requestedMode,justification,effectiveMode,subject:program};sandbox denied 时输出 escalationGuidance。Atlas 差异:subject 范围与 timeoutMs 门控、拒绝时指引文本为可验收目标	F05-host
+B-F05-PTY-01	local_execution.py(owner 隔离+四类 waitReason)	持久 PTY 等待原因	wave3@060071ab	对齐已验	E15(本轮关闭)	—	F08-tools
+B-F05-JOBS-01	ExecManager(256KiB live/16KiB settled/每 owner 10,E16)	后台作业统一注册表	wave3@060071ab	对齐已验	E16(本轮关闭)+本会话逐段读 jobs-local index.ts:4-89,266,477-483,595	DSH 独有:model cursor 消费语义——settle 保留 cursor 未消费字节于 cap 之上、首个终态模型读才裁到 cap;readAt 永不动 cursor;读即从 modelCursor 消费并推进到 ring.total;注册 projection 播种。Atlas 无消费游标=实施候选(F08)	F08-tools
+B-F05-SUBAGENT-01	agent definitions 能力约束+validate_toolset_binding(E26/E17)	子代理激活与 toolFilter	wave3@060071ab	对齐已验	E17/E26(W4-Z1)+descriptor.ts:85-145 本会话逐段读	DSH persisted descriptor 校验:未知字段拒绝、逐 key 字符串/字符串数组校验(toolFilter allow/deny)、version 字段 omit 形态;Atlas 校验聚焦工具名/空集——未知字段与 persisted 形态校验为对照差异(候选)	F05-host
+B-F05-REPEAT-01	engine/kernel/stuck.py RepeatToolReminder(THRESHOLDS=(3,5,8))+StuckDetector(loop.py:1822 按模型 profile 接线)	重复调用提醒	wave3@060071ab	对齐已验	E20(本轮关闭)+本会话逐行读 stuck.py:44-70、DSH index.ts:25-70	核心语义对齐(3/5/8 提醒不否决+全参数指纹)。差异:DSH 阈值可配+装载期 fail-loud(空/非整/<2/重复抛错)+include/exclude 通配+argumentsPreviewChars 上限(默认 500)+reminder source 标签;Atlas 独有:挥发字段指纹剔除(id/时间戳/receipt)+窗口化循环检测(矫正提醒)。可配置面候选待 F05	F05-host
+B-F08-FS-01	core/atlas 工具面(local_file/local_edit 等)+fs 观察态(S21:session/path token+提交前重验)	文件工具与乐观 stale 检测	wave3@060071ab	对齐已验	S21(本轮关闭)	fs-patch 语义(patch 应用)对照待做	F08-tools
+B-F08-SHELL-01	core/atlas tools local_exec/local_shell+windows_job_sandbox	shell 执行(Windows Job 沙箱)	wave3@060071ab	部分	E14/E16 闭合+bash/pwsh 工具存在	Atlas 仅 local_shell/local_exec/local_git 三入口进 sandbox;两档隔离更严(ro 容器/rw exec/Job fallback);缺 DSH 的 denial/runner-failure 分类、后台 runnerFailed、可插拔 sandbox provider;pwsh 无独立沙箱底座。验收 A-6/A-7 见 evidence §C/§D	F08-tools
+B-F08-LSP-01	core/atlas/lsp/{client,manager,servers}+LspProviderRegistry(E30)	LSP 四操作+registry	wave3@060071ab(lsp 文件在途改动)	对齐已验	E30(WAVE5 闭合+registry)	stdio 传输形态与 tool-lsp 模型面参数对照待做	F08-tools
+B-F08-BROWSER-01	core/atlas/tools/web.py+web_extract.py+browser_exec(E4 提及)	浏览器/网页工具	wave3@060071ab	部分	web/websearch 工具存在+真实模型工具回合记录	四底座(runtime/CDP-MCP/Playwright-MCP/stagehand)无对应;browser_exec 底座待核	F08-tools
+B-F08-WEBHOOK-01	WebhookProvider+HMAC adapter+WebhookSessionRequest(X29)	webhook 外部入口	wave3@060071ab	对齐已验	X29(本轮关闭)	github 专用 provider 对照待做	F08-tools
+B-F08-HOOKS-01	core/atlas/runtime/hooks.py(28 事件+codex_hook_settings+fingerprint 信任门)	hook 桥与逐条信任门	wave3@060071ab	对齐已验	X12/X13/X14(W4-Z6 真机;信任门 PRESENT-STRONGER); 第二批 28 项定向重验通过(hook_missing_script,2026-11-18)	hook-protocol 事件枚举逐个对照待做	F08-tools
+B-F09-MCP-01	core/atlas/tools/mcp_client.py(500ms→30s 预算+unreachable 终态)+for_scope 隔离	MCP liveness+资源作用域	wave3@060071ab	对齐已验	X22/X23(本轮关闭+8836 实测)	manager 管理面(安装/配置 UI)对照待做	F09-extensions
+B-F09-SKILL-01	skills/__init__.py(发现根阶梯+依赖门 preflight+新鲜度指纹)	技能系统	wave3@060071ab	对齐已验	X15-X20(W4-Z6 真机;依赖门 PRESENT-STRONGER)	skill-filesystem 发现语义逐字段对照待做	F09-extensions
+B-F09-PLUGIN-TOOLS-01	kernel 8 个 typed 插件管理动作+plugin_marketplace permission_mode(X10)	插件管理工具面	wave3@060071ab	对齐已验	X10(W4-Z5 live 双腿)	8 动作名与 DSH 工具面逐名对照待做	F09-extensions
+B-F09-CLIENT-EXT-01	ConversationActivity ConversationNodeDefinition 注册表(X27)	渲染层扩展点	wave3@060071ab	对齐已验	X27(WAVE5 闭合)	slots 贯通(App 静态导入)残留按 ledger 记录	F09-extensions
+B-F09-BUNDLE-OFFICIAL-01	"core/atlas/plugins/runtime.py discover()(official_attestation 字段在 :1189-1194,源码自注""尚无已验证的官方信任店"")"	official_attestation/availability/overrides/marketplace/update 字段;官方语义弱于 DSH	wave3@060071ab	部分	X11(W4-Z5 live GET /api/plugins)+ 当前快照 :1189-1194 注释复核	DSH 在 boot 层统一 bundle+profile 解析、retired 名单、平台准入且官方来源有安装目标契约;Atlas 无对应 official trust store 与 bundle 层语义	F09-extensions
+B-F04-CLI-ARGS-01	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-02	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-03	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-04	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-05	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-06	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-07	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-08	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-09	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-10	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-11	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-12	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-ARGS-13	无独立 dsh 型 CLI(Atlas 以 HTTP/WS 为入口)	—	wave3@060071ab	缺失	当前树无对应入口(族级映射,行级对照待批次)	Atlas 无多模式 CLI 与逐 flag 参数面/退出码契约	F04-cli-sdk
+B-F04-CLI-PROFILE-02	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-03	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-04	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-05	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-06	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-07	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-08	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-09	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-10	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-11	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-12	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-13	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PROFILE-14	config layers(patch_layer.merge_config_layers+dump_config_preview)	层叠合并与预览	wave3@060071ab	部分	X4(W4-Z5 CLI+HTTP 双实证)(族级映射,行级对照待批次)	无分层 env、启动服务栈、信号有界关停(130/0)、DSH_USER_AGENT_SUFFIX 等价面	F04-cli-sdk
+B-F04-CLI-PLUGIN-01	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-02	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-03	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-04	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-05	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-06	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-07	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-08	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-09	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-10	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-11	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-12	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-13	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-14	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-15	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-PLUGIN-16	kernel 8 插件管理动作+plugins_router(X10/X11)	管理面+审批	wave3@060071ab	部分	X10/X11(W4-Z5 live)(族级映射,行级对照待批次)	pnpm 转发/依赖解析/版本豁免/装后回滚缺失=X5/X6/X7(HARD 历史口径)	F04-cli-sdk
+B-F04-CLI-DUMP-01	atlas plugins dump-config+GET /api/plugins/config-layers(scrub)	dump 面两条入口	wave3@060071ab	部分	X4(W4-Z5 双实证)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	层序标签/# == 注释契约逐字段对照待做	F04-cli-sdk
+B-F04-CLI-DUMP-02	atlas plugins dump-config+GET /api/plugins/config-layers(scrub)	dump 面两条入口	wave3@060071ab	部分	X4(W4-Z5 双实证)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	层序标签/# == 注释契约逐字段对照待做	F04-cli-sdk
+B-F04-CLI-DUMP-03	atlas plugins dump-config+GET /api/plugins/config-layers(scrub)	dump 面两条入口	wave3@060071ab	部分	X4(W4-Z5 双实证)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	层序标签/# == 注释契约逐字段对照待做	F04-cli-sdk
+B-F04-CLI-DUMP-04	atlas plugins dump-config+GET /api/plugins/config-layers(scrub)	dump 面两条入口	wave3@060071ab	部分	X4(W4-Z5 双实证)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	层序标签/# == 注释契约逐字段对照待做	F04-cli-sdk
+B-F04-CLI-DIAG-01	port_guard(L6:启动前探测,占用即退出 2)	端口守卫	wave3@060071ab	部分	L6(台账闭合)(族级映射,行级对照待批次)	startup-*.log(0600)写盘与启动审计文案无对应	F04-cli-sdk
+B-F04-CLI-DIAG-02	port_guard(L6:启动前探测,占用即退出 2)	端口守卫	wave3@060071ab	部分	L6(台账闭合)(族级映射,行级对照待批次)	startup-*.log(0600)写盘与启动审计文案无对应	F04-cli-sdk
+B-F04-CLI-DIAG-03	port_guard(L6:启动前探测,占用即退出 2)	端口守卫	wave3@060071ab	部分	L6(台账闭合)(族级映射,行级对照待批次)	startup-*.log(0600)写盘与启动审计文案无对应	F04-cli-sdk
+B-F04-CLI-BIN-01	无 npm bin 分派面	—	wave3@060071ab	缺失	—(族级映射,行级对照待批次)	bin.runCli 等价分派缺失	F04-cli-sdk
+B-F04-CLI-BIN-02	无 npm bin 分派面	—	wave3@060071ab	缺失	—(族级映射,行级对照待批次)	bin.runCli 等价分派缺失	F04-cli-sdk
+B-F04-CLI-BIN-03	无 npm bin 分派面	—	wave3@060071ab	缺失	—(族级映射,行级对照待批次)	bin.runCli 等价分派缺失	F04-cli-sdk
+B-F04-CLI-APPS-01	core/atlas/tools/app_server.py(headless/ACP/SDK 等价面)	JSON-RPC stdio 服务	wave3@060071ab	部分	X24/X25(W4-Z5/Z6 live)(族级映射,行级对照待批次)	web 注入 8 旗标、--json NDJSON 流(cap 32KiB/8KiB)契约无对应	F04-cli-sdk
+B-F04-CLI-APPS-02	core/atlas/tools/app_server.py(headless/ACP/SDK 等价面)	JSON-RPC stdio 服务	wave3@060071ab	部分	X24/X25(W4-Z5/Z6 live)(族级映射,行级对照待批次)	web 注入 8 旗标、--json NDJSON 流(cap 32KiB/8KiB)契约无对应	F04-cli-sdk
+B-F04-CLI-APPS-03	core/atlas/tools/app_server.py(headless/ACP/SDK 等价面)	JSON-RPC stdio 服务	wave3@060071ab	部分	X24/X25(W4-Z5/Z6 live)(族级映射,行级对照待批次)	web 注入 8 旗标、--json NDJSON 流(cap 32KiB/8KiB)契约无对应	F04-cli-sdk
+B-F04-CLI-APPS-04	core/atlas/tools/app_server.py(headless/ACP/SDK 等价面)	JSON-RPC stdio 服务	wave3@060071ab	部分	X24/X25(W4-Z5/Z6 live)(族级映射,行级对照待批次)	web 注入 8 旗标、--json NDJSON 流(cap 32KiB/8KiB)契约无对应	F04-cli-sdk
+B-F04-CLI-APPS-05	core/atlas/tools/app_server.py(headless/ACP/SDK 等价面)	JSON-RPC stdio 服务	wave3@060071ab	部分	X24/X25(W4-Z5/Z6 live)(族级映射,行级对照待批次)	web 注入 8 旗标、--json NDJSON 流(cap 32KiB/8KiB)契约无对应	F04-cli-sdk
+B-F04-CLI-APPS-06	core/atlas/tools/app_server.py(headless/ACP/SDK 等价面)	JSON-RPC stdio 服务	wave3@060071ab	部分	X24/X25(W4-Z5/Z6 live)(族级映射,行级对照待批次)	web 注入 8 旗标、--json NDJSON 流(cap 32KiB/8KiB)契约无对应	F04-cli-sdk
+B-F04-CLI-APPS-07	core/atlas/tools/app_server.py(headless/ACP/SDK 等价面)	JSON-RPC stdio 服务	wave3@060071ab	部分	X24/X25(W4-Z5/Z6 live)(族级映射,行级对照待批次)	web 注入 8 旗标、--json NDJSON 流(cap 32KiB/8KiB)契约无对应	F04-cli-sdk
+B-F03-ROUTE-01	无 URL 路由器;导航经 store+deep link(D20)+多窗(D31)	—	wave3@060071ab	部分	D20/D31(W4-Z7)	单一 HTML+slot 组合路由形态差异记录	F03-web
+B-F03-ROUTE-02	无 URL 路由器;导航经 store+deep link(D20)+多窗(D31)	—	wave3@060071ab	部分	D20/D31(W4-Z7)	单一 HTML+slot 组合路由形态差异记录	F03-web
+B-F03-ROUTE-03	无 URL 路由器;导航经 store+deep link(D20)+多窗(D31)	—	wave3@060071ab	部分	D20/D31(W4-Z7)	单一 HTML+slot 组合路由形态差异记录	F03-web
+B-F03-ROUTE-04	无 URL 路由器;导航经 store+deep link(D20)+多窗(D31)	—	wave3@060071ab	部分	D20/D31(W4-Z7)	单一 HTML+slot 组合路由形态差异记录	F03-web
+B-F03-ROUTE-05	无 URL 路由器;导航经 store+deep link(D20)+多窗(D31)	—	wave3@060071ab	部分	D20/D31(W4-Z7)	单一 HTML+slot 组合路由形态差异记录	F03-web
+B-F03-PAGE-01	App.tsx 主视图+MessageThread	—	wave3@060071ab	部分	本会话 grep:主面在	逐页对照待批次(工作区/聊天/空白态)	F03-web
+B-F03-PAGE-02	App.tsx 主视图+MessageThread	—	wave3@060071ab	部分	本会话 grep:主面在	逐页对照待批次(工作区/聊天/空白态)	F03-web
+B-F03-PAGE-03	App.tsx 主视图+MessageThread	—	wave3@060071ab	部分	本会话 grep:主面在	逐页对照待批次(工作区/聊天/空白态)	F03-web
+B-F03-PAGE-04	App.tsx 主视图+MessageThread	—	wave3@060071ab	部分	本会话 grep:主面在	逐页对照待批次(工作区/聊天/空白态)	F03-web
+B-F03-PAGE-05	App.tsx 主视图+MessageThread	—	wave3@060071ab	部分	本会话 grep:主面在	逐页对照待批次(工作区/聊天/空白态)	F03-web
+B-F03-PAGE-06	App.tsx 主视图+MessageThread	—	wave3@060071ab	部分	本会话 grep:主面在	逐页对照待批次(工作区/聊天/空白态)	F03-web
+B-F03-PAGE-07	App.tsx 主视图+MessageThread	—	wave3@060071ab	部分	本会话 grep:主面在	逐页对照待批次(工作区/聊天/空白态)	F03-web
+B-F03-SETTINGS-01	设置面板(WorkspaceSecurityPanel/ExpertModePanel/各 settings 组件)	—	wave3@060071ab	部分	本会话 grep:settings 组件族在	骨架/section 注册机制对照待批次	F03-web
+B-F03-SETTINGS-02	无(无账户设置节)	—	wave3@060071ab	缺失	本会话 grep:无 account 节	账户设置节候选(依赖 remoteAccess/watch)	F03-web
+B-F03-SETTINGS-03	通用设置面	—	wave3@060071ab	部分	本会话 grep:设置项在	13 个首选项行逐项对照待批次	F03-web
+B-F03-SETTINGS-04	模型设置(路由/凭据/网络)	—	wave3@060071ab	对齐已验	本会话 grep:models 设置+set_model_api_key/凭据库(L4)	逐项对照待批次	F03-web
+B-F03-SETTINGS-05	插件面板(ConsolePage+X11)	—	wave3@060071ab	对齐已验	X11(W4-Z5 live GET /api/plugins)	tab 条件注入(configForms.whileServed)对照待批次	F03-web
+B-F03-SETTINGS-06	AgentPresetStore(X8)	—	wave3@060071ab	部分	X8(W4-Z5 live preset 解析)	设置节 UI 对照待批次	F03-web
+B-F03-SETTINGS-07	services/shortcuts.ts+D22	—	wave3@060071ab	部分	D19/D22(W4-Z7 测试)	快捷键参考覆盖层与录制编辑候选	F03-web
+B-F03-SETTINGS-08	renderer/App.tsx 版本提示面	—	wave3@060071ab	部分	本会话 grep:App.tsx/DiagnosticsHub 版本相关	host-release-change 覆盖层形态对照待批次	F03-web
+B-F03-SETTINGS-09	无(无 openDevTools 开关)	—	wave3@060071ab	缺失	本会话 grep:electron.ts 无 openDevTools	developer-tools 设置节候选	F03-web
+B-F03-PREVIEW-01	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-02	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-03	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-04	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-05	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-06	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	pdf 懒加载对照待批次	F03-web
+B-F03-PREVIEW-07	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	code 预览已在隔离 worktree zcode/exec04-code-preview 实现(10 测试过,diff=证据/zcode-exec04-code-preview.diff),待主控验收合入	F03-web
+B-F03-PREVIEW-08	core/atlas/api/workspace_router.py:642-675(/api/workspace/preview)+core/atlas/office.py:224+(render_office)+core/scripts/isolated_preview_worker.py:57-75;renderer frontend/src/renderer/shell/panels/FilesPanel.tsx:663-667(sandbox iframe)	"隔离子进程(credential-free)渲染 docx/xlsx/pptx→HTML;前端 sandbox="""" iframe;另有 Windows Sandbox 选项"	wave3@060071ab	部分	当前树逐行 + 真实探针: xlsx mode=office-html 500B table/alpha/42 成功;docx 因当前运行时未安装 pyproject 声明的 python-docx 报 ModuleNotFoundError(evidence/exec06-preview-office-20261118.txt §B)	当前运行时缺 python-docx/python-pptx(声明在 core/pyproject.toml:72-74,需打包端安装验证);.doc/.ppt 不支持(后端 415);无 DSH 字体缺失提示/转换动作席。验收: 安装依赖后 docx+pptx 探针通过;legacy 格式另立转换路径	F03-web
+B-F03-PREVIEW-09	core/atlas/api/workspace_router.py:642-675 + core/atlas/office.py:114-138(create_spreadsheet)/224+(render_office);renderer FilesPanel.tsx:392-407(workbookSheets 解析);backend-adapter/src/client.ts:341-344	xlsx 经隔离渲染为 HTML 表格,前端解析多工作表;xls/csv/tsv 无表格化	wave3@060071ab	部分	真实探针: xlsx mode=office-html, has_table/alpha/42 全真(evidence/exec06-preview-office-20261118.txt §B);XLSX 正则仅 .xlsx	"csv/tsv 表格预览已在隔离 worktree zcode/exec06-csv-preview 实现并经 PAR-07-A 修复两个真实缺陷:①EOF 空引号字段 '\""\""' 丢行→rowStarted;②首逻辑记录跨引号换行导致分号误判→firstLogicalRecord。回归 15 测试过、renderer tsc 0(evidence/par07-a.md);待验收合入。.xls 仍无解析。验收: 合入后 csv/tsv 升对齐,再补 xls"	F03-web
+B-F03-PREVIEW-10	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-11	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-12	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-13	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-14	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-15	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-16	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-PREVIEW-17	shell/panels/documentPreviewRegistry.tsx(D16)	—	wave3@060071ab	对齐已验	D16(W4-Z7 registry.test 3 项+FilesPanel)+本会话文件在	子类型逐个对照待批次	F03-web
+B-F03-MARKDOWN-01	MarkdownBody/代码块	—	wave3@060071ab	部分	本会话 grep:在	逐契约对照待批次	F03-web
+B-F03-MARKDOWN-02	MarkdownBody/代码块	—	wave3@060071ab	部分	本会话 grep:在	逐契约对照待批次	F03-web
+B-F03-MARKDOWN-03	MarkdownBody/代码块	—	wave3@060071ab	部分	本会话 grep:在	逐契约对照待批次	F03-web
+B-F03-MARKDOWN-04	MarkdownBody/代码块	—	wave3@060071ab	部分	本会话 grep:在	逐契约对照待批次	F03-web
+B-F03-I18N-01	i18n.ts(D17)	—	wave3@060071ab	对齐已验	D17(W4-Z7 7 项测试)	逐条目对照待批次	F03-web
+B-F03-I18N-02	i18n.ts(D17)	—	wave3@060071ab	对齐已验	D17(W4-Z7 7 项测试)	逐条目对照待批次	F03-web
+B-F03-I18N-03	i18n.ts(D17)	—	wave3@060071ab	对齐已验	D17(W4-Z7 7 项测试)	逐条目对照待批次	F03-web
+B-F03-I18N-04	i18n.ts(D17)	—	wave3@060071ab	对齐已验	D17(W4-Z7 7 项测试)	逐条目对照待批次	F03-web
+B-F03-SHORTCUT-01	services/shortcuts.ts+D22	—	wave3@060071ab	对齐已验	D19/D22(W4-Z7)	录制态/编辑持久化候选(见 F02-impl)	F03-web
+B-F03-SHORTCUT-02	services/shortcuts.ts+D22	—	wave3@060071ab	对齐已验	D19/D22(W4-Z7)	录制态/编辑持久化候选(见 F02-impl)	F03-web
+B-F03-SHORTCUT-03	services/shortcuts.ts+D22	—	wave3@060071ab	对齐已验	D19/D22(W4-Z7)	录制态/编辑持久化候选(见 F02-impl)	F03-web
+B-F03-SHORTCUT-04	services/shortcuts.ts+D22	—	wave3@060071ab	对齐已验	D19/D22(W4-Z7)	录制态/编辑持久化候选(见 F02-impl)	F03-web
+B-F03-COMMAND-01	slashCommands.ts+pluginSlashCommands(D33)	—	wave3@060071ab	对齐已验	D33(W4-Z7 测试)	逐命令对照待批次	F03-web
+B-F03-COMMAND-02	slashCommands.ts+pluginSlashCommands(D33)	—	wave3@060071ab	对齐已验	D33(W4-Z7 测试)	逐命令对照待批次	F03-web
+B-F03-COMMAND-03	slashCommands.ts+pluginSlashCommands(D33)	—	wave3@060071ab	对齐已验	D33(W4-Z7 测试)	逐命令对照待批次	F03-web
+B-F03-COMMAND-04	slashCommands.ts+pluginSlashCommands(D33)	—	wave3@060071ab	对齐已验	D33(W4-Z7 测试)	逐命令对照待批次	F03-web
+B-F03-OVERLAY-01	ConversationMessage/CodeBlock/ExpertModePanel contextmenu	—	wave3@060071ab	部分	本会话 grep:三处 contextmenu	统一 context-menu 服务(slot 化)候选	F03-web
+B-F03-OVERLAY-02	无(无配额面)	—	wave3@060071ab	缺失	本会话 grep:quota 无命中	配额通知链候选	F03-web
+B-F03-OVERLAY-03	InitDialog/IDEManagerDialog/FallbackModelsDialog+MessageThread	—	wave3@060071ab	部分	本会话 grep:对话框族在	行 toast 统一组件候选(现为对话框形态)	F03-web
+B-F03-OVERLAY-04	无(file-drag 缺失)	—	wave3@060071ab	缺失	本会话 grep:file-drag 无(F02 IPC-18..21)	toast 组+拖拽反馈候选	F03-web
+B-F03-OVERLAY-05	无(welcome/onboarding 缺失)	—	wave3@060071ab	缺失	本会话 grep:无(F02 IPC-46..54)	引导覆盖层候选(大)	F03-web
+B-F03-CONN-01	useAtlasStore 重连+adapter 重放(D7/D9)	—	wave3@060071ab	对齐已验	D7/D9(WAVE5/W4-Z7)	指数退避参数(73-120)对照待批次	F03-web
+B-F03-CONN-02	useAtlasStore 重连+adapter 重放(D7/D9)	—	wave3@060071ab	对齐已验	D7/D9(WAVE5/W4-Z7)	指数退避参数(73-120)对照待批次	F03-web
+B-F03-CONN-03	useAtlasStore 重连+adapter 重放(D7/D9)	—	wave3@060071ab	对齐已验	D7/D9(WAVE5/W4-Z7)	指数退避参数(73-120)对照待批次	F03-web
+B-F03-CONN-04	useAtlasStore 重连+adapter 重放(D7/D9)	—	wave3@060071ab	对齐已验	D7/D9(WAVE5/W4-Z7)	指数退避参数(73-120)对照待批次	F03-web
+B-F03-RENDER-01	ConversationNodeRegistry(D4)	—	wave3@060071ab	部分	D4(W3-X6/W4-Z7)	SlotRegistry 全 slot 键全集对照待批次	F03-web
+B-F03-RENDER-02	frontend/src/renderer/main.tsx:13-15 ReactDOM.createRoot(#root).render(<App/>);App.tsx 单体组件树	直接 React 根渲染;无 slot 服务	wave3@060071ab	部分	全 renderer grep renderSlot/SlotRegistry/registerSlot=0 命中;main.tsx 逐行(evidence/exec06-f03-boot-render-20261118.txt §B)	无 SlotRegistry/root 单槽/ctx.slots.renderSlot('root') 等价面;扩展面硬编码于 App.tsx。验收: registry declare/render/unload+root 单槽冲突测试(evidence §B)	F03-web
+B-F03-RENDER-03	PaneWorkspace(D31)	—	wave3@060071ab	部分	D31(W4-Z7)	AppFrame 六席布局/列求解无对应	F03-web
+B-F03-RENDER-04	styles/app.css 三主题	—	wave3@060071ab	部分	本会话 grep:三套主题在	theme/change 纯 DOM 呈现器候选	F03-web
+B-F03-RENDER-05	useAtlasStore	—	wave3@060071ab	部分	本会话 grep:store 在	persist/exclusive-factory 契约对照待批次	F03-web
+B-F03-RENDER-06	styles/app.css:232-233 app-region	—	wave3@060071ab	部分	本会话 grep:.drag/.no-drag 在	拖拽矩形回放(electron#32341 规避)候选	F03-web
+B-F03-RENDER-07	frontend/vite.config.ts + 静态 import/frontend/package.json build=vite build;无运行时模块表	Vite 构建期打包	wave3@060071ab	缺失	grep staticModules/PLATFORM_MODULES/__ModuleLoader__=0 命中;vite build 脚本(evidence/exec06-f03-boot-render-20261118.txt §C)	无平台单例 seed/require 解析顺序/未命中 loud error;渲染层插件无法动态装载共享单例。验收: seed 表+require miss 单测(evidence §C)	F03-web
+B-F03-RENDER-08	无(无 boot manifest;frontend/index.html 固定单入口)	—	wave3@060071ab	缺失	grep __DSH_BOOT__/parseBootManifest=0 命中;index.html 单入口(evidence/exec06-f03-boot-render-20261118.txt §D)	无 rev/release/entries/batches 解析、重复/未知/无批次校验、bootstrap/application 调度。验收: 与 DSH 12 类校验等价的 parser 单测(evidence §D)	F03-web
+B-F03-I18N-05	documentPreviewRegistry markdown 族	—	wave3@060071ab	部分	D16	frontmatter 结构化行渲染为 Atlas 缺口	F03-web
+B-F05-SUBPROV-01	agent/definitions.py 多格式发现+agents/backends/ 适配器(X33)	子代理 provider 后端	wave3@060071ab	部分	X33(W4-Z6 真实 delegate)+E22(W4-Z1 roster/CAS)	DSH 六 provider(acp/dsh-sdk/fork/spawn 等)逐个对照;control 工具面与 tool-subagent-control 对照	F05-host
+B-F09-CHAT-IMPORT-01	无	—	wave3@060071ab	缺失	当前树无 chat 导入能力	官方插件形态的会话导入为 Atlas 新增项	F09-extensions
+B-F08-FORGE-01	core/atlas/task_artifacts.py:215-280(WorktreeService create/status/remove/merge)+core/atlas/tools/workspace_workflows.py:1089-1090(workspace_worktree_manage)+core/atlas/engine/kernel/loop.py:3779-3783(dispatch/gate)+core/atlas/api/run_drive.py:2233-2262(run-request worktree 自动创建/切换)+core/atlas/api/conversations_router.py:2158-2166(fork)+workspace_router.py:1601-1666(POST create,IMPL-6/PAR-07-D-fix)	模型工具 workspace_worktree_manage 已存在;run-request 可自动创建并切到 worktree;fork 创建;新增 REST POST create(仅记录 worktree_*,workspace 保持 base 不变)	wave3@060071ab	部分	D 独立验收(evidence/par07-d.md)发现 workspace 覆盖破坏 merge/delete;修复分支 zcode/par07-worktree-api-fix 9 测试过(evidence/par07-d-fix.md、par07-d-fix-runs.txt);模型工具/auto-cwd 基线已存在	无 forgePanel/变更请求 Host Remote;REST POST create 无 client/UI 调用方(backend-adapter/frontend 未接);多进程创建竞争未控(仅进程内锁)。DSH create_worktree 的 cwd 切换语义由 run-request worktree 等价承担,不是本 POST。验收: 接客户端入口→创建→run 使用 worktree→merge/delete 全链路	F08-tools
+B-F04-SDKPROT-initialize-01	app_server.py:783 initialize	JSON-RPC stdio 服务	wave3@060071ab	部分	X25+当前 :783;参数级对照待批次(行级:方法名命中); audit2026-11-18:降级(证据含待对照标记:待批次)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-session-prompt-01	app_server session/enqueue(在途未提交,归原作者)	JSON-RPC stdio 服务	wave3@060071ab	部分	X25;durable 收据语义对齐但未集成(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-session-query-01	无对应命令面	JSON-RPC stdio 服务	wave3@060071ab	缺失	Atlas 无 query/command 生命周期与 query.completed(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-session-resume-01	app_server.py:1137 session/resume	JSON-RPC stdio 服务	wave3@060071ab	对齐已验	X25(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-session-wait-01	app_server session/wait(run 落定才回)	JSON-RPC stdio 服务	wave3@060071ab	对齐已验	X25(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-session-working-directory-get-01	无对应	JSON-RPC stdio 服务	wave3@060071ab	缺失	当前树 grep 无 working-directory 方法(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-session-working-directory-set-01	无对应	JSON-RPC stdio 服务	wave3@060071ab	缺失	同上;实施因 app_server.py 在途暂缓(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-shutdown-01	app_server shutdown(EOF 同款优雅排空)	JSON-RPC stdio 服务	wave3@060071ab	对齐已验	X25(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-user-question-ask-01	app_server.py:783 initialize	JSON-RPC stdio 服务	wave3@060071ab	部分	X25+当前 :783;参数级对照待批次(行级:方法名命中); audit2026-11-18:降级(证据含待对照标记:待批次)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-user-question-cancelled-01	PAR-07-E 隔离树:app_server.py ask_user/input_request+user-question.cancelled 通知+sdk/python/atlas_sdk/app_server.py 消费+cancel_session;desktop run_drive.py:3522-3545 仍未接(只读)	被取消未决问题恰好一次通知 {requestId,sessionId};ask_user 抛 CancelledError;pending→resolved|invalidated 单一权威;迟到/重复回答 -32602;SDK 支持 request_id/respond_input/cancel_session;durable appserver.request 保留	wave3@060071ab	部分	PAR-07-E 6 新真实通道测试+既有 35 项(含重连/重启)通过(evidence/par07-e.md);主代理复跑 24 passed;diff 待生成/验收	桌面 A-2 未做:无 input.cancelled/三真源同步/question 卡终态/answerInput 取消后处理;SDK 补丁基于 060071ab,合入需移植到主树在途 app_server(复用 pending_request_meta);桌面剩余差距单列	F04-cli-sdk
+B-F04-SDKPROT-session-event-01	app_server.py:990 session/events	JSON-RPC stdio 服务	wave3@060071ab	部分	流式事件契约对照待批次(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-session-status-01	session/status(running/idle 通知)	JSON-RPC stdio 服务	wave3@060071ab	对齐已验	X25(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-session-query-completed-01	无对应	JSON-RPC stdio 服务	wave3@060071ab	缺失	命令生命周期通知缺失(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-subagent-started-01	无对应	JSON-RPC stdio 服务	wave3@060071ab	缺失	X25 已记录残余(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-subagent-finished-01	无对应	JSON-RPC stdio 服务	wave3@060071ab	缺失	同上(行级:方法名命中)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-approval-request-01	app_server.py:783 initialize	JSON-RPC stdio 服务	wave3@060071ab	部分	X25+当前 :783;参数级对照待批次(行级:方法名命中); audit2026-11-18:降级(证据含待对照标记:待批次)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SDKPROT-transport-01	core/atlas/tools/app_server.py(:752-1137 方法面)	JSON-RPC stdio 服务	wave3@060071ab	部分	X25(W4-Z6 stdio 实证)+B 节 38 项真实子进程测试(2026-11-18)(族级映射,行级对照待批次)	working-directory get/set、subagent.started/finished、session.query.completed 契约缺失;enqueue 为在途未集成	F04-cli-sdk
+B-F04-SERVER-apply-01	app_server.py 生命周期(start/stop/排空,在途)	—	wave3@060071ab	部分	X25+当前方法面 :752-1137	stdio 装配就绪门/loader 门语义无对应;在途暂缓	F04-cli-sdk
+B-F04-SERVER-schedule-restore-01	DBOS automation+schedule 绑定会话(X31)	—	wave3@060071ab	部分	X31(W4-Z6 真实 date 触发)	schedule 驱动的 SDK 会话恢复与首次 resume 认领语义对照待批次	F04-cli-sdk
+B-F04-SERVER-max-tokens-01	kernel max_output 续写(model_call.py,在途)	—	wave3@060071ab	部分	Task2 语义闭合	maxTokensAsSuccess 部署映射(max-tokens 终止计为 SDK 成功)待对照	F04-cli-sdk
+B-F04-PYSDK-start-01	AppServer.start:129(spawn+stderr drain:157)	Python 异步 SDK	wave3@060071ab	对齐已验	X25+当前 :129/:157(SDK 公开面 grep,只读对照;atlas_sdk 在途)	—	F04-cli-sdk
+B-F04-PYSDK-close-01	AppServer 生命周期(shutdown/排空)	Python 异步 SDK	wave3@060071ab	部分	X25(W4-Z6 stdio)(SDK 公开面 grep,只读对照;atlas_sdk 在途)	有界排空+question 取消语义对照待批次	F04-cli-sdk
+B-F04-PYSDK-initialize-01	AppServer _request initialize 握手	Python 异步 SDK	wave3@060071ab	对齐已验	X25(stdio 全生命周期)(SDK 公开面 grep,只读对照;atlas_sdk 在途)	宿主能力声明字段对照待批次	F04-cli-sdk
+B-F04-PYSDK-session-prompt-01	new_session:277+session/enqueue(在途)	Python 异步 SDK	wave3@060071ab	部分	X25;enqueue 在途未集成(SDK 公开面 grep,只读对照;atlas_sdk 在途)	durable 收据 vs 完成回执对照待批次	F04-cli-sdk
+B-F04-PYSDK-resume-session-01	高层 Atlas.resume:85	Python 异步 SDK	wave3@060071ab	部分	__init__.py:85(SDK 公开面 grep,只读对照;atlas_sdk 在途)	Session 对象形态(可复用)候选	F04-cli-sdk
+B-F04-PYSDK-get-working-directory-01	AppServer.get_working_directory:287(SDK 侧在)	Python 异步 SDK	wave3@060071ab	部分	当前 :287(SDK 公开面 grep,只读对照;atlas_sdk 在途)	Host 方法面 grep 无对应——连通性待验证(在途)	F04-cli-sdk
+B-F04-PYSDK-set-working-directory-01	无	Python 异步 SDK	wave3@060071ab	缺失	Host 无对应(当前 grep)(SDK 公开面 grep,只读对照;atlas_sdk 在途)	同 DSH session/working-directory/set;实施暂缓(app_server.py 在途)	F04-cli-sdk
+B-F04-PYSDK-request-01	AppServer._request:195(类型化 JSON-RPC)	Python 异步 SDK	wave3@060071ab	部分	当前 :195(SDK 公开面 grep,只读对照;atlas_sdk 在途)	公开面命名/类型化参数对照待批次	F04-cli-sdk
+B-F04-PYSDK-notify-01	AppServer._notify:192	Python 异步 SDK	wave3@060071ab	部分	当前 :192(SDK 公开面 grep,只读对照;atlas_sdk 在途)	—	F04-cli-sdk
+B-F04-PYSDK-next-notification-01	无(通知队列内部,无阻塞读取公开面)	Python 异步 SDK	wave3@060071ab	缺失	当前 grep 无(SDK 公开面 grep,只读对照;atlas_sdk 在途)	过滤通知订阅面候选	F04-cli-sdk
+B-F04-PYSDK-subscribe-notifications-01	无	Python 异步 SDK	wave3@060071ab	缺失	当前 grep 无(SDK 公开面 grep,只读对照;atlas_sdk 在途)	带过滤器订阅候选	F04-cli-sdk
+B-F04-PYSDK-subscribe-session-notifications-01	无(会话树订阅缺失)	Python 异步 SDK	wave3@060071ab	缺失	当前 grep 无(SDK 公开面 grep,只读对照;atlas_sdk 在途)	会话树过滤订阅候选	F04-cli-sdk
+B-F04-PYSDK-next-request-01	AppServer._read_dispatch_loop:237(内部)	Python 异步 SDK	wave3@060071ab	部分	当前 :237(SDK 公开面 grep,只读对照;atlas_sdk 在途)	服务端→客户端请求公开读取面候选	F04-cli-sdk
+B-F04-PYSDK-user-question-01	session/request_permission+input.required(X24)	Python 异步 SDK	wave3@060071ab	部分	X24/W4-Z5(SDK 公开面 grep,只读对照;atlas_sdk 在途)	内置 handler 线程/取消语义对照待批次	F04-cli-sdk
+B-F04-PYSDK-respond-01	无(公开答复面)	Python 异步 SDK	wave3@060071ab	缺失	当前 grep 无(SDK 公开面 grep,只读对照;atlas_sdk 在途)	respond/respond_error 公开面候选	F04-cli-sdk
+B-F04-PYSDK-respond-error-01	无	Python 异步 SDK	wave3@060071ab	缺失	同上(SDK 公开面 grep,只读对照;atlas_sdk 在途)	同上	F04-cli-sdk
+B-F04-PYSDK-subscription-next-01	无	Python 异步 SDK	wave3@060071ab	缺失	无订阅面(SDK 公开面 grep,只读对照;atlas_sdk 在途)	随订阅族实施	F04-cli-sdk
+B-F04-PYSDK-subscription-drain-01	无	Python 异步 SDK	wave3@060071ab	缺失	无(SDK 公开面 grep,只读对照;atlas_sdk 在途)	非阻塞泵送候选	F04-cli-sdk
+B-F04-PYSDK-subscription-close-01	无	Python 异步 SDK	wave3@060071ab	缺失	无(SDK 公开面 grep,只读对照;atlas_sdk 在途)	注销/清理候选	F04-cli-sdk
+B-F04-PYSDK-harness-start-01	高层 Atlas(env/executable)懒启动	Python 异步 SDK	wave3@060071ab	部分	__init__.py:29(SDK 公开面 grep,只读对照;atlas_sdk 在途)	—	F04-cli-sdk
+B-F04-PYSDK-harness-close-01	高层关闭	Python 异步 SDK	wave3@060071ab	部分	__init__.py(SDK 公开面 grep,只读对照;atlas_sdk 在途)	—	F04-cli-sdk
+B-F04-PYSDK-harness-start-session-01	无(Session 对象形态)	Python 异步 SDK	wave3@060071ab	缺失	当前 grep 无(SDK 公开面 grep,只读对照;atlas_sdk 在途)	可复用 Session 对象候选	F04-cli-sdk
+B-F04-PYSDK-harness-resume-session-01	Atlas.resume:85	Python 异步 SDK	wave3@060071ab	部分	__init__.py:85(SDK 公开面 grep,只读对照;atlas_sdk 在途)	Session 形态差异记录	F04-cli-sdk
+B-F04-PYSDK-harness-run-01	Atlas.run:71(一次性至完成)	Python 异步 SDK	wave3@060071ab	对齐已验	__init__.py:71+stream:33(SDK 公开面 grep,只读对照;atlas_sdk 在途)	—	F04-cli-sdk
+B-F04-PYSDK-harness-client-01	无(底层客户端只读访问)	Python 异步 SDK	wave3@060071ab	缺失	当前 grep 无(SDK 公开面 grep,只读对照;atlas_sdk 在途)	只读 client 访问候选	F04-cli-sdk
+B-F04-PYSDK-session-run-01	无(session/query 命令面)	Python 异步 SDK	wave3@060071ab	缺失	X25 残余已记录(SDK 公开面 grep,只读对照;atlas_sdk 在途)	query 生命周期候选	F04-cli-sdk
+B-F04-PYSDK-session-get-working-directory-01	AppServer.get_working_directory:287	Python 异步 SDK	wave3@060071ab	部分	当前 :287(SDK 公开面 grep,只读对照;atlas_sdk 在途)	同 get-working-directory 行	F04-cli-sdk
+B-F04-PYSDK-session-set-working-directory-01	无	Python 异步 SDK	wave3@060071ab	缺失	Host 无对应(SDK 公开面 grep,只读对照;atlas_sdk 在途)	同 set-working-directory 行	F04-cli-sdk
+B-F04-PYSDK-final-response-01	RunResult 文本(从事件流聚合)	Python 异步 SDK	wave3@060071ab	部分	__init__.py:21(SDK 公开面 grep,只读对照;atlas_sdk 在途)	最后助手文本提取契约对照待批次	F04-cli-sdk
+B-F04-PYSDK-finish-reason-01	无(turn/end 终止原因提取)	Python 异步 SDK	wave3@060071ab	缺失	kernel 有 typed reason(E2);SDK 未暴露(SDK 公开面 grep,只读对照;atlas_sdk 在途)	SDK 侧 finish_reason 提取候选	F04-cli-sdk
+B-F04-PYSDK-harnessconfig-01	AppServer __init__(executable/workspace/env 较薄)	Python 异步 SDK	wave3@060071ab	部分	app_server.py:107(SDK 公开面 grep,只读对照;atlas_sdk 在途)	逐字段语义(超时/patches/dsh_home/user-question)对照待批次	F04-cli-sdk
+B-F04-PYSDK-deepseekharnessconfig-01	高层配置较薄	Python 异步 SDK	wave3@060071ab	部分	__init__.py:29(SDK 公开面 grep,只读对照;atlas_sdk 在途)	同上	F04-cli-sdk
+B-F04-PYSDK-office-render-images-01	无(office 族缺失)	Python 异步 SDK	wave3@060071ab	缺失	office-kit/office.py 定性(WATCH-05)(SDK 公开面 grep,只读对照;atlas_sdk 在途)	office 渲染候选(大)	F04-cli-sdk
+B-F04-PYSDK-office-convert-01	无	Python 异步 SDK	wave3@060071ab	缺失	同上(SDK 公开面 grep,只读对照;atlas_sdk 在途)	格式导出候选	F04-cli-sdk
+B-F04-PYSDK-office-recalculate-01	无	Python 异步 SDK	wave3@060071ab	缺失	同上(SDK 公开面 grep,只读对照;atlas_sdk 在途)	公式缓存刷新候选	F04-cli-sdk
+B-F02-IPC-01	electron.ts:1621,1641,1664,1688 showSaveDialog(导出/录屏等保存路径)	typed 订阅+补取最新状态	wave3@060071ab	对齐已验	本会话 grep:四处 showSaveDialog+electron.navigation.test.ts 对话框 mock	逐调用方与 preload fileActions.save 通道形态对照待 F02 批次	F02-desktop
+B-F02-IPC-02	无(主进程无 clipboard.readImage)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:main/ 无剪贴板图片读取;renderer 仅文本剪贴板(i18n :7574)	最小实现:main clipboard.readImage handler+preload 暴露+草稿图片路径;回归:clipboardImage 主进程测试(mock clipboard)+preload 接线断言	F02-desktop
+B-F02-IPC-03	renderer/services/shortcuts.ts(注册表,D22/D19)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:shortcuts.ts 18 处 register;main 无按键/菜单命令推送	最小实现:menu accelerator→webContents.send 输入事件;回归:主进程推送单测	F02-desktop
+B-F02-IPC-04	electron.ts:632 窗口加速键(非冲突键)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:加速键注册在;revision 版关页确认通道无	最小实现:close-window 带 revision 确认;回归:lifecycle 测试扩展	F02-desktop
+B-F02-IPC-05	shortcuts.ts(会话内注册,不持久化)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:注册表在;定义快照/持久化无	keybindings.json 持久化候选(F02-impl,electron.ts 在途暂缓)	F02-desktop
+B-F02-IPC-06	无(无持久化编辑)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无编辑/revision 乐观锁	最小实现:keybindings.json+revision CAS+广播;回归:CAS 冲突测试	F02-desktop
+B-F02-IPC-07	无(无配置广播)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 6 实现 subscribe 广播	F02-desktop
+B-F02-IPC-08	无(无录制态)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	录制态互斥(防自触发)候选	F02-desktop
+B-F02-IPC-09	electron.ts:431 ensureBackendRunning({onProgress})	typed 订阅+补取最新状态	wave3@060071ab	对齐已验	本会话 grep:backendProcess.ts+lifecycle/python 测试;D1	握手通道形态(preload ready/fatal)对照待批次	F02-desktop
+B-F02-IPC-10	无(welcomeWindow 流缺失)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无 onboarding/welcome 主进程面	首跑引导候选(F02-impl,大)	F02-desktop
+B-F02-IPC-11	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	引导期最小尺寸候选	F02-desktop
+B-F02-IPC-12	模型 key 配置经后端(set_model_api_key+凭据管理器)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:后端路由在(L4);引导期查询通道无	引导期 hasApiKey 通道候选	F02-desktop
+B-F02-IPC-13	backendProcess 失败路径+safeMode 恢复(D23 相邻)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:ensureBackendRunning 失败+safeModeOnNextStart	渲染层 failed(message) 上报通道形态对照待批次	F02-desktop
+B-F02-IPC-14	electron.ts:1359-1367 guest webContents+browserAddressShortcutTarget	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:guest 处理在	workspace 级浏览器租约模型(acquire/release)候选	F02-desktop
+B-F02-IPC-15	同上	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:同上	租约释放/清理候选	F02-desktop
+B-F02-IPC-16	外链移交浏览器(D20 形态)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:外链守卫在	guest 内开页请求→owner 推送形态对照待批次	F02-desktop
+B-F02-IPC-17	electron.ts:1609 showOpenDialog(owner)	typed 订阅+补取最新状态	wave3@060071ab	对齐已验	本会话 grep:workspace 目录选择对话框	—	F02-desktop
+B-F02-IPC-18	无(无 webContents.startDrag)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:全仓无 startDrag	最小实现:fileDrag.prepare(临时文件+图标)→startDrag;回归:main 拖拽测试(mock startDrag)	F02-desktop
+B-F02-IPC-19	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 18 实现 requestId 取消	F02-desktop
+B-F02-IPC-20	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 18 实现	F02-desktop
+B-F02-IPC-21	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	句柄释放清理候选	F02-desktop
+B-F02-IPC-22	无(无 deviceInfo 面)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无 os.release 面	最小实现:os.release()+os.arch() handler;回归:单测	F02-desktop
+B-F02-IPC-23	renderer i18n(D17)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:i18n.ts 在;主进程 getLocale 引导无命中	主进程 locale 引导通道候选	F02-desktop
+B-F02-IPC-24	renderer 语言切换(i18n)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:切换持久化在	上报主进程通道候选	F02-desktop
+B-F02-IPC-25	update-coordinator journal 有 channel 字段	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:coordinator.ts:4-36 channel 仅记账	渠道读取通道候选(feed 每渠道 url)	F02-desktop
+B-F02-IPC-26	无(无渠道切换)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:releaseUpdate.ts 无 channel	最小实现:settings 渠道字段+feed builder;回归:releaseUpdate 渠道测试	F02-desktop
+B-F02-IPC-27	无(无渠道广播)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 26 实现	F02-desktop
+B-F02-IPC-28	update-coordinator 状态机+UpdateBanner(D10)	typed 订阅+补取最新状态	wave3@060071ab	对齐已验	本会话 grep:coordinator 状态面+13 项测试	IPC 查询通道形态差异记录	F02-desktop
+B-F02-IPC-29	UpdateBanner 下载进度	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:banner 在	独立手动更新入口通道候选	F02-desktop
+B-F02-IPC-30	renderer 内部状态广播	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:coordinator subscribe 在	跨窗口广播候选	F02-desktop
+B-F02-IPC-31	App.tsx:323 matchMedia prefers-color-scheme(renderer 侧 OS 深色镜像)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:matchMedia 命中 App.tsx:323;DSH 为 main nativeTheme+data-ds-theme-source MutationObserver	镜像层级差异(renderer matchMedia vs main nativeTheme+主题源监听)待 F02 对照	F02-desktop
+B-F02-IPC-32	electron.ts:1104-1105 enter/leave-full-screen→'window:fullscreen-change'	typed 订阅+补取最新状态	wave3@060071ab	对齐已验	本会话 grep:精确命中	—	F02-desktop
+B-F02-IPC-33	无(无标题栏配色采样)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无 setTitleBarColor/titleBarOverlay	Windows 标题栏配色候选(canvas 采样)	F02-desktop
+B-F02-IPC-34	electron.ts:1167 Menu.buildFromTemplate().popup	typed 订阅+补取最新状态	wave3@060071ab	对齐已验	本会话 grep:精确命中	—	F02-desktop
+B-F02-IPC-35	无(无嵌入 Platform WebView)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	账户/充值嵌入视图候选(大);账户现经后端路由	F02-desktop
+B-F02-IPC-36	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 35 实现	F02-desktop
+B-F02-IPC-37	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 35 实现	F02-desktop
+B-F02-IPC-38	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 35 实现	F02-desktop
+B-F02-IPC-39	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 35 实现(会话清洗)	F02-desktop
+B-F02-IPC-40	releaseUpdate 强制版本策略+UpdateBanner 无跳过(D10)	typed 订阅+补取最新状态	wave3@060071ab	对齐已验	本会话 grep:releaseUpdate.ts+UpdateBanner 5 项测试	专用 IPC 通道形态差异记录	F02-desktop
+B-F02-IPC-41	同上(状态推送)	typed 订阅+补取最新状态	wave3@060071ab	对齐已验	本会话 grep:mandatory 字段在 releaseUpdate	形态差异记录	F02-desktop
+B-F02-IPC-42	UpdateBanner 动作(下载/安装)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:banner 动作在	confirmation 版本动作参数对照待批次	F02-desktop
+B-F02-IPC-43	UpdateBanner 状态	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:banner 在	revision 化对话框状态机候选	F02-desktop
+B-F02-IPC-44	UpdateBanner 内容	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:在	跨窗口推送候选	F02-desktop
+B-F02-IPC-45	UpdateBanner 响应(无 revision)	typed 订阅+补取最新状态	wave3@060071ab	部分	本会话 grep:在	revision 乐观锁候选	F02-desktop
+B-F02-IPC-46	无(无欢迎页密钥保存)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无;key 配置经后端路由	引导流候选(大)	F02-desktop
+B-F02-IPC-47	无(无欢迎页埋点)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	遥测 opt-in 候选(对齐 F10 S24)	F02-desktop
+B-F02-IPC-48	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 47 实现	F02-desktop
+B-F02-IPC-49	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	一次性通知候选	F02-desktop
+B-F02-IPC-50	无(无欢迎页登录流)	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无;账户经后端	登录流候选(大)	F02-desktop
+B-F02-IPC-51	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 50 实现	F02-desktop
+B-F02-IPC-52	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	随 50 实现	F02-desktop
+B-F02-IPC-53	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	账户状态推送候选	F02-desktop
+B-F02-IPC-54	无	typed 订阅+补取最新状态	wave3@060071ab	缺失	本会话 grep:无	跳过登录候选	F02-desktop
+B-F02-HOST-01	D2 BackendLifecycleEvent(ready/fatal/shutdown-complete/quit-inspection)+backend-controller	两进程生命周期	wave3@060071ab	部分	D2 闭合(族级映射,行级对照待批次)	Host 协议版本化(DESKTOP_HOST_PROTOCOL_VERSION=4)、platform-session/plugin-operation 控制请求无对应	F02-desktop
+B-F02-HOST-02	D2 BackendLifecycleEvent(ready/fatal/shutdown-complete/quit-inspection)+backend-controller	两进程生命周期	wave3@060071ab	部分	D2 闭合(族级映射,行级对照待批次)	Host 协议版本化(DESKTOP_HOST_PROTOCOL_VERSION=4)、platform-session/plugin-operation 控制请求无对应	F02-desktop
+B-F02-HOST-03	D2 BackendLifecycleEvent(ready/fatal/shutdown-complete/quit-inspection)+backend-controller	两进程生命周期	wave3@060071ab	部分	D2 闭合(族级映射,行级对照待批次)	Host 协议版本化(DESKTOP_HOST_PROTOCOL_VERSION=4)、platform-session/plugin-operation 控制请求无对应	F02-desktop
+B-F02-HOST-04	D2 BackendLifecycleEvent(ready/fatal/shutdown-complete/quit-inspection)+backend-controller	两进程生命周期	wave3@060071ab	部分	D2 闭合(族级映射,行级对照待批次)	Host 协议版本化(DESKTOP_HOST_PROTOCOL_VERSION=4)、platform-session/plugin-operation 控制请求无对应	F02-desktop
+B-F02-HOST-05	D2 BackendLifecycleEvent(ready/fatal/shutdown-complete/quit-inspection)+backend-controller	两进程生命周期	wave3@060071ab	部分	D2 闭合(族级映射,行级对照待批次)	Host 协议版本化(DESKTOP_HOST_PROTOCOL_VERSION=4)、platform-session/plugin-operation 控制请求无对应	F02-desktop
+B-F02-HOST-06	D2 BackendLifecycleEvent(ready/fatal/shutdown-complete/quit-inspection)+backend-controller	两进程生命周期	wave3@060071ab	部分	D2 闭合(族级映射,行级对照待批次)	Host 协议版本化(DESKTOP_HOST_PROTOCOL_VERSION=4)、platform-session/plugin-operation 控制请求无对应	F02-desktop
+B-F02-HOST-07	D2 BackendLifecycleEvent(ready/fatal/shutdown-complete/quit-inspection)+backend-controller	两进程生命周期	wave3@060071ab	部分	D2 闭合(族级映射,行级对照待批次)	Host 协议版本化(DESKTOP_HOST_PROTOCOL_VERSION=4)、platform-session/plugin-operation 控制请求无对应	F02-desktop
+B-F02-HOST-08	D2 BackendLifecycleEvent(ready/fatal/shutdown-complete/quit-inspection)+backend-controller	两进程生命周期	wave3@060071ab	部分	D2 闭合(族级映射,行级对照待批次)	Host 协议版本化(DESKTOP_HOST_PROTOCOL_VERSION=4)、platform-session/plugin-operation 控制请求无对应	F02-desktop
+B-F02-HOST-09	D2 BackendLifecycleEvent(ready/fatal/shutdown-complete/quit-inspection)+backend-controller	两进程生命周期	wave3@060071ab	部分	D2 闭合(族级映射,行级对照待批次)	Host 协议版本化(DESKTOP_HOST_PROTOCOL_VERSION=4)、platform-session/plugin-operation 控制请求无对应	F02-desktop
+B-F02-HOST-10	D2 BackendLifecycleEvent(ready/fatal/shutdown-complete/quit-inspection)+backend-controller	两进程生命周期	wave3@060071ab	部分	D2 闭合(族级映射,行级对照待批次)	Host 协议版本化(DESKTOP_HOST_PROTOCOL_VERSION=4)、platform-session/plugin-operation 控制请求无对应	F02-desktop
+B-F02-WINDOW-01	electron.ts:576 openConversationWindow+PaneWorkspace	多窗口/分栏	wave3@060071ab	部分	D31(W4-Z7;Atlas 更强)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	close→hide/平台外观/focusPrimary 等窗口语义对照待做	F02-desktop
+B-F02-WINDOW-02	electron.ts:576 openConversationWindow+PaneWorkspace	多窗口/分栏	wave3@060071ab	部分	D31(W4-Z7;Atlas 更强)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	close→hide/平台外观/focusPrimary 等窗口语义对照待做	F02-desktop
+B-F02-WINDOW-03	electron.ts:576 openConversationWindow+PaneWorkspace	多窗口/分栏	wave3@060071ab	部分	D31(W4-Z7;Atlas 更强)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	close→hide/平台外观/focusPrimary 等窗口语义对照待做	F02-desktop
+B-F02-WINDOW-04	electron.ts:576 openConversationWindow+PaneWorkspace	多窗口/分栏	wave3@060071ab	部分	D31(W4-Z7;Atlas 更强)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	close→hide/平台外观/focusPrimary 等窗口语义对照待做	F02-desktop
+B-F02-WINDOW-05	electron.ts:576 openConversationWindow+PaneWorkspace	多窗口/分栏	wave3@060071ab	部分	D31(W4-Z7;Atlas 更强)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	close→hide/平台外观/focusPrimary 等窗口语义对照待做	F02-desktop
+B-F02-WINDOW-06	electron.ts:576 openConversationWindow+PaneWorkspace	多窗口/分栏	wave3@060071ab	部分	D31(W4-Z7;Atlas 更强)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	close→hide/平台外观/focusPrimary 等窗口语义对照待做	F02-desktop
+B-F02-WINDOW-07	electron.ts:576 openConversationWindow+PaneWorkspace	多窗口/分栏	wave3@060071ab	部分	D31(W4-Z7;Atlas 更强)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	close→hide/平台外观/focusPrimary 等窗口语义对照待做	F02-desktop
+B-F02-MENU-01	electron.ts:627 createApplicationMenu+shortcuts 注册表	原生菜单+快捷键	wave3@060071ab	部分	D22(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	上下文菜单/File 菜单逐项对照待做	F02-desktop
+B-F02-MENU-02	electron.ts:627 createApplicationMenu+shortcuts 注册表	原生菜单+快捷键	wave3@060071ab	部分	D22(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	上下文菜单/File 菜单逐项对照待做	F02-desktop
+B-F02-MENU-03	electron.ts:627 createApplicationMenu+shortcuts 注册表	原生菜单+快捷键	wave3@060071ab	部分	D22(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	上下文菜单/File 菜单逐项对照待做	F02-desktop
+B-F02-TRAY-01	electron.ts:257 createTray	持久托盘	wave3@060071ab	部分	D21(W4-Z7)+当前锚点(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	销毁与后台关闭确认语义待对照	F02-desktop
+B-F02-TRAY-02	electron.ts:257 createTray	持久托盘	wave3@060071ab	部分	D21(W4-Z7)+当前锚点(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	销毁与后台关闭确认语义待对照	F02-desktop
+B-F02-TRAY-03	electron.ts:257 createTray	持久托盘	wave3@060071ab	部分	D21(W4-Z7)+当前锚点(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	销毁与后台关闭确认语义待对照	F02-desktop
+B-F02-UPDATE-01	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-02	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-03	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-04	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-05	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-06	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-07	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-08	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-09	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-10	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-11	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-12	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-13	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-14	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-15	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-UPDATE-16	update-coordinator+releaseUpdate(退避/journal/强制版本)	更新生命周期	wave3@060071ab	部分	D10(W4-Z7 13 项测试)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	渠道切换/飞书测试认证/取证 JSONL 无对应	F02-desktop
+B-F02-LIFE-01	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-02	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-03	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-04	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-05	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-06	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-07	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-08	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-09	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-10	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-11	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-12	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-13	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-14	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-LIFE-15	electron.ts 生命周期(whenReady/before-quit/will-quit/powerMonitor)	启动退出链	wave3@060071ab	部分	D20/D23 闭合(族级映射,行级对照待批次)	before-quit 三分支(确认/跳过/安装器交接)与 finishQuit 语义待对照	F02-desktop
+B-F02-CRASH-01	electron.ts:1029 recoverRendererCrash(安全模式)	崩溃恢复	wave3@060071ab	部分	D23(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	crash-*.log 命名/保留策略对照待做	F02-desktop
+B-F02-CRASH-02	electron.ts:1029 recoverRendererCrash(安全模式)	崩溃恢复	wave3@060071ab	部分	D23(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	crash-*.log 命名/保留策略对照待做	F02-desktop
+B-F02-CRASH-03	electron.ts:1029 recoverRendererCrash(安全模式)	崩溃恢复	wave3@060071ab	部分	D23(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	crash-*.log 命名/保留策略对照待做	F02-desktop
+B-F02-CRASH-04	electron.ts:1029 recoverRendererCrash(安全模式)	崩溃恢复	wave3@060071ab	部分	D23(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	crash-*.log 命名/保留策略对照待做	F02-desktop
+B-F02-CRASH-05	electron.ts:1029 recoverRendererCrash(安全模式)	崩溃恢复	wave3@060071ab	部分	D23(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	crash-*.log 命名/保留策略对照待做	F02-desktop
+B-F02-SINGLE-01	electron.ts:1197 requestSingleInstanceLock+parseAtlasDeepLink	单实例+deep link	wave3@060071ab	部分	D20(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	dsh:// 特权协议与 dsh-app 文档服务对照待做	F02-desktop
+B-F02-SINGLE-02	electron.ts:1197 requestSingleInstanceLock+parseAtlasDeepLink	单实例+deep link	wave3@060071ab	部分	D20(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	dsh:// 特权协议与 dsh-app 文档服务对照待做	F02-desktop
+B-F02-SINGLE-03	electron.ts:1197 requestSingleInstanceLock+parseAtlasDeepLink	单实例+deep link	wave3@060071ab	部分	D20(W4-Z7)(族级映射,行级对照待批次); audit2026-11-18:降级(证据含待对照标记:族级)	dsh:// 特权协议与 dsh-app 文档服务对照待做	F02-desktop
+B-F02-INPUT-01	renderer shortcuts.ts+electron keybindings(D22)	—	wave3@060071ab	部分	本会话 grep:renderer 注册表在;main 按键拦截通道对照	主进程按键事件推送候选(同 F02-impl 快捷键族)	F02-desktop
+B-F02-INPUT-02	electron.ts:627 原生编辑角色	—	wave3@060071ab	对齐已验	D22(W4-Z7)+本会话 grep	编辑菜单键注入形态对照待批次	F02-desktop
+B-F02-INPUT-03	core/atlas/api/u6_router.py:108-130(GET/PUT /api/u6/keybindings)+frontend/src/renderer/services/shortcuts.ts:65-99(localStorage atlas.shortcuts+applyFileBindings)+App.tsx:558-573(3s 轮询)+ShortcutsPanel.tsx:27-38;原生:electron.ts:52-55,650-667,827-841,910-918	设备级 localStorage + 后端 keybindings.json(mtime 轮询)+原生 preferences;无 CAS/原子写/广播	wave3@060071ab	部分	当前树逐行(evidence/exec06-input03-keybindings-20261118.txt §B);GET/PUT 代码;渲染层轮询与保存路径	IMPL-4 后端 CAS/原子写已完成;PAR-07-B 已补客户端:GET revision→PUT expected_revision→成功续用新 revision→409 明确提示+重新加载/本机重试;首建 null、旧配置可读、本地偏好保留(evidence/par07-b.md,backend 7+frontend 11+tsc 0)。剩余:跨窗口仍是 App.tsx 3s 轮询(无广播/1s)、损坏 JSON 不能从 CAS UI 修复、后端锁仅进程内。验收 A-4/A-5 部分闭环	F02-impl
+B-F02-BROWSER-01	electron.ts:1359-1367 guest webContents	—	wave3@060071ab	部分	本会话 grep:guest 处理在	租约模型(acquire/release/workspace 分区)候选	F02-desktop
+B-F02-BROWSER-02	外链守卫(D20)	—	wave3@060071ab	部分	本会话 grep:导航守卫在	webview 加固(附加策略)对照待批次	F02-desktop
+B-F02-PERM-01	VoiceHud/设备选择(D28)+安全模式	—	wave3@060071ab	部分	D28(W4-Z7 voiceHudProtocol 测试)	OS 级麦克风权限门控(透明拒绝)对照待批次	F02-desktop
+B-F10-SYNC-01	无(dsh_session_log 字段无实现)	—	wave3@060071ab	缺失	契约已公开(README);S26 历史口径更新	可验收目标:deepseek provider 请求注入该字段+watermark durable 事件+设置开关+8MiB 排空;全部 owner 侧可本地验收,官方 API 接受为云端确认项	F10-cloud
+B-F10-LIVESHARE-01	无(LiveShare 无对应)	—	wave3@060071ab	缺失	两包 README 契约	可验收目标:owner 侧分享控件/网关帧/强制语义本地实现(loopback mock 身份);Relay 独立服务端=观察边界	F10-cloud
+B-F10-REMOTE-01	core/atlas/remote_access.py:38-89(短期 bearer 会话);core/atlas/origin_guard.py:59-66(令牌有效即全放行);core/atlas/api/remote_router.py:16-58(远程页/start/status/stop/全部会话列表)	布尔令牌闸;无分资源/分方法 ACL	wave3@060071ab	部分	当前树逐行核对(evidence/exec06-user-question-cancel-remoteaccess-20261118.txt §D3);remote_token_valid→is_trusted 实际放行路径	无 registerPolicy/decide/allows/snapshotFor/follow、无 remote-access/denied 结构化 reason、无 client source/whenAccess 条件面;远程页直接列全部会话且不做逐会话过滤。验收目标见 evidence §D4,落 F10-cloud	F10-cloud
+B-F01-CORE-PKG-VERIFY-01	frontend/scripts/write-release-manifest.mjs(安装包/后端 exe/node archive/sqlite dll 的 sha256+版本一致性);frontend/windows-release/release-manifest.json;frontend/src/main/releaseUpdate.ts:70-140(安装包 sha256+可选 Authenticode,拒绝无哈希安装)	发布清单生成与更新包哈希校验;后端为 PyInstaller 单 exe,无 npm 核心包集合	wave3@060071ab	部分	当前树逐行(evidence/exec06-f01-core-pkg-20261118.txt);manifest 字段核对;grep 启动期 executable_sha256/canonical_archive_sha256=0	无启动前对后端 exe/内置 node/sqlite dll 的哈希复核(清单只在构建时生成、更新时校验安装包);无 lockfile 注册表解析拒绝(Atlas 非 npm 形态);无整包替换后的版本清单复核。验收: 启动期 fail-closed 校验清单与二进制哈希;更新后 versions 一致	F01-distribution
+B-F09-BUNDLE-CATALOG-01	plugins/runtime.py discover()(X11)	official/availability/overrides	wave3@060071ab	部分	X11(W4-Z5 live)+当前 :1189-1194	无 bundle 目录形态(OPTIONAL/ON_DEMAND/RETIRED 清单+离线生成元数据+8 语言);16 个可选 bundle 逐个对照待批次	F09-extensions
+B-F09-REGISTRY-01	core/atlas/plugins/runtime.py:371-410(start_install_operation,单 registry)+:505-530(_run_package_manager pnpm --registry)+:657-680(_run_npm_pack npm --registry)+安装 requestId 幂等/审批/取消	单注册表 pnpm/npm 安装底座与安装状态机;无 fallback 计划/失败归因/版本事实	wave3@060071ab	部分	当前树逐段(evidence/exec06-f09-registry-20261119.txt §B);X5/X6/X7 历史口径已修正为“有单源安装、缺双源语义”	无双源/fallback registryPlan;无 pnpm 自身 registry 公共判定;无 registry/spec-host/other 失败归因与换源重试;无 newerVersions/versionFacts(peer/deprecated/dsh)。验收 A-1..A-5 见 evidence §D;plugins/runtime.py 在途,实施 blocked-on-author	F09-extensions
+B-F09-MCP-MANAGER-01	core/atlas/api/tools_router.py:380-539(GET/POST/DELETE /api/mcp/servers)+:633-652(restart)+:663-689(reconnect-failed);core/atlas/tools/mcp_client.py:441-1432(MCPClient 状态/restart_server/ScopedMCPClient);集成调用 integrations_router.py:435	HTTP REST 管理面 + MCPClient:列/增/删/重启/批量重连失败服务器,单服务器进程与状态;无 Typert Remote 命名空间形态	wave3@060071ab	对齐已验	当前树逐路由+逐方法(evidence/exec06-f09-mcpmanager-20261119.txt);X22/X23+8836 历史实证	形态差异:DSH 为 Typert Remote 服务(McpServerManager),Atlas 为 HTTP 路由+MCPClient;无逐服务器 enable/disable 开关(增删即启停),状态视图字段集不同。核心注册/启停/状态能力等价	F09-extensions
+B-F09-SKILL-SOURCES-01	core/atlas/skills/__init__.py:709(SKILL_SOURCE_PRIORITY)+:731-800(default_skill_sources);调用策略 :269-303(disable-model-invocation/user-invocable)	高者胜阶梯:plugin 60 > project-dsh 40 > project-agents 38 > claude-project 30 > runtime 25 > custom 22 > claude-user 20 > user-dsh 19 > user-agents 18 > hermes 15 > atlas-user 12 > library 11 > atlas 10 > bundled 5;项目/用户 .dsh/.agents 仅在目录存在时加入	wave3@060071ab	部分	当前树逐行+X15 真机+introspect;IMPL-5 worktree 5 测试过、技能回归 47 passed/1 环境失败(evidence/exec06-f09-skill-sources-20261118.txt)	PAR-07-C 已补生产接线候选:extensions.custom_skill_dirs/runtime_skills_dir/bundled_skills_dir→default_skill_sources,server lifespan+atlas exec 双入口,16 测试+39 复跑过(evidence/par07-c.md);主树 server.py 在途,合入锚点 464-477。剩余:virtual runtime provider(provider 身份+rank+get 句柄)未做;source 列表启动期冻结;相对路径按进程 CWD;source/provider 未分离	F09-extensions
+B-F08-TEAM-01	W4-Z1 subtask_list/team_wait/kanban CAS(E22)	AgentTeam 语义	wave3@060071ab	对齐已验	E22(W4-Z1 真实模型 CAS 拒绝实证)	包位迁移记录;tool-agent-team 工具面逐动作对照待批次	F08-tools
+B-F08-CUA-01	无(CUA 无对应)	—	wave3@060071ab	缺失	结构级证据	CUA 底座+可选 bundle 为新增项候选	F08-tools
+B-F08-OFFICE-01	无(office 文档族无对应)	—	wave3@060071ab	缺失	office-kit/tool-office+runtime pythonPackages	office 文档创建/渲染为新增项候选(与 SDK office.py 同源)	F08-tools
+B-F06-RETRY-DURABLE-01	core/atlas/engine/kernel/loop.py:2618-2685(durable model/attempt started/committed/discarded)+model_call.py:1192-1360(retry 决策字段)+session_sync.py:675-735(恢复状态)+app_server.py:1165-1180(explicit_resume_required)	durable model/attempt 事件族:discarded 带 retry=true/kind/number/delay/budget;恢复区分 outcome_unknown/retry_scheduled_not_started	wave3@060071ab	部分	当前树逐行+既有 38 项批次(evidence/exec06-f05-batch-retry-sandbox-20261118.txt §B)	无独立 llm/retry-started;无跨尝试稳定 retryId;payload 无 provider/mode/policyKey/maxRetries/failure 对象(不能离线重建策略);以 model/attempt 状态表达,恢复语义已有。验收 A-3/A-4 见 evidence §D	F06-model
+B-F06-ATTACHMENT-01	engine/session_sync.py sha256 blob(:298-302 存取重验)+前端 attachmentStaging(D5)	内容寻址附件存取	wave3@060071ab	部分	S19(本轮关闭)+D5(W4-Z7 测试)	图像归一化/压缩/sharp 管线与请求图像门控无对应;实施候选(session_sync.py 在途暂缓)	F06-model

@@ -1,0 +1,19 @@
+
+[2026-11-18T20:40:22.917Z] [existing/window2] loading http://127.0.0.1:41138/
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[2026-11-18T20:40:23.122Z] [existing/window2] console(2): %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+[2026-11-18T20:40:24.650Z] [existing/window2] snapshot ready: status="点按键开始录入。Esc 取消，Backspace 或 Delete 清除当前绑定。" conflict=false rows=[] revision=0a0dfafa80bc778d6694419b263228e6b19df813937dc35929d978c9f3c5ec9d
+[2026-11-18T20:40:26.159Z] [existing/window2] window1 saved action A; clicking newTask binding row
+[2026-11-18T20:40:26.162Z] [existing/window2] click newTask binding: {"ok":true,"label":"修改「新任务」的第 1 组快捷键"}
+[2026-11-18T20:40:26.365Z] [existing/window2] dispatch Ctrl+Alt+N: {"ok":true,"dispatched":false,"defaultPrevented":true,"label":"修改「新任务」的第 1 组快捷键"}
+[2026-11-18T20:40:26.544Z] [existing/window2] snapshot 409: status="保存冲突：keybindings.json 已被其他窗口修改，请重新加载后再保存" conflict=true rows=[] revision=b0124b826c92ace623ae221c125f6abbd3d332078c1a9a8cf497a44b8e9b3feb
+[2026-11-18T20:40:26.546Z] [existing/window2] click retry: {"ok":true,"text":"用本机改动重试保存"}
+[2026-11-18T20:40:26.723Z] [existing/window2] snapshot retry: status="已重放本机改动并保存，其他窗口的修改已保留" conflict=false rows=[] revision=17d2c1acd0777dff6a551e21bd2d9f0af44e4b09410640cc17e947427426f63e
+[2026-11-18T20:40:26.723Z] [existing/window2] window2 retry complete

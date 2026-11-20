@@ -1,0 +1,35 @@
+2026-11-18 20:26:01 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-0dywjcve\atlas\config\atlas.toml
+.................                                                        [100%]
+============================== warnings summary ===============================
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+17 passed, 5 warnings in 21.21s

@@ -411,7 +411,7 @@ class ModelRouter:
         try:
             response = await asyncio.to_thread(
                 _post_completion_queued, route, messages, kwargs, network,
-                _provider_semaphore(route),
+                _provider_semaphore(route), budget is None,
             )
         except BaseException:
             if budget is not None:
@@ -452,15 +452,24 @@ class ModelRouter:
         if kwargs.get("timeout") is None:
             kwargs["timeout"] = _provider_timeout(route, streaming=True)
         semaphore = _provider_semaphore(route)
+        allow_transport_retries = kwargs.pop("_atlas_allow_transport_retries", True)
+
+        managed: _ManagedBlockingStream
 
         def queued_stream():
             semaphore.acquire()
             try:
-                yield from _stream_completion(route, messages, kwargs, network)
+                yield from _stream_completion(
+                    route, messages, kwargs, network,
+                    allow_transport_retries=allow_transport_retries,
+                    on_response=managed._set_response,
+                    retry_allowed=managed.retry_allowed,
+                )
             finally:
                 semaphore.release()
 
-        return queued_stream()
+        managed = _ManagedBlockingStream(queued_stream())
+        return managed
 
     async def complete_for(
         self, model_id: str, purpose: str, messages: list[dict[str, Any]],
@@ -850,11 +859,16 @@ def _shared_client(route: RouteSpec, network: ModelNetworkSettings) -> tuple[htt
 class _PooledClient:
     """Per-request view of a shared pool: carries the timeout, never closes the pool."""
 
-    def __init__(self, route: RouteSpec, network: ModelNetworkSettings, timeout: Any) -> None:
+    def __init__(
+        self, route: RouteSpec, network: ModelNetworkSettings, timeout: Any,
+        *, allow_retries: bool = True, retry_allowed: Callable[[], bool] | None = None,
+    ) -> None:
         self._route = route
         self._network = network
         self._client, self._key = _shared_client(route, network)
         self._timeout = timeout
+        self._allow_retries = bool(allow_retries)
+        self._retry_allowed = retry_allowed
 
     def _rebuild_after_stale_socket(self) -> None:
         """Evict a failed keep-alive pool before retrying the request."""
@@ -868,6 +882,11 @@ class _PooledClient:
                     pass
         self._client, self._key = _shared_client(self._route, self._network)
 
+    def _can_retry(self) -> bool:
+        return self._allow_retries and (
+            self._retry_allowed is None or self._retry_allowed()
+        )
+
     def __enter__(self) -> "_PooledClient":
         return self
 
@@ -877,18 +896,19 @@ class _PooledClient:
 
     def post(self, url: str, **kwargs: Any) -> httpx.Response:
         kwargs.setdefault("timeout", self._timeout)
-        for attempt in range(len(_MODEL_RETRY_DELAYS) + 1):
+        retry_delays = _MODEL_RETRY_DELAYS if self._allow_retries else ()
+        for attempt in range(len(retry_delays) + 1):
             try:
                 response = self._client.post(url, **kwargs)
             except _TRANSIENT_MODEL_ERRORS:
-                if attempt == len(_MODEL_RETRY_DELAYS):
+                if attempt == len(retry_delays):
                     raise
                 self._rebuild_after_stale_socket()
             else:
-                if response.status_code < 500 or attempt == len(_MODEL_RETRY_DELAYS):
+                if response.status_code < 500 or attempt == len(retry_delays):
                     return response
                 response.close()
-            time.sleep(_MODEL_RETRY_DELAYS[attempt])
+            time.sleep(retry_delays[attempt])
         raise AssertionError("unreachable")
 
     def open_stream(self, url: str, **kwargs: Any) -> httpx.Response:
@@ -898,11 +918,12 @@ class _PooledClient:
             try:
                 response = self._client.send(request, stream=True)
             except _TRANSIENT_MODEL_ERRORS:
-                if attempt == len(_MODEL_RETRY_DELAYS):
+                if attempt == len(_MODEL_RETRY_DELAYS) or not self._can_retry():
                     raise
                 self._rebuild_after_stale_socket()
             else:
-                if response.status_code < 500 or attempt == len(_MODEL_RETRY_DELAYS):
+                if (response.status_code < 500 or attempt == len(_MODEL_RETRY_DELAYS)
+                        or not self._can_retry()):
                     break
                 response.read()
                 response.close()
@@ -919,8 +940,67 @@ class _PooledClient:
         return response
 
 
-def _client(route: RouteSpec, network: ModelNetworkSettings, timeout: Any) -> _PooledClient:
-    return _PooledClient(route, network, timeout)
+class _ManagedBlockingStream:
+    """Blocking iterator with an abort handle safe to call during ``next()``."""
+
+    def __init__(self, iterator: Any) -> None:
+        self._iterator = iterator
+        self._lock = threading.Lock()
+        self._response: httpx.Response | None = None
+        self._advancing = False
+        self._closed = False
+
+    def __iter__(self) -> "_ManagedBlockingStream":
+        return self
+
+    def __next__(self) -> Any:
+        with self._lock:
+            if self._closed:
+                raise StopIteration
+            self._advancing = True
+        try:
+            return next(self._iterator)
+        finally:
+            with self._lock:
+                self._advancing = False
+
+    def _set_response(self, response: httpx.Response | None) -> None:
+        with self._lock:
+            self._response = response
+            should_close = self._closed and response is not None
+        if should_close:
+            response.close()
+
+    def abort(self) -> None:
+        """Close the active response from another thread without touching next()."""
+        with self._lock:
+            self._closed = True
+            response = self._response
+        if response is not None:
+            response.close()
+
+    def retry_allowed(self) -> bool:
+        """Let an in-flight blocking transport observe cancellation before retrying."""
+        with self._lock:
+            return not self._closed
+
+    def close(self) -> None:
+        """Abort the response and close an idle generator."""
+        self.abort()
+        with self._lock:
+            advancing = self._advancing
+        if not advancing:
+            self._iterator.close()
+
+
+def _client(
+    route: RouteSpec, network: ModelNetworkSettings, timeout: Any,
+    *, allow_retries: bool = True, retry_allowed: Callable[[], bool] | None = None,
+) -> _PooledClient:
+    return _PooledClient(
+        route, network, timeout, allow_retries=allow_retries,
+        retry_allowed=retry_allowed,
+    )
 
 
 def prewarm(route: RouteSpec) -> None:
@@ -947,18 +1027,25 @@ def prewarm(route: RouteSpec) -> None:
 
 def _post_completion_queued(route: RouteSpec, messages: list[dict[str, Any]],
                             kwargs: dict[str, Any], network: ModelNetworkSettings,
-                            semaphore: threading.BoundedSemaphore) -> dict[str, Any]:
+                            semaphore: threading.BoundedSemaphore,
+                            allow_transport_retries: bool = True) -> dict[str, Any]:
     semaphore.acquire()
     try:
-        return _post_completion(route, messages, kwargs, network)
+        return _post_completion(
+            route, messages, kwargs, network,
+            allow_transport_retries=allow_transport_retries,
+        )
     finally:
         semaphore.release()
 
 
-def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any], network: ModelNetworkSettings) -> dict[str, Any]:
+def _post_completion(
+    route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any],
+    network: ModelNetworkSettings, *, allow_transport_retries: bool = True,
+) -> dict[str, Any]:
     timeout = kwargs.get("timeout") or httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=10.0)
     url, headers, payload = _request_details(route, messages, {**kwargs, "stream": False})
-    with _client(route, network, timeout) as client:
+    with _client(route, network, timeout, allow_retries=allow_transport_retries) as client:
         response = client.post(url, headers=headers, json=payload)
         response.raise_for_status()
         if route.api_mode == "anthropic_messages" and "text/event-stream" in response.headers.get("content-type", ""):
@@ -1078,7 +1165,12 @@ def _dump_payload(payload: dict[str, Any]) -> None:
         pass
 
 
-def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any], network: ModelNetworkSettings):
+def _stream_completion(
+    route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any],
+    network: ModelNetworkSettings, *, allow_transport_retries: bool = True,
+    on_response: Callable[[httpx.Response | None], None] | None = None,
+    retry_allowed: Callable[[], bool] | None = None,
+):
     # read is only a backstop for a socket that went silent; the kernel's stream watchdog
     # (first-chunk / idle limits) gives up and retries well before it.
     timeout = kwargs.get("timeout") or httpx.Timeout(connect=15.0, read=300.0, write=30.0, pool=10.0)
@@ -1086,8 +1178,13 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
     if route.api_mode == "anthropic_messages":
         payload["stream"] = True
     _dump_payload(payload)
-    with _client(route, network, timeout) as client:
+    with _client(
+        route, network, timeout, allow_retries=allow_transport_retries,
+        retry_allowed=retry_allowed,
+    ) as client:
         response = client.open_stream(url, headers=headers, json=payload)
+        if on_response is not None:
+            on_response(response)
         try:
             if route.api_mode == "anthropic_messages":
                 tool_indexes: dict[int, int] = {}
@@ -1175,4 +1272,8 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                     except ValueError:
                         continue
         finally:
-            response.close()
+            try:
+                response.close()
+            finally:
+                if on_response is not None:
+                    on_response(None)

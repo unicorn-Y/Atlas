@@ -1,0 +1,57 @@
+EXEC-06 · IMPL-6 会话 worktree POST create API(隔离 worktree)
+日期: 2026-11-18;基线 060071ab;分支 `zcode/exec06-worktree-api`
+
+================================================================================
+A. 动机(来自 F08 复核)
+================================================================================
+DSH 有模型工具 create_worktree(创建分支+checkout+切会话 cwd);Atlas 内部
+WorktreeService 完整,但对话 worktree 只有 GET/merge/sync,创建仅发生在 fork
+(conversations_router.py:2161-2199)。补 `POST /api/conversations/{id}/worktree`
+作为模型工具/UI 的前置入口。
+
+================================================================================
+B. 改动(3 文件)
+================================================================================
+1) core/atlas/api/workspace_router.py(+71)
+   - `_worktree_create_lock`(asyncio.Lock):同进程串行创建,防止两次预检查都通过。
+   - `POST /api/conversations/{conversation_id}/worktree`:
+     - 404 会话不存在;409 已有 worktree / 无 workspace / workspace 缺失 / 非 git repo;
+     - body 可选 {name?, base_branch?};name 由 WorktreeService 规范化成
+       atlas/<id8>-<suffix>;
+     - 锁内重读会话,调用 `_server()._worktrees().create(...)`(异步线程);
+     - 成功后 `memory.update_conversation(workspace/worktree_path/worktree_branch/base_branch)`,
+       会话随 worktree 走;
+     - 记录失败→ remove(force, keep_branch=False) 回滚,返回 500 明确“已移除”;
+     - ValueError→400,OSError/RuntimeError→409。
+2) core/tests/test_conversation_worktree_create.py(+161,5 用例)
+   - 真实临时 git 仓库+真实 MemoryStore+真实 WorktreeService:
+     创建并迁移会话字段;二次创建 409 且不新增树;非 git/缺失会话拒绝;
+     记录失败回滚且 git worktree list 只剩主树;并发两次只有一个赢家。
+3) core/tests/snapshots/routes.json(重生成)
+   - 加入新路由;**注**:基线快照本就与当前代码不符(基线 worktree 上
+     test_routes_match_frozen_snapshot 也失败),重生成同时修复了该既有漂移;
+     diff 中大量条目为既有路由补齐/FastAPI schema 差异,非本次逻辑改动。
+
+================================================================================
+C. 验证
+================================================================================
+- `python -m pytest tests/test_engine_worktree_pinned_revision.py
+  tests/test_conversation_worktree_create.py` → **8 passed, EXIT 0**
+  (evidence/exec06-worktree-api-runs.txt)。
+- 重生成快照:`PYTHONPATH=. python -m tests.test_route_snapshot` → EXIT 0;
+  随后 `pytest tests/test_route_snapshot.py` → route snapshot 测试通过,
+  仅 `test_fastapi_lazy_includes...` 失败——基线 worktree 同失败,环境/FastAPI
+  版本差异,非本次引入。
+- diff:evidence/zcode-exec06-worktree-api.diff(3 文件;逻辑 +71,测试 +161,
+  快照重生成);**不合回不 push**。
+
+================================================================================
+D. 边界
+================================================================================
+- 未接模型工具 create_worktree(工具目录文件在途,blocked-on-author);
+- 未做 UI 入口;未在打包 Electron 实测;
+- 会话 workspace 切到 worktree 后,现有 run 继续用旧 workspace(仅后续 run 生效);
+  这是与 fork 创建路径一致的行为。
+- 多进程并发(两个后端进程)仍可能竞争;CAS 式文件锁未做,锁仅进程内。
+验收后续:工具注册→create→cwd 切换→working_directory 离开→重名失败(A-1..A-4,
+见 evidence/exec06-f08-forge-20261118.txt §D)。

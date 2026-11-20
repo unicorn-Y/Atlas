@@ -1,0 +1,262 @@
+{
+  "checks": [
+    {
+      "name": "A completed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A installed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A one npm attempt",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A plan ordered public+fallback",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A no failure attribution",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "B completed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "B npm fallback order",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "B pnpm fallback order",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "B pack attempts recorded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "B dependency attempts recorded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C failed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C only private asked",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C plan single source",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C refusal recorded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C attribution registry",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "D failed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "D only first registry asked",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "D plan marks tarball host",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "D attribution spec-host",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "D fallback refused",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "E failed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "E raw credential issued to npm",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "E state hides 'par10-secret'",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "E state hides 'par10-token'",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "E state hides 'alice'",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "E full workspace path redacted",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "E plan URL has no credentials",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "E redaction marker present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "F failed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "F only one attempt",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "F plan pnpm-own-unknown",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "F no mirror",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "G endpoint accepted request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "G routed install completed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "G invalid fallback rejected",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "scenarios": {
+    "a-normal": {
+      "status": "completed",
+      "plan": {
+        "registries": [
+          "https://registry.npmjs.org/",
+          "https://registry.npmmirror.com/"
+        ],
+        "requested": "https://registry.npmjs.org/",
+        "decision": "requested-configured",
+        "registryRefusal": null,
+        "specKind": "registry",
+        "specHost": null,
+        "directSource": "registry",
+        "fallbackAllowed": true
+      }
+    },
+    "b-fallback": {
+      "status": "completed",
+      "error": null,
+      "failureType": null,
+      "failureAttribution": null,
+      "calls": [
+        [
+          "npm",
+          "https://registry.npmjs.org/"
+        ],
+        [
+          "npm",
+          "https://registry.npmmirror.com/"
+        ],
+        [
+          "pnpm",
+          "https://registry.npmjs.org/"
+        ],
+        [
+          "pnpm",
+          "https://registry.npmmirror.com/"
+        ]
+      ],
+      "pack": [
+        "https://registry.npmjs.org/",
+        "https://registry.npmmirror.com/"
+      ],
+      "dependencies": [
+        "https://registry.npmjs.org/",
+        "https://registry.npmmirror.com/"
+      ]
+    },
+    "c-private": {
+      "status": "failed",
+      "attribution": "registry"
+    },
+    "d-spec-host": {
+      "status": "failed",
+      "attribution": "spec-host"
+    },
+    "e-redaction": {
+      "failureKind": "other",
+      "attempts": 1
+    },
+    "f-pnpm-own": {
+      "status": "failed",
+      "decision": "pnpm-own-unknown"
+    },
+    "g-router": {
+      "status": "completed",
+      "plan": {
+        "registries": [
+          "https://registry.npmjs.org/",
+          "https://registry.npmmirror.com/"
+        ],
+        "requested": "https://registry.npmjs.org/",
+        "decision": "requested-configured",
+        "registryRefusal": null,
+        "specKind": "path",
+        "specHost": null,
+        "directSource": "local",
+        "fallbackAllowed": true
+      }
+    }
+  }
+}
+PAR10_T1_HARNESS PASS (35/35)

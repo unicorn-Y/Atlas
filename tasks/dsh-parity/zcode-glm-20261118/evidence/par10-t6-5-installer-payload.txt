@@ -1,0 +1,106 @@
+PAR-10-T6-5 NSIS payload inspection (no install)
+2026-11-18T22:56:56Z
+installer=/d/Atlas/.worktrees/zcode-par10-win-release-repro/frontend/windows-release/Atlas-0.1.1-Setup.exe
+method: 7-Zip extracts $PLUGINSDIR/app-64.7z and selected payload files; no registry/shortcut changes
+
+== 7z listing of installer ==
+
+7-Zip 26.02 (x64) : Copyright (c) 1999-2026 Igor Pavlov : 2026-06-25
+
+Scanning the drive for archives:
+1 file, 731988013 bytes (699 MiB)
+
+Listing archive: D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\windows-release\Atlas-0.1.1-Setup.exe
+
+--
+Path = D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\windows-release\Atlas-0.1.1-Setup.exe
+Type = Nsis
+Physical Size = 731988013
+Method = Deflate
+Solid = -
+Headers Size = 213300
+Embedded Stub Size = 143360
+SubType = NSIS-3 Unicode
+
+   Date      Time    Attr         Size   Compressed  Name
+------------------- ----- ------------ ------------  ------------------------
+                    .....                      6931  $PLUGINSDIR\System.dll
+                    .....                      8018  $PLUGINSDIR\UAC.dll
+                    .....                     45608  $PLUGINSDIR\StdUtils.dll
+                    .....                      4684  $PLUGINSDIR\nsDialogs.dll
+2019-06-18 03:21:30 .....                      1899  $PLUGINSDIR\modern-wizard.bmp
+                    .....                      3299  $PLUGINSDIR\nsExec.dll
+2026-11-19 06:04:34 .....                     97009  uninstallerIcon.ico
+2026-11-19 06:43:30 .....    731151454    731151454  $PLUGINSDIR\app-64.7z
+                    .....                    242382  $PLUGINSDIR\nsis7z.dll
+2026-11-19 06:43:36 .....                    234169  $R0\Uninstall Atlas.exe
+                    .....                      1080  $PLUGINSDIR\WinShell.dll
+------------------- ----- ------------ ------------  ------------------------
+2026-11-19 06:43:36          731151454    731796533  11 files
+
+== extract payload ==
+
+Everything is Ok
+
+Size:       731151454
+Compressed: 731988013
+EXIT=0
+-rw-r--r-- 1 25011 197609 731151454 Nov 19 06:43 /d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/nsis-payload/$PLUGINSDIR/app-64.7z
+
+== extract checked files from payload ==
+Solid = -
+Blocks = 12772
+
+Everything is Ok
+
+Files: 5
+Size:       336723058
+Compressed: 731151454
+EXIT=0
+
+== payload manifest ==
+{
+  "schema_version": 1,
+  "app_version": "0.1.1",
+  "git_commit": "060071ab2ecf86d41cab90e98160183ce126bc69",
+  "electron_version": "44.7.0",
+  "sqlite_runtime": {
+    "version": "3.54.0",
+    "source": "https://www.sqlite.org/2026/sqlite-dll-win-x64-3540000.zip",
+    "archive_sha3_256": "f5fb500c73a3afd89976386bb8e4fdc8b5b65c052e187fb1ada1f5de034cd45b",
+    "dll_sha256": "5ca6a16bdd2c5a5037b1e3a942d9ac1c66efe2def902b202d44774680a8a4656"
+  },
+  "backend_build": {
+    "version": "0.1.0",
+    "executable_sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+  },
+  "bundled_node": {
+    "version": "24.21.0",
+    "platform": "win32-x64",
+    "source": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip",
+    "canonical_archive_sha256": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541"
+  },
+  "unpacked_executable_sha256": "92d002d1119fc12227953991b4e8368b46ae5391493cc52fd054636ef951e90f",
+  "build": {
+    "time_utc": "2026-11-18T22:41:44.200Z",
+    "platform": "win32",
+    "architecture": "x64",
+    "node_version": "v24.18.1"
+  }
+}
+
+== payload hashes ==
+92d002d1119fc12227953991b4e8368b46ae5391493cc52fd054636ef951e90f */d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/nsis-payload/root/Atlas.exe
+13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76 */d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/nsis-payload/root/resources/atlas/backend/atlas_backend.exe
+5ca6a16bdd2c5a5037b1e3a942d9ac1c66efe2def902b202d44774680a8a4656 */d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/nsis-payload/root/resources/atlas/backend/_internal/sqlite3.dll
+6daf68bc1d5f011ddc52ddf2c6db7d913a897b3492ebb802a6b1a701149531f1 */d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/nsis-payload/root/resources/atlas/release-manifest.json
+
+== compare with win-unpacked ==
+92d002d1119fc12227953991b4e8368b46ae5391493cc52fd054636ef951e90f */d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/../frontend/windows-release/win-unpacked/Atlas.exe
+92d002d1119fc12227953991b4e8368b46ae5391493cc52fd054636ef951e90f */d/Atlas/.worktrees/zcode-par10-win-release-repro/frontend/windows-release/win-unpacked/Atlas.exe
+13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76 */d/Atlas/.worktrees/zcode-par10-win-release-repro/frontend/windows-release/win-unpacked/resources/atlas/backend/atlas_backend.exe
+5ca6a16bdd2c5a5037b1e3a942d9ac1c66efe2def902b202d44774680a8a4656 */d/Atlas/.worktrees/zcode-par10-win-release-repro/frontend/windows-release/win-unpacked/resources/atlas/backend/_internal/sqlite3.dll
+6daf68bc1d5f011ddc52ddf2c6db7d913a897b3492ebb802a6b1a701149531f1 */d/Atlas/.worktrees/zcode-par10-win-release-repro/frontend/windows-release/win-unpacked/resources/atlas/release-manifest.json
+
+== payload electron version marker ==
+44.7.0

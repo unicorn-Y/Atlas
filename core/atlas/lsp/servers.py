@@ -81,6 +81,10 @@ class ServerDef:
     # Server handles ``workspace/didChangeWorkspaceFolders``: one process serves every project root
     # (git worktrees included) as extra workspaceFolders instead of one process per root.
     multi_root: bool = False
+    # Explicit marker contract lets remote workspaces resolve the same per-language
+    # root through SFTP instead of accidentally probing the host filesystem.
+    root_markers: Optional[Tuple[str, ...]] = None
+    root_excludes: Tuple[str, ...] = ()
     # didOpen languageId; "" = derive from LANGUAGE_BY_EXT (custom servers name theirs in config).
     language_id: str = ""
 
@@ -101,6 +105,8 @@ class ServerContext:
     # Whether the server may load code the project ships (see workspace.is_trusted_workspace).
     # Defaults closed: a context built without a trust decision must never run the repo's code.
     trusted: bool = False
+    remote: bool = False
+    remote_binary_resolver: Callable[[str, Any, Sequence[str]], Optional[str]] | None = None
 
 
 # ---- helpers ----
@@ -142,13 +148,17 @@ def _markers_root(markers: Optional[Sequence[str]], excludes: Sequence[str] = ()
 
 def _find_binary(ctx: ServerContext, server_id: str, which: Sequence[str]) -> Optional[str]:
     """Config override → PATH probe (never installs); ``None`` when nothing resolves."""
+    if ctx.remote_binary_resolver is not None:
+        return ctx.remote_binary_resolver(
+            server_id, ctx.binary_overrides.get(server_id), which,
+        )
     return find_binary(ctx.binary_overrides.get(server_id), which)
 
 
 def _make_spec(root: str, ctx: ServerContext, server_id: str, command: List[str],
                base_init: Optional[Dict[str, Any]] = None, seed: bool = False) -> SpawnSpec:
     init = ctx.init_overrides.get(server_id, {}) if base_init is None else {**base_init, **ctx.init_overrides.get(server_id, {})}
-    env = child_env()
+    env = {} if ctx.remote else child_env()
     env.update(ctx.env_overrides.get(server_id, {}))
     return SpawnSpec(command, root, root, env=env,
                      initialization_options=init, seed_diagnostics_on_first_push=seed)
@@ -185,7 +195,7 @@ def _spawn_pyright(root: str, ctx: ServerContext) -> Optional[SpawnSpec]:
             bin_path = sibling
     # Point pyright at the project venv; its default "python on PATH" rarely is.  Pyright executes
     # this interpreter, so a checkout's own venv is only used when the workspace is trusted.
-    py = _detect_python(root if ctx.trusted else None)
+    py = None if ctx.remote else _detect_python(root if ctx.trusted else None)
     return _make_spec(root, ctx, "pyright", [bin_path, "--stdio"], {"python": {"pythonPath": py}} if py else {})
 
 
@@ -339,6 +349,8 @@ _PSES_MISSING_MSG = (
 
 def _spawn_powershell_es(root: str, ctx: ServerContext) -> Optional[SpawnSpec]:
     """Spawn PowerShellEditorServices: needs a ``pwsh``/``powershell`` host plus the module bundle."""
+    if ctx.remote:
+        return None  # PSES bundle/session paths are host-owned; no remote bundle resolver exists yet.
     pwsh = _which("pwsh", "powershell")
     if pwsh is None:
         return None
@@ -394,7 +406,6 @@ UNTRUSTED_SAFE_SERVERS = frozenset({
 
 _JS_MARKERS = ["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock", "package.json", "tsconfig.json"]
 _DENO_EXCLUDES = ["deno.json", "deno.jsonc"]
-_root_typescript = _markers_root(_JS_MARKERS, _DENO_EXCLUDES)
 
 
 def _server(server_id: str, extensions: Tuple[str, ...], description: str, *,
@@ -409,6 +420,8 @@ def _server(server_id: str, extensions: Tuple[str, ...], description: str, *,
         resolve_root or _markers_root(markers, excludes),
         build_spawn or _simple_spawn(server_id, which or (server_id,), args, base_init, seed, untrusted_init),
         seed_first_push=seed, description=description, multi_root=multi_root,
+        root_markers=tuple(markers) if markers is not None else None,
+        root_excludes=tuple(excludes),
     )
 
 
@@ -417,14 +430,14 @@ SERVERS: List[ServerDef] = [
             markers=["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json"],
             build_spawn=_spawn_pyright, multi_root=True),
     _server("typescript", (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"),
-            "JavaScript/TypeScript — typescript-language-server", resolve_root=_root_typescript,
+            "JavaScript/TypeScript — typescript-language-server", markers=_JS_MARKERS, excludes=_DENO_EXCLUDES,
             build_spawn=_spawn_typescript, seed=True),
-    _server("vue-language-server", (".vue",), "Vue.js — @vue/language-server", resolve_root=_root_typescript,
+    _server("vue-language-server", (".vue",), "Vue.js — @vue/language-server", markers=_JS_MARKERS, excludes=_DENO_EXCLUDES,
             build_spawn=_spawn_vue),
-    _server("svelte-language-server", (".svelte",), "Svelte — svelte-language-server", resolve_root=_root_typescript,
+    _server("svelte-language-server", (".svelte",), "Svelte — svelte-language-server", markers=_JS_MARKERS, excludes=_DENO_EXCLUDES,
             which=("svelteserver", "svelte-language-server"), args=("--stdio",),
             untrusted_init={"isTrusted": False}),
-    _server("astro-language-server", (".astro",), "Astro — @astrojs/language-server", resolve_root=_root_typescript,
+    _server("astro-language-server", (".astro",), "Astro — @astrojs/language-server", markers=_JS_MARKERS, excludes=_DENO_EXCLUDES,
             which=("astro-ls", "astro-language-server"), args=("--stdio",)),
     _server("gopls", (".go",), "Go — gopls", markers=["go.work", "go.mod", "go.sum"]),
     _server("rust-analyzer", (".rs",), "Rust — rust-analyzer", markers=["Cargo.toml", "Cargo.lock"]),
@@ -457,7 +470,7 @@ SERVERS: List[ServerDef] = [
             args=("--startup-file=no", "--history-file=no", "-e", "using LanguageServer; runserver()")),
     _server("clojure-lsp", (".clj", ".cljs", ".cljc", ".edn"), "Clojure — clojure-lsp",
             markers=["deps.edn", "project.clj", "shadow-cljs.edn", "bb.edn", "build.boot"], args=("listen",)),
-    _server("nixd", (".nix",), "Nix — nixd", resolve_root=lambda fp, ws: nearest_root(fp, ["flake.nix"]) or ws),
+    _server("nixd", (".nix",), "Nix — nixd", markers=["flake.nix"]),
     _server("zls", (".zig", ".zon"), "Zig — zls", markers=["build.zig"]),
     _server("gleam", (".gleam",), "Gleam — built-in language server", markers=["gleam.toml"], args=("lsp",)),
     _server("elixir-ls", (".ex", ".exs"), "Elixir — elixir-ls", markers=["mix.exs", "mix.lock"],
@@ -490,7 +503,10 @@ def language_id_for(path: str, srv: Optional[ServerDef] = None) -> str:
 def _custom_spawn(server_id: str, command: Sequence[str]) -> _SpawnFn:
     """Spawn builder for a config-declared server: ``command[0]`` is a path or a PATH lookup, no auto-install."""
     def build(root: str, ctx: ServerContext) -> Optional[SpawnSpec]:
-        bin_path = _which(os.path.expanduser(command[0]))
+        if ctx.remote_binary_resolver is not None:
+            bin_path = ctx.remote_binary_resolver(server_id, [command[0]], (command[0],))
+        else:
+            bin_path = _which(os.path.expanduser(command[0]))
         if bin_path is None:
             _warn_once(f"custom:{server_id}", f"lsp.servers.{server_id}: 命令 {command[0]!r} 未在 PATH 上找到，已跳过该自定义语言服务。")
             return None
@@ -520,6 +536,7 @@ def custom_servers(servers_cfg: Any) -> List[ServerDef]:
             _custom_spawn(str(server_id), command),
             description=str(cfg.get("description") or f"{server_id} — 自定义（lsp.servers）"),
             language_id=str(cfg.get("language_id") or ""),
+            root_markers=tuple(str(m) for m in markers) if isinstance(markers, list) and markers else None,
         ))
     return out
 

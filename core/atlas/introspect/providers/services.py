@@ -157,11 +157,16 @@ def _registry(ctx: Context, _args: dict[str, Any]) -> dict[str, Any]:
         return {"note": "这个容器没有 service_registry。"}
     snapshot = getattr(registry, "snapshot", None)
     owners = getattr(registry, "owners", None)
+    dependencies = getattr(registry, "dependencies", None)
     registered = snapshot() if callable(snapshot) else {}
     return {
         "registered": registered,
         "count": len(registered),
         "by_owner": owners() if callable(owners) else {},
+        # Declared dependency edges. An empty map is a legitimate answer: it means
+        # no service in this build declares an ordering constraint, not that the
+        # query failed.
+        "depends_on": dependencies() if callable(dependencies) else {},
     }
 
 

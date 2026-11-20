@@ -1,0 +1,47 @@
+2026-11-18 08:46:04 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-sj_fvxo9\atlas\config\atlas.toml
+.F....................                                                   [100%]
+================================== FAILURES ===================================
+_________ test_node_release_manifest_pins_official_binary_and_sha256 __________
+tests\test_mcp_client.py:47: in test_node_release_manifest_pins_official_binary_and_sha256
+    assert manifest["archive"] == "node-v22.23.3-win-x64.zip"
+E   AssertionError: assert 'node-v24.21.0-win-x64.zip' == 'node-v22.23.3-win-x64.zip'
+E     
+E     - node-v22.23.3-win-x64.zip
+E     ?        ^  ^ ^
+E     + node-v24.21.0-win-x64.zip
+E     ?        ^  ^ ^
+============================== warnings summary ===============================
+tests/test_mcp_client.py::test_bundled_node_resolves_from_installed_application_directory
+  D:\Atlas\.worktrees\zcode-exec05-mcp\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_mcp_client.py::test_bundled_node_resolves_from_installed_application_directory
+  D:\Atlas\.worktrees\zcode-exec05-mcp\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_mcp_client.py::test_bundled_node_resolves_from_installed_application_directory
+  D:\Atlas\.worktrees\zcode-exec05-mcp\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_mcp_client.py::test_bundled_node_resolves_from_installed_application_directory
+  D:\Atlas\.worktrees\zcode-exec05-mcp\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_mcp_client.py::test_bundled_node_resolves_from_installed_application_directory
+  D:\Atlas\.worktrees\zcode-exec05-mcp\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_mcp_client.py::test_node_release_manifest_pins_official_binary_and_sha256
+1 failed, 21 passed, 5 warnings in 4.67s

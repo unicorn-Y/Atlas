@@ -1,0 +1,75 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+rootdir: D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core
+configfile: pyproject.toml
+plugins: anyio-4.12.1, langsmith-0.14.0, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 3 items
+
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child 2026-11-19 06:09:33 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-z1wgin2l\atlas\config\atlas.toml
+FAILED [ 33%]
+tests/test_mcp_lifecycle_shutdown.py::test_cancelled_mcp_discovery_stops_its_real_stdio_child FAILED [ 66%]
+tests/test_mcp_lifecycle_shutdown.py::test_cancelled_owner_does_not_skip_other_server_cleanup FAILED [100%]
+
+================================== FAILURES ===================================
+E   AssertionError: {'available': False, 'node_required': False, 'blocking_reason': 'MCP server startup is still in progress', 'servers': [{'name': 'lifecycle-test', 'configured': True, 'enabled': True, 'transport': 'stdio', ...}], ...}
+    assert [] == ['lifecycle-test']
+      
+      Right contains one more item: 'lifecycle-test'
+      
+      Full diff:
+      + []
+      - [
+      -     'lifecycle-test',
+      - ]
+---------------------------- Captured stdout call -----------------------------
+2026-11-19 06:09:33 [info     ] mcp.starting                   count=1 names=['lifecycle-test']
+D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\tests\test_mcp_lifecycle_shutdown.py:93: AssertionError: {'available': False, 'node_required': False, 'blocking_reason': 'MCP server startup is still in progress', 'servers': [{'name': 'lifecycle-test', 'configured': True, 'enabled': True, 'transport': 'stdio', ...}], ...}
+E   Failed: DID NOT RAISE CancelledError
+---------------------------- Captured stdout call -----------------------------
+2026-11-19 06:09:34 [info     ] mcp.starting                   count=1 names=['lifecycle-test']
+2026-11-19 06:09:34 [info     ] mcp.server_initialized         protocol=2025-11-25 server=lifecycle-test server_info="name='lifecycle-test' title=None version='1' description=None website_url=None icons=None"
+D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\tests\test_mcp_lifecycle_shutdown.py:137: Failed: DID NOT RAISE CancelledError
+E   AssertionError: assert 0 >= 1
+     +  where 0 = len([])
+     +    where [] = _matching_children(WindowsPath('D:/Atlas/.worktrees/zcode-par10-mcp-lifecycle-gate/.tmp/t63-t5code/test_cancelled_owner_does_not_0/first/fake_mcp_server.py'))
+---------------------------- Captured stdout call -----------------------------
+2026-11-19 06:09:34 [info     ] mcp.starting                   count=2 names=['first', 'second']
+D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\tests\test_mcp_lifecycle_shutdown.py:175: AssertionError: assert 0 >= 1
+============================== warnings summary ===============================
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+  D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+  D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+  D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+  D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+  D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+FAILED tests/test_mcp_lifecycle_shutdown.py::test_cancelled_mcp_discovery_stops_its_real_stdio_child
+FAILED tests/test_mcp_lifecycle_shutdown.py::test_cancelled_owner_does_not_skip_other_server_cleanup
+======================== 3 failed, 5 warnings in 3.92s ========================

@@ -1,0 +1,41 @@
+[+00077ms] electron=44.7.0 chrome=152.0.7977.130 node=24.21.0
+[+00078ms] probeDir=D:\Atlas\.worktrees\zcode-exec06-csv-preview\.tmp\par08-probe
+[+00078ms] userData=D:/Atlas/.worktrees/zcode-exec06-csv-preview/.tmp/par08-probe/user-data
+[+00112ms] fixture HTTP server listening at http://127.0.0.1:32225
+[+00772ms] loaded fixture app
+[+00775ms] renderer-console[2] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[+00876ms] PASS wait: file tree shows both fixture files
+[+00876ms] tree items: ["empty.csv","quoted-empty.csv"]
+[+00876ms] PASS tree contains empty.csv
+[+00876ms] PASS tree contains quoted-empty.csv
+[+00877ms] sent real mouse click for empty.csv at (592,59)
+[+00877ms] PASS clicked tree item empty.csv
+[+00980ms] PASS wait: preview marker empty
+[+01332ms] snapshot empty.csv: {"marker":"empty","notes":["空文件，没有可显示的表格行。"],"bodyText":"par08-fixture\nempty.csv\nquoted-empty.csv\nempty.csv\nempty.csv\n独立预览关闭\n空文件，没有可显示的表格行。","tableHtml":null,"tableText":null,"thCount":0,"tdCount":0,"trCount":0,"nbspCount":0}
+[+01345ms] screenshot par08-a-electron-empty.png: 1184x755 bytes=17880
+[+01345ms] PASS empty.csv shows the empty-file note marker
+[+01345ms] PASS empty.csv note is 空文件，没有可显示的表格行
+[+01345ms] PASS empty.csv rendered body contains the empty note
+[+01345ms] PASS empty.csv renders no table
+[+01345ms] sent real mouse click for quoted-empty.csv at (592,85)
+[+01345ms] PASS clicked tree item quoted-empty.csv
+[+01448ms] PASS wait: preview marker quoted-empty.csv
+[+01799ms] snapshot quoted-empty.csv: {"marker":"quoted-empty.csv","notes":["1 行 · 逗号分隔"],"bodyText":"par08-fixture\nempty.csv\nquoted-empty.csv\nempty.csv\nquoted-empty.csv\nquoted-empty.csv\n独立预览关闭\n1 行 · 逗号分隔\n ","tableHtml":"<table class=\"w-full border-collapse text-left text-[12px]\" aria-label=\"表格预览 quoted-empty.csv\"><thead class=\"sticky top-0 bg-sunken\"><tr><th scope=\"col\" class=\"border-b border-line px-2 py-1.5 font-semibold text-fg\">&nbsp;</th></tr></thead><tbody></tbody></table>","tableText":" ","thCount":1,"tdCount":0,"trCount":1,"nbspCount":1}
+[+01811ms] screenshot par08-a-electron-quoted-empty.png: 1184x755 bytes=18623
+[+01811ms] PASS quoted-empty.csv shows the table preview marker
+[+01811ms] PASS quoted-empty.csv does not show the empty-file note
+[+01811ms] PASS quoted-empty.csv renders a table
+[+01811ms] PASS quoted-empty.csv note says 1 行 · 逗号分隔
+[+01811ms] PASS quoted-empty.csv table has exactly one column
+[+01811ms] PASS quoted-empty.csv table has exactly one row
+[+01811ms] PASS quoted-empty.csv one row is the header row (no invented body row)
+[+01811ms] PASS quoted-empty.csv empty cell renders a visible non-breaking-space placeholder
+[+01811ms] quoted-empty table HTML: <table class="w-full border-collapse text-left text-[12px]" aria-label="表格预览 quoted-empty.csv"><thead class="sticky top-0 bg-sunken"><tr><th scope="col" class="border-b border-line px-2 py-1.5 font-semibold text-fg">&nbsp;</th></tr></thead><tbody></tbody></table>
+[+01828ms] exit code 0 (failures=0)

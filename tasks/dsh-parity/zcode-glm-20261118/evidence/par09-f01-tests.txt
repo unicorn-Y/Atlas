@@ -1,0 +1,18 @@
+# PAR-09-F01 component tests
+cwd: /d/Atlas/.worktrees/zcode-par09-release-integrity/frontend
+command: NO_COLOR=1 npx vitest run src/main/releaseIntegrity.test.ts
+--- output ---
+npm notice run atlas@0.1.0 npx
+npm notice run vitest run src/main/releaseIntegrity.test.ts
+
+ RUN  v5.0.4 D:/Atlas/.worktrees/zcode-par09-release-integrity/frontend
+
+ ✓ src/main/releaseIntegrity.test.ts (26 tests) 568ms
+
+ Test Files  1 passed (1)
+      Tests  26 passed (26)
+   Start at  05:03:35
+   Duration  754ms (tests 96%, import 2%, transform 1%, worker 1%)
+
+--- end output ---
+EXIT=0

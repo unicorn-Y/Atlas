@@ -1,0 +1,4 @@
+# tsc renderer (worktree zcode/exec06-csv-preview)
+npm notice run atlas@0.1.0 npx
+npm notice run tsc -p tsconfig.renderer.json --noEmit
+EXIT=0

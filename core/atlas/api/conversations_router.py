@@ -1343,13 +1343,26 @@ async def update_conversation(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     if "sandbox" in values and values["sandbox"] is not None:
         sandbox = values["sandbox"]
-        if sandbox.get("type") != "docker" or not isinstance(
-            sandbox.get("network", False), bool
-        ):
+        sandbox_type = sandbox.get("type")
+        if (sandbox_type not in {"docker", "ssh-bwrap"}
+                or not isinstance(sandbox.get("network", False), bool)
+                or (sandbox_type == "ssh-bwrap" and sandbox.get("image") is not None)
+                or (sandbox.get("image") is not None and not isinstance(sandbox.get("image"), str))):
             raise HTTPException(status_code=400, detail="invalid sandbox settings")
-    existing = await memory.get_conversation(conversation_id) if memory_options else None
-    if memory_options and existing is None:
+    needs_existing = bool(memory_options) or "sandbox" in values
+    existing = await memory.get_conversation(conversation_id) if needs_existing else None
+    if needs_existing and existing is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if "sandbox" in values and values["sandbox"] is not None:
+        effective_workspace = values.get("workspace")
+        if effective_workspace is None and isinstance(existing, dict):
+            effective_workspace = existing.get("workspace")
+        remote_workspace = isinstance(effective_workspace, str) and effective_workspace.startswith("ssh://")
+        sandbox_type = values["sandbox"].get("type")
+        if ((remote_workspace and sandbox_type != "ssh-bwrap")
+                or (sandbox_type == "ssh-bwrap" and not remote_workspace)
+                or (effective_workspace and not remote_workspace and sandbox_type != "docker")):
+            raise HTTPException(status_code=400, detail="sandbox type does not match workspace")
     metadata = {}
     if memory_options:
         try:

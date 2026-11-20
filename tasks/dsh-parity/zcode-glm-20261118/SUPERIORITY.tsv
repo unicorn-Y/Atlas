@@ -1,0 +1,11 @@
+conclusion_id	claim	metric_or_capability	atlas_evidence	dsh_evidence	verdict	evidence_path
+S-HIST-01	单轮 prompt tokens Atlas 少 48.8%(8,900 vs 17,377)	同 7 任务×3 遍,同 gateway(d1api)/同模型 deepseek-v4.1-flash,缓存口径已按 harness 归一	omni_bench 三遍实测(2026-11-15)	DSH --json usage 四桶归一后实测	指标领先(历史口径:双方版本为 2026-11-15 快照,需对新基线复测后方可宣称当前优势)	tasks/dsh-parity/BENCH-ANALYSIS.md;MULTITURN.md
+S-HIST-02	多轮上下文 DSH 反超:Atlas 每轮 +~1,600 tokens,DSH 缓存几乎不涨,第 8 轮交叉	8 轮同会话 prompt tokens 曲线	MULTITURN 实测(2026-11-15)	同上	DSH 领先(历史口径)	tasks/dsh-parity/MULTITURN.md
+S-HIST-03	延迟 Atlas 略快 5–8%(三遍方向一致,绝对值漂移 ~30%)	warm 中位 ms/turn	三遍 3,937/4,171/5,218 vs 4,282/4,516/5,498	同条件	指标领先(历史口径,样本不足以精确)	tasks/dsh-parity/BENCH-ANALYSIS.md
+S-HIST-04	任务完成率 7/7 持平	单轮任务完成	tasks completed 7/7	7/7	持平	tasks/dsh-parity/BENCH.md
+S-CAND-01	Atlas 独有:长期记忆(git 版记忆库/三元组索引/退避队列)	能力有无(端到端验收场景待补)	core/atlas/memory/library(当前树存在)	DSH 无(S30:tool-ralph README 注)	Atlas 独有已验(历史证据+当前锚点在;新快照端到端场景待补)	DSH-GAP-LEDGER S30;当前树 grep
+S-CAND-02	Atlas 独有:rewind 三模式+preview+redo+文件还原	能力有无	conversations_router.py:82-90 _record_rewind_causality_event(session.rewind 事件)	DSH 无(S31/D25:仅类型字面量)	Atlas 独有已验(历史证据+当前锚点在;待补场景)	DSH-GAP-LEDGER S31/D25;conversations_router.py:82-90
+S-CAND-03	Atlas 独有:hook 逐条指纹信任门(fail-closed)	能力有无	runtime/hooks.py:781-821(_fingerprint/unreviewed 状态机)	DSH 无(X14)	Atlas 独有已验(历史证据+当前锚点在;待补场景)	DSH-GAP-LEDGER X14;hooks.py:781-821
+S-CAND-04	Atlas 独有:多窗口/分栏工作区	能力有无	electron.ts:576 openConversationWindow+:632-633 菜单加速键+PaneWorkspace.tsx	DSH 单窗口(D31)	Atlas 独有已验(历史证据+当前锚点在;待补场景)	DSH-GAP-LEDGER D31;electron.ts:576,632-633,1239
+S-CAND-05	Atlas 独有:写路径 LSP 诊断增量	能力有无	engine/lsp_bridge.py:35-51(写前基线+atlas.lsp.edit_report+lsp.diagnostics 事件)	DSH 无(E33)	Atlas 独有已验(历史证据+当前锚点在;待补场景)	DSH-GAP-LEDGER E33;lsp_bridge.py:35-51
+S-PENDING-01	同条件配对比较(新基线 rc.4 vs Atlas 当前)未运行	全部未测指标	—	—	待比较(阻塞:omni_bench 安全 batch 未过=Task 8 Step 1 凭据/配置/代理硬断言;先修后跑)	tasks/dsh-parity/atomic/comparison-protocol.md(待建)

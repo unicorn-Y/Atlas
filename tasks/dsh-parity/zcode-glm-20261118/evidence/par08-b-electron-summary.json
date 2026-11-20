@@ -1,0 +1,14 @@
+{
+  "backend_port": 8814,
+  "window1_exit": 0,
+  "window2_exit": 0,
+  "backend_exit_after_sigterm": 143,
+  "final_palette": [
+    "Ctrl+Alt+U"
+  ],
+  "final_newtask": [
+    "Ctrl+Alt+N"
+  ],
+  "final_revision_sha256": "17d2c1acd0777dff6a551e21bd2d9f0af44e4b09410640cc17e947427426f63e",
+  "result": "PASS"
+}

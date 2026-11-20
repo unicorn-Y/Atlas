@@ -1,0 +1,22 @@
+
+[2026-11-18T20:40:29.885Z] [same-action/window2] loading http://127.0.0.1:47437/
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[2026-11-18T20:40:30.090Z] [same-action/window2] console(2): %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+[2026-11-18T20:40:31.617Z] [same-action/window2] snapshot ready: status="点按键开始录入。Esc 取消，Backspace 或 Delete 清除当前绑定。" conflict=false rows=[] revision=0a0dfafa80bc778d6694419b263228e6b19df813937dc35929d978c9f3c5ec9d
+[2026-11-18T20:40:33.127Z] [same-action/window2] window1 saved palette; window2 now edits the same palette action
+[2026-11-18T20:40:33.130Z] [same-action/window2] click palette binding: {"ok":true,"label":"修改「搜索与命令」的第 1 组快捷键"}
+[2026-11-18T20:40:33.334Z] [same-action/window2] dispatch Ctrl+Alt+O: {"ok":true,"dispatched":false,"defaultPrevented":true,"label":"修改「搜索与命令」的第 1 组快捷键"}
+[2026-11-18T20:40:33.512Z] [same-action/window2] snapshot 409: status="保存冲突：keybindings.json 已被其他窗口修改，请重新加载后再保存" conflict=true rows=[] revision=b0124b826c92ace623ae221c125f6abbd3d332078c1a9a8cf497a44b8e9b3feb
+[2026-11-18T20:40:33.514Z] [same-action/window2] click retry: {"ok":true,"text":"用本机改动重试保存"}
+[2026-11-18T20:40:33.691Z] [same-action/window2] snapshot replay-conflict: status="有 1 项快捷键与文件冲突，请逐项选择保留本机或采用文件" conflict=true rows=["palette"] revision=b0124b826c92ace623ae221c125f6abbd3d332078c1a9a8cf497a44b8e9b3feb
+[2026-11-18T20:40:33.693Z] [same-action/window2] click 保留本机: {"ok":true,"text":"保留本机"}
+[2026-11-18T20:40:33.845Z] [same-action/window2] click 按选择保存: {"ok":true,"text":"按选择保存"}
+[2026-11-18T20:40:34.020Z] [same-action/window2] snapshot resolved: status="已按选择保存，本窗口改过的操作已重放，其他窗口的修改已保留" conflict=false rows=[] revision=6467823c45e4159a7bb574a6a3bbf8b817d1e2bcac7c8b7b2db7e26feadb3857
+[2026-11-18T20:40:34.021Z] [same-action/window2] window2 same-action resolution complete

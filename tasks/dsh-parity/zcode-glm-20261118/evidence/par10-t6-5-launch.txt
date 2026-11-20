@@ -1,0 +1,58 @@
+PAR-10-T6-5 real packaged launch (win-unpacked)
+2026-11-18T22:47:55Z
+Exe=D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\windows-release\win-unpacked\Atlas.exe
+env: ATLAS_DESKTOP_USER_DATA_DIR=C:\Users\25011\AppData\Local\Temp\par10-t6-5\userdata ATLAS_DATA_DIR=C:\Users\25011\AppData\Local\Temp\par10-t6-5\datadir
+-----
+
+PID=64268
+ALIVE_AFTER_15s=True
+MAIN_WINDOW_TITLE=新任务 — Atlas
+CHILDREN=Atlas.exe,Atlas.exe,Atlas.exe,atlas_backend.exe
+UIA_WINDOW_COUNT=1
+UIA_WINDOW_NAME=新任务 — Atlas
+GRACEFUL_EXIT=false
+EXIT_CODE=-1
+PS_EXIT=0
+-----
+temp userdata tree:
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/blob_storage
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/blob_storage/c4992dee-8748-4949-a656-107de41a6616
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Cache
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Cache/Cache_Data
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Cache/Cache_Data/data_0
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Cache/Cache_Data/data_1
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Cache/Cache_Data/data_2
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Cache/Cache_Data/data_3
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Cache/Cache_Data/index
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Cache/No_Vary_Search
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Cache/No_Vary_Search/journal.baj
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Cache/No_Vary_Search/snapshot.baf
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Code Cache
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Code Cache/electron-preload
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Code Cache/electron-preload/9F20D55C08D305012C3B2BEC6B1DE4D845ED9D6A0277283A225EE3734D8A2DD7-046EE14B76106E2E39DCF4D74A8AEE393DEDA01000D21673491EB8D652BB29D2.cache
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Code Cache/js
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Code Cache/js/index
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Code Cache/js/index-dir
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/userdata/Code Cache/wasm
+temp datadir tree:
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/config
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/config/atlas.toml
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/atlas.db
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/channels.sqlite
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/channels.sqlite-shm
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/channels.sqlite-wal
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/dbos-startup.json
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/dbos.sqlite
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/devices
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/devices/devices.json
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/logs
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/logs/backend-stdio.log
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/profiles
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/profiles/architect.toml
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/profiles/default.toml
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/profiles/reviewer.toml
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/projects.db
+/c/Users/25011/AppData/Local/Temp/par10-t6-5/datadir/data/recipes

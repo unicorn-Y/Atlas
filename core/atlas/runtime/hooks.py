@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import threading
 import time
@@ -353,6 +354,70 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
     return outcome
 
 
+_MISSING_SCRIPT_CACHE: dict[str, bool] = {}
+
+_SCRIPT_SUFFIXES = {".py", ".js", ".mjs", ".cjs", ".ps1", ".sh"}
+_INTERPRETER_NAMES = {
+    "python", "python3", "py", "node", "node.exe", "bash", "sh",
+    "pwsh", "powershell", "ruby", "perl",
+}
+
+
+def _split_command(command: str) -> list[str]:
+    """Split a hook command line, keeping Windows backslashes and quoting intact.
+
+    ``shlex.split(posix=True)`` treats ``\\`` as an escape, which mangles every
+    ``D:\\path\\to\\hook.py``. ``posix=False`` keeps the backslashes but leaves the
+    quote marks attached, so those are stripped here.
+    """
+    try:
+        raw = shlex.split(command, posix=False)
+    except ValueError:  # unbalanced quote — fall back to whitespace
+        raw = command.split()
+    return [token[1:-1] if len(token) >= 2 and token[0] == token[-1] and token[0] in "\"'" else token
+            for token in raw]
+
+
+def _missing_script(command: str) -> str | None:
+    """Return the script path a hook command points at when that file is gone.
+
+    A Codex/Claude ``hooks.json`` outlives the checkout it was written against, so
+    a declared command can name a script that has since been deleted. Spawning it
+    anyway costs a full interpreter start plus a guaranteed failure on *every*
+    matching event — measured here at ~1 s per hook per turn across five hooks —
+    and the only thing it produces is the interpreter's "can't open file" text,
+    which then has to be special-cased out of the feedback path.
+
+    Parsed from the command *string*, not from the final argv: on this platform
+    ``prepare_hook_command`` wraps the text as ``bash -lc "<command>"``, so every
+    script the user wrote ends up inside a single argv element and an argv scan
+    would see only the shell.
+
+    Only definite paths are refused — an argument counts when it has a script
+    extension — so bare commands resolved on PATH behave exactly as before.
+    """
+    tokens = _split_command(command)
+    if not tokens:
+        return None
+    head = Path(tokens[0]).name.lower()
+    if not (head.startswith("python") or head in _INTERPRETER_NAMES):
+        return None
+    for argument in tokens[1:]:
+        if not argument or argument.startswith("-"):
+            continue
+        candidate = Path(argument)
+        if candidate.suffix.lower() not in _SCRIPT_SUFFIXES:
+            continue
+        key = str(candidate)
+        cached = _MISSING_SCRIPT_CACHE.get(key)
+        if cached is None:
+            cached = not candidate.exists()
+            _MISSING_SCRIPT_CACHE[key] = cached
+        if cached:
+            return key
+    return None
+
+
 async def _run_command(
     spec: Mapping[str, Any], input_data: dict[str, Any], *, cwd: str | None,
     plugin_root: str | None,
@@ -365,6 +430,15 @@ async def _run_command(
         "${CLAUDE_PLUGIN_ROOT}": plugin_root or "",
     }
     command = _substitute(command, replacements)
+
+    # Refuse a command that names a script which is no longer on disk, before
+    # paying for an interpreter start that can only fail. Reported as skipped
+    # rather than as an error so a stale third-party hooks.json stops costing a
+    # second per turn without looking like Atlas broke something.
+    missing = _missing_script(command)
+    if missing is not None:
+        return 127, "", f"hook script not found: {missing}"
+
     args = spec.get("args")
     selected_shell = resolve_hook_shell(spec.get("shell"))
     command, env = prepare_hook_command(

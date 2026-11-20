@@ -1,0 +1,18 @@
+{
+  "counts": {
+    "implementation": 0,
+    "integration": 0,
+    "live": 0,
+    "parity": 0,
+    "private_authorization": 0,
+    "protocol": 0,
+    "superiority": 0,
+    "tests": 0
+  },
+  "schema_version": 1,
+  "source_obligations": {
+    "total": 418395,
+    "unresolved": 411224
+  },
+  "status": "INCOMPLETE"
+}

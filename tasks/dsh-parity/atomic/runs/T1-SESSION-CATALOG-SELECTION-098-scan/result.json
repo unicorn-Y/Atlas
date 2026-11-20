@@ -1,0 +1,10 @@
+{
+  "duration_seconds": 271.81299999999464,
+  "leftover_processes": [],
+  "returncode": 0,
+  "signals": [],
+  "status": "PASS",
+  "stderr_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-SESSION-CATALOG-SELECTION-098-scan\\stderr.log",
+  "stdout_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-SESSION-CATALOG-SELECTION-098-scan\\stdout.log",
+  "timed_out": false
+}

@@ -1,0 +1,169 @@
+2026-11-19 05:11:52 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-j0lr45o5\atlas\config\atlas.toml
+F.................F..................................................... [ 77%]
+.....................                                                    [100%]
+================================== FAILURES ===================================
+______________ test_installed_plugin_crosses_real_runtime_paths _______________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-exec05-mcp/.tmp/par09-f09b/test_installed_plugin_crosses_0')
+
+    @pytest.mark.asyncio
+    async def test_installed_plugin_crosses_real_runtime_paths(tmp_path: Path) -> None:
+        python = sys.executable
+        deny = tmp_path / "deny.py"
+        _deny_script(deny)
+        source = tmp_path / "plugin-source" / "audit"
+        _make_plugin(source, python, deny)
+    
+        plugins_dir = tmp_path / "installed"
+        runtime = PluginRuntime([plugins_dir], tmp_path / "plugins-state.json")
+        runtime.install_local(source)
+    
+        mcp_client = _StubMcpClient()
+        capabilities = _StubCapabilities()
+        report = await runtime.load_all(mcp_client=mcp_client, capabilities=capabilities)
+        assert report["loaded"] == ["audit"]
+        contributions = runtime.enabled_contributions()
+        assert len(contributions) == 1
+        plugin = contributions[0]
+        assert plugin["name"] == "audit"
+    
+        # -- hook 腿：插件 hook 经 HookStore 进入真实 agent 工具执行链并阻断 --
+        store = HookStore(
+            tmp_path / "hooks.toml",
+            plugin_hooks=lambda: [hook for item in contributions for hook in item["hooks"]],
+        )
+    
+        async def user_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+            return await store.execute(event_name, payload, cwd=str(tmp_path))
+    
+        agent = AgentOrchestrator(MagicMock(), MagicMock())
+        result = await agent._execute_tools_node(_tool_state(
+            "run_checks", {"target": "core"}, _tool_runtime(tmp_path, user_hook),
+        ))
+        assert result["pending_events"][0]["is_error"] is True
+>       assert "禁止运行检查" in result["messages"][0].content
+E       AssertionError: assert '禁止运行检查' in 'Hook「claude-536477af50817935fdfb」尚未通过信任审查，已阻止执行。请在 Hooks 设置页明确批准后重试。'
+E        +  where 'Hook「claude-536477af50817935fdfb」尚未通过信任审查，已阻止执行。请在 Hooks 设置页明确批准后重试。' = ToolMessage(content='Hook「claude-536477af50817935fdfb」尚未通过信任审查，已阻止执行。请在 Hooks 设置页明确批准后重试。', tool_call_id='tc-1').content
+
+tests\test_c4_plugin_e2e.py:143: AssertionError
+_______ test_compaction_agent_pins_bare_wire_id_from_host_shaped_config _______
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-exec05-mcp/.tmp/par09-f09b/test_compaction_agent_pins_bar0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000193A0CDC810>
+
+    def test_compaction_agent_pins_bare_wire_id_from_host_shaped_config(tmp_path, monkeypatch):
+        """Manual compaction builds its Hermes agent on the bare wire id.
+    
+        ``_compact_session_sync`` used to pass ``settings.current_litellm_model``
+        (the prefixed routing label) straight to the agent transport — real relays
+        404 the whole compaction (H10.2-DEFECT-1 residual).
+        """
+        from types import SimpleNamespace
+    
+        history = [{"role": "user", "content": "你好"}, {"role": "assistant", "content": "done"}]
+    
+        class FakeSessionDB:
+            def get_messages_as_conversation(self, conversation_id, include_ancestors=True):
+                return list(history)
+    
+            def get_session(self, conversation_id):
+                return {"system_prompt": "system-prompt-from-session"}
+    
+        built_kwargs: dict = {}
+    
+        def fake_agent_factory(**kwargs):
+            built_kwargs.update(kwargs)
+            return SimpleNamespace(
+                context_compressor=None,
+                _session_db=FakeSessionDB(),
+                _compress_context=lambda hist, prompt, **kw: (list(hist), None),
+                close=lambda: None,
+            )
+    
+        monkeypatch.setattr("atlas.config.load_user_settings", lambda: {})
+        models = SimpleNamespace(
+            current_model="main",
+            current_litellm_model="openai/deepseek-v4.1-flash",
+            list_models=lambda: [
+                {"id": "main", "litellm_model": "openai/deepseek-v4.1-flash"},
+            ],
+        )
+        runtime = AtlasRuntime(
+            data_dir=tmp_path, model_manager=models, agent_factory=fake_agent_factory,
+        )
+    
+>       result = runtime._compact_session_sync("conv-1", str(tmp_path), None)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_atlas_mcp_config.py:200: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+atlas\engine\atlas_runtime.py:811: in _compact_session_sync
+    return asyncio.run(compact())
+           ^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    async def compact() -> dict[str, Any]:
+        from types import SimpleNamespace
+    
+        from atlas.config import get_config
+        from atlas.engine.session_sync import (
+            abort_session_compaction, begin_session_compaction,
+            compact_session_messages,
+        )
+        from atlas.engine.state.atlas_state import SessionDB
+        from atlas.engine.kernel.context import ContextManager
+        from atlas.engine.kernel.loop import _compaction_payload
+        from atlas.engine.kernel.model_call import complete_stream
+        from atlas.models.tokens import estimate_tokens
+    
+        router = getattr(self.model_manager, "model_router", None)
+        if router is None:
+>           raise RuntimeError("Atlas model router is unavailable for compaction")
+E           RuntimeError: Atlas model router is unavailable for compaction
+
+atlas\engine\atlas_runtime.py:747: RuntimeError
+============================== warnings summary ===============================
+tests/test_c4_plugin_e2e.py::test_installed_plugin_crosses_real_runtime_paths
+  D:\Atlas\.worktrees\zcode-exec05-mcp\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_c4_plugin_e2e.py::test_installed_plugin_crosses_real_runtime_paths
+  D:\Atlas\.worktrees\zcode-exec05-mcp\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_c4_plugin_e2e.py::test_installed_plugin_crosses_real_runtime_paths
+  D:\Atlas\.worktrees\zcode-exec05-mcp\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_c4_plugin_e2e.py::test_installed_plugin_crosses_real_runtime_paths
+  D:\Atlas\.worktrees\zcode-exec05-mcp\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_c4_plugin_e2e.py::test_installed_plugin_crosses_real_runtime_paths
+  D:\Atlas\.worktrees\zcode-exec05-mcp\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_c4_plugin_e2e.py::test_installed_plugin_crosses_real_runtime_paths
+FAILED tests/test_atlas_mcp_config.py::test_compaction_agent_pins_bare_wire_id_from_host_shaped_config
+2 failed, 91 passed, 5 warnings in 13.71s

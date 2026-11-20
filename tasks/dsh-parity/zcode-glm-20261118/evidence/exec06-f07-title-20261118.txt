@@ -1,0 +1,93 @@
+EXEC-06 · B-F07-TITLE-01 复核:LLM 自动命名不是“Atlas 缺”,但只覆盖 AtlasRuntime 路径
+日期: 2026-11-18;DSH rc.4 3f321d32;Atlas wave3@060071ab + 在途
+
+================================================================================
+A. DSH(公开源码)
+================================================================================
+- packages/session/session-title/src/index.ts(service+provider contract+normalize):
+  - `session/title` 最新快照事件(log-only);多来源(user/provider/fallback);
+  - provider 注册身份 SessionTitleProviderId;normalizeSessionTitle/fallbackSessionTitle/truncateTitleUtf8;
+  - Config: fallbackMaxWords/fallbackMaxBytes/maxTitleBytes。
+- packages/session/session-title-llm/src/index.ts:1-100
+  - 共享执行策略:route 准备、输入/输出/token/时间边界、取消、精确辅助请求日志、流组装;
+  - `session/title-llm-request` 事件数据{titleProvider,messageSeqs,route,system,messages,maxTokens,reasoningEffort?};
+  - SESSION_TITLE_TIMEOUT_CODE='SESSION_TITLE_TIMEOUT';Config{maxInputBytes,maxOutputTokens,timeoutMs,provider?,model?}。
+- packages/session/session-title-first-prompt-llm/src/index.ts:provider 按首条人类消息;
+  targetWords/targetCjkCharacters 可配;系统提示禁止引号/前缀/代码;JSON 框架防止用户文本破坏分隔符。
+- packages/experimental/session-title-all-prompts-llm/src/index.ts:23,159-171
+  - provider 'all-prompts';request.messages 的 messageSeqs 全量;仅当主题实质变化/扩展时改写标题。
+- packages/experimental/session-titles-bundle:组合装配上述 provider。
+- 用户改名:session-title service 接受显式 user title 并钉住;在途自动生成被取代(SessionTitleService)。
+
+================================================================================
+B. Atlas 实际实现(已有,但仅一条运行路径)
+================================================================================
+- core/atlas/engine/kernel/toolkit/title_generator.py
+  - :178-191 配置:auto title enabled(默认 true)、model_upgrade_enabled(默认 false);
+  - :194-227 generate_title:LLM 提示(3-7 words/JSON {"title":...}/同语言/保留术语),
+    max input 1000 chars、max tokens 128、失败回退 derive_title;
+  - :230-241 _write_session_title:当前来源为 user 时拒绝自动写入;
+  - :244-254 apply_instant_title(derived 立即写入并回调);
+  - :257-283 auto_title_session(可选 LLM upgrade,source=llm|derived)。
+- core/atlas/engine/atlas_runtime.py:841-850 title_callback 参数;:1041-1095
+  - 仅当非 ephemeral 且 user_turn_count<=3 时启动 title 任务,与主模型调用并行;
+  - apply_instant_title → 若 model_upgrade_enabled 则 model_router.complete_for(
+    current_model,"title",...,max_tokens=128,reasoning effort off)→auto_title_session;
+  - 完成后 flush title_callbacks。
+- core/atlas/agent/run_phases.py:1401-1428
+  - on_session_title:仅当前标题属于自动候选(空/New Conversation/首消息前40字)或上次自动标题时 accepted;
+  - 发布 `session.title` {title,title_source,accepted};:1492 title_callback=on_session_title。
+- core/atlas/engine/session_titles.py:9-16 set_user_title / refresh_user_title(pin/unpin)。
+- core/atlas/api/conversations_router.py:1389-1419 用户改名与 S28 refresh 端点。
+- **关键缺口**:AgentOrchestrator.run(core/atlas/agent/__init__.py:964+)没有任何 title 代码;
+  core/atlas/tools/app_server.py:136,592 使用的正是 AgentOrchestrator.run
+  → SDK/ACP 创建的会话不会自动命名。标题只在 AtlasRuntime.run_turn 路径生效。
+
+================================================================================
+C. 实测(同一测试,两套产品代码;私有 basetemp)
+================================================================================
+当前树(wave3+在途):
+  tests/test_c1_lifecycle_titles.py + test_w5_s28_title_refresh.py + test_u40_title_generation.py
+  → 4 failed, 7 passed, EXIT 1(evidence/exec06-title-currenttree.txt)
+基线树(060071ab,当前 fake/conftest):
+  test_c1_lifecycle_titles.py → 4 failed, EXIT 1(evidence/exec06-title-baseline-productcode.txt)
+  test_w5_s28_title_refresh.py + test_u40_title_generation.py → 7 passed, EXIT 0
+失败 4 项断言的是 `AgentOrchestrator.run` 路径的标题事件/持久化:
+  - title_events 为空(无 derived/llm);
+  - 或 fake.main_requests() 为空(测试在 run 失败后仍断言标题)。
+两树完全一致 → 非在途回归,是 AgentOrchestrator 路径从未接入标题能力。
+通过 7 项覆盖 pin/unpin/refresh/title proposal,两树一致。
+
+================================================================================
+D. 差距(相对 DSH)
+================================================================================
+G1 AgentOrchestrator.run / app-server / SDK 路径无自动标题(仅 AtlasRuntime 桌面运行路径有)。
+G2 无 `session/title-llm-request` 精确辅助请求事件(DSH 记录 route/system/messages/
+   maxTokens/reasoningEffort,可重建请求);Atlas 只发最终 session.title。
+G3 无 provider 插件面(first-prompt/all-prompts)、无可配 targetWords/targetCjkCharacters、
+   无 maxTitleBytes/fallbackMaxBytes;Atlas 提示与 48 字/3-7 words 为硬编码常量。
+G4 无 title-invalid 错误码;无效输出仅回退 derived。
+G5 all-prompts 语义缺失:Atlas 只取当前 message(+preview),不聚合多条人类消息;
+   虽在前 3 个用户回合可重试,但输入集合不同。
+
+================================================================================
+E. 验收标准(二值)
+================================================================================
+A-1 AgentOrchestrator.run 路径:首条可命名消息后发 derived title 事件并持久化;
+    配置开启 LLM upgrade 时再发 llm 事件;标题任务不阻塞 run.completed。
+A-2 用户改名钉住:在途 LLM 结果 accepted=false 且不覆盖;refresh 后自动标题可再竞争。
+A-3 精确请求事件:派发前记录 {provider,route,system,messages,maxTokens,reasoningEffort};
+    payload 可重建实际请求。
+A-4 provider/长度可配:first-prompt 与 all-prompts 二选一;targetWords/targetCjkCharacters/
+    maxTitleBytes 生效;超时→SESSION_TITLE_TIMEOUT 或 fallback,工具调用输出拒绝。
+A-5 复验:当前 4 项 title lifecycle 测试转绿(实现 worktree);pin/unpin 7 项保持绿;
+    事件契约三真源(test_event_contract)随新事件更新。
+实施依赖:agent/__init__.py 与 run_phases.py 为在途文件(原协作者),登记 F07-session
+blocked-on-author;可先在 agent 层新增独立 title hook 模块,但接线点冲突,不并写。
+
+================================================================================
+F. 结论
+================================================================================
+B-F07-TITLE-01 原 gap “Atlas 缺 LLM 自动命名”不准确:Atlas 已有完整 derivative+opt-in LLM
+标题、pin/unpin 与事件;真实差距是 app-server/SDK 路径未接线 + DSH 的 provider/精确请求契约。
+状态保持 部分。

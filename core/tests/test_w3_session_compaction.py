@@ -68,7 +68,10 @@ def test_compaction_bracket_and_rebuildable_summary_are_durable(tmp_path):
     watermark = begin_session_compaction(tmp_path, "s", holder)
     replacement = [{"role": "user", "content": "summary text", "_compressed_summary": True}]
     compact_session_messages(tmp_path, "s", holder, watermark, held, replacement,
-                             snapshot_state={"provider": "provider", "model": "model", "before_tokens": 100})
+                             snapshot_state={
+                                 "plan": None, "todo": None, "open_tool_call_ids": [],
+                                 "turn_context_projection": [], "turn_context_ref_index": [],
+                             })
     with SessionDB(db_path=tmp_path / "state.db") as db:
         events = db.list_session_events("s")
     # Every message append now also lands in the log (E1/S1), so this asserts the
@@ -84,7 +87,10 @@ def test_compaction_bracket_and_rebuildable_summary_are_durable(tmp_path):
     assert compaction[0]["seq"] in summary["shadowed_seqs"]
     assert summary["shadowed_seqs"] == sorted(summary["shadowed_seqs"])
     assert summary["messages"][0]["content"] == "summary text"
-    assert summary["snapshot"]["state"]["before_tokens"] == 100
+    assert summary["snapshot"]["state"] == {
+        "plan": None, "todo": None, "open_tool_call_ids": [],
+        "turn_context_projection": [], "turn_context_ref_index": [],
+    }
 
 
 def test_provider_model_compaction_policy_override():

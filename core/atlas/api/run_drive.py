@@ -2027,20 +2027,22 @@ async def _handle_run_start(
     if run.allowed_paths:
         local_roots = [root for root in run.extra_roots if not root.startswith("ssh://")]
         run.allowed_paths = list(dict.fromkeys([*run.allowed_paths, *local_roots]))
+    sandbox_type = run.sandbox.get("type") if isinstance(run.sandbox, dict) else None
     if run.sandbox is not None and (
-        not isinstance(run.sandbox, dict) or run.sandbox.get("type") != "docker"
+        sandbox_type not in {"docker", "ssh-bwrap"}
         or not isinstance(run.sandbox.get("network", False), bool)
         or (run.sandbox.get("image") is not None and not isinstance(run.sandbox.get("image"), str))
+        or (sandbox_type == "ssh-bwrap" and run.sandbox.get("image") is not None)
     ):
         invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
         await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
-            "category": "validation", "detail": "Docker 沙箱配置无效。",
+            "category": "validation", "detail": "沙箱配置无效。",
         }))
         return
     if run.sandbox and run.executor != "atlas":
         invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
         await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
-            "category": "validation", "detail": "Docker 沙箱目前只支持 Atlas Agent 执行。",
+            "category": "validation", "detail": "沙箱目前只支持 Atlas Agent 执行。",
         }))
         return
     if run.executor not in {"atlas", "codex", "claude", "hermes", "pi", "zcode"}:
@@ -2150,10 +2152,17 @@ async def _handle_run_start(
                 active_skill_instructions = [*active_skill_instructions, {
                     "name": "项目指令", "content": str(instructions),
                 }]
-    if run.sandbox and (not workspace or str(workspace).startswith("ssh://")):
+    remote_workspace = bool(workspace and str(workspace).startswith("ssh://"))
+    if run.sandbox and (
+        not workspace
+        or (remote_workspace and sandbox_type != "ssh-bwrap")
+        or (not remote_workspace and sandbox_type != "docker")
+    ):
         invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
         await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
-            "category": "validation", "detail": "Docker 沙箱需要本机工作目录，不能与 ssh:// 同时使用。",
+            "category": "validation",
+            "detail": ("ssh:// 工作目录仅支持显式 ssh-bwrap 策略；Docker 仍限本机。"
+                       if remote_workspace else "Docker 沙箱需要本机工作目录。"),
         }))
         return
     # Bind before the workspace branches: the run.context.sources envelope at the
@@ -2988,6 +2997,7 @@ async def _execute_run(
     resume_from: str | None = None,
 ) -> None:
     """Execute agent run, emitting Runtime Event envelopes."""
+    sandbox_type = run.sandbox.get("type") if isinstance(run.sandbox, dict) else None
     execution_started_at = time.perf_counter()
     timing_tool_starts: dict[str, float] = {}
     try:
@@ -3133,11 +3143,12 @@ async def _execute_run(
         if event == "run.started":
             data = {
                 **data,
-                "environment": "docker" if run.sandbox else
-                    "ssh" if (workspace or "").startswith("ssh://") else "local",
+                "environment": ("docker" if sandbox_type == "docker" else
+                                "ssh-bwrap" if sandbox_type == "ssh-bwrap" else
+                                "ssh" if (workspace or "").startswith("ssh://") else "local"),
                 "executor": run.executor,
             }
-            if run.sandbox:
+            if sandbox_type == "docker":
                 data["image"] = run.sandbox.get("image") or "python:3.12-slim"
             if (workspace or "").startswith("ssh://"):
                 with suppress(Exception):
@@ -3220,6 +3231,7 @@ async def _execute_run(
     async def cancel_local_foreground() -> None:
         if local_execution is not None:
             await local_execution.cancel_run(run.run_id)
+        await ssh_workspaces.cancel_run(run.run_id)
 
     async def check_pause_cancel() -> bool:
         """Wait while paused; return True if cancelled."""
@@ -3240,9 +3252,14 @@ async def _execute_run(
             "resumed": plan_state is not None,
         })
 
+    remote_sandbox_runner: dict[str, str] | None = None
     record_api_timing("run_callback_setup_complete")
     try:
-        if run.sandbox:
+        if run.sandbox and sandbox_type == "ssh-bwrap":
+            remote_sandbox_runner = await ssh_workspaces.prepare_remote_sandbox(
+                workspace or "", network=bool(run.sandbox.get("network", False)),
+            )
+        elif run.sandbox:
             docker_status = await sandbox_manager.status()
             if not docker_status["available"]:
                 raise RuntimeError(docker_status["detail"])
@@ -3368,6 +3385,7 @@ async def _execute_run(
 
         # Run the agent orchestrator
         full_response = ""
+        full_response_chunks: list[tuple[str, str]] = []
         record_api_timing("orchestrator_setup_complete")
 
         # Build approval callback that emits approval.required and waits for response
@@ -3731,10 +3749,52 @@ async def _execute_run(
                 if isinstance(usage, dict):
                     await record_usage(usage)
 
-        async def ssh_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        async def ssh_tool(
+            name: str, arguments: dict[str, Any], owner_run_id: str | None = None,
+        ) -> dict[str, Any]:
             if not workspace or not workspace.startswith("ssh://"):
                 raise RuntimeError("SSH workspace is unavailable")
-            return await ssh_workspaces.call_tool(name, arguments, workspace, run_id=run.run_id)
+            if name == "local_process":
+                if run.sandbox and sandbox_type == "ssh-bwrap":
+                    call_args = dict(arguments)
+                    mode = run.sandbox_mode or "workspace-write"
+                    starting = str(call_args.get("action") or "start") == "start"
+                    if starting and "sandbox_permissions" in call_args:
+                        if call_args.get("sandbox_permissions") == "danger-full-access":
+                            detail = "Remote bwrap sandbox cannot grant danger-full-access per tool call."
+                            return {"data": {"error": detail, "sandbox_enforced": False},
+                                    "content": [{"type": "text", "text": detail}],
+                                    "is_error": True}
+                        from atlas.engine.tool_permissions import authorize_sandbox_escalation
+                        authorization = await authorize_sandbox_escalation(
+                            call_args, approval_callback, tool_name=name,
+                            tool_call_id=str(call_args.get("tool_call_id") or
+                                             f"sandbox:{owner_run_id or run.run_id}:{uuid.uuid4()}"),
+                        )
+                        if not authorization["approved"]:
+                            detail = "Remote sandbox permission request was not approved."
+                            return {"data": {"error": detail, **authorization},
+                                    "content": [{"type": "text", "text": detail}],
+                                    "is_error": True}
+                        mode = authorization["request"]["sandbox_permissions"]
+                    if remote_sandbox_runner is None:
+                        raise RuntimeError("Remote sandbox preflight did not complete.")
+                    return await ssh_workspaces.call_sandboxed_process(
+                        call_args, workspace, owner_run_id or run.run_id,
+                        runner=remote_sandbox_runner, mode=mode,
+                        network=bool(run.sandbox.get("network", False)),
+                    )
+                return await ssh_workspaces.call_process(
+                    arguments, workspace, run_id=owner_run_id or run.run_id,
+                )
+            if run.sandbox and name in {"local_shell", "local_exec", "local_git"}:
+                raise PermissionError(
+                    "Remote sandbox command tools must use the managed local_process bwrap path."
+                )
+            return await ssh_workspaces.call_tool(
+                name, arguments, workspace, run_id=run.run_id,
+                observation_owner_id=run.conversation_id,
+            )
 
         async def ssh_checkpoint(action: str, arguments: dict[str, Any]) -> Any:
             if not workspace or not workspace.startswith("ssh://"):
@@ -3753,6 +3813,11 @@ async def _execute_run(
         async def sandbox_tool(run_id: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             from atlas.engine.tool_permissions import authorize_sandbox_escalation
 
+            if isinstance(workspace, str) and workspace.strip().casefold().startswith("ssh://"):
+                raise PermissionError(
+                    "Remote SSH sandbox requires a target-native confinement runner; "
+                    "local Docker/Job execution is not permitted."
+                )
             call_args = dict(arguments)
             if "sandbox_permissions" in call_args:
                 authorization = await authorize_sandbox_escalation(
@@ -3824,7 +3889,12 @@ async def _execute_run(
             ignore_project_config=run.ignore_project_config,
             session_id=run.conversation_id,
         ):
-            if await check_pause_cancel():
+            # Cancellation unwinds the model attempt through this same event
+            # stream. Preserve its rollback before the cancelled terminal event;
+            # otherwise the client can retain text whose durable attempt was
+            # already discarded.
+            if (await check_pause_cancel()
+                    and event.get("type") != "message.rollback"):
                 run.status = "cancelled"
                 await cancel_local_foreground()
                 await emit("run.cancelled", {"reason": run.end_conversation_reason}
@@ -3851,7 +3921,24 @@ async def _execute_run(
             if etype == "chunk":
                 chunk_content = event.get("content", "")
                 full_response += chunk_content
-                await emit("message.delta", {"content": chunk_content})
+                attempt_id = str(event.get("attempt_id") or "")
+                full_response_chunks.append((attempt_id, str(chunk_content)))
+                await emit("message.delta", {
+                    "content": chunk_content,
+                    **({"attempt": event.get("attempt"), "attempt_id": attempt_id} if attempt_id else {}),
+                })
+
+            elif etype == "message.rollback":
+                attempt_id = str(event.get("attempt_id") or "")
+                if attempt_id:
+                    full_response_chunks = [
+                        item for item in full_response_chunks if item[0] != attempt_id
+                    ]
+                    full_response = "".join(content for _, content in full_response_chunks)
+                await emit("message.rollback", {
+                    "attempt": event.get("attempt"), "attempt_id": attempt_id,
+                    "category": event.get("category", ""),
+                })
 
             elif etype == "artifact_created":
                 artifact = {
@@ -3878,6 +3965,7 @@ async def _execute_run(
                 await emit("tool.preparing", {
                     "index": event.get("index", 0),
                     "attempt": event.get("attempt", 1),
+                    "attempt_id": event.get("attempt_id", ""),
                     "tool_call_id": event.get("call_id", ""),
                     "name": event.get("name", ""),
                     "chars": event.get("chars", 0),
@@ -3927,6 +4015,8 @@ async def _execute_run(
                 await emit("run.status", {
                     "status": event.get("status", "running"),
                     "text": event.get("text", ""),
+                    **({"attempt": event.get("attempt"), "attempt_id": event.get("attempt_id")}
+                       if event.get("attempt_id") else {}),
                 })
 
             elif etype in {

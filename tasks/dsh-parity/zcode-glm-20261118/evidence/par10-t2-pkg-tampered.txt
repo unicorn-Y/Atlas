@@ -1,0 +1,15 @@
+PAR-10-T2 packaged Electron launch: atlas_backend.exe tampered 2026-11-18T21:48:21Z
+payload: D:\Atlas\.tmp\par10-t2\pkg-broken\win-unpacked; manifest restored, then 22 bytes appended to resources/atlas/backend/atlas_backend.exe
+sha256(tampered backend)=b391a20326df79a5868deb8292942956235ee178764384c5b42d5abac2c89ce0
+command: powershell -File run-packaged.ps1 -Exe <pkg-broken>\Atlas.exe -WaitSeconds 8 -ErrorDialogTitle Error
+
+PID=58916
+ALIVE_AFTER_8s=True
+MAIN_WINDOW_TITLE=Error
+CHILDREN=Atlas.exe,Atlas.exe
+UIA_WINDOW_COUNT=1
+UIA_WINDOW_NAME=Error
+ERROR_DIALOG_TEXT=Atlas 启动失败
+ERROR_DIALOG_TEXT=Atlas 启动时出错，请把下面的信息发给维护者： |  | Error: Atlas 安装产物完整性检查失败（D:\Atlas\.tmp\par10-t2\pkg-broken\win-unpacked\resources\atlas\release-manifest.json），已拒绝启动。 | - hash_mismatch [backend_build.executable_sha256 @ resources/atlas/backend/atlas_backend.exe]: SHA-256 不匹配（清单 13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76，磁盘 b391a20326df79a5868deb8292942956235ee178764384c5b42d5abac2c89ce0） |     at assertReleaseIntegrity (file:///D:/Atlas/.tmp/par10-t2/pkg-broken/win-unpacked/resources/app.asar/dist-electron/main/releaseIntegrity.js:539:15) |     at file:///D:/Atlas/.tmp/par10-t2/pkg-broken/win-unpacked/resources/app.asar/dist-electron/main/electron.js:2039:9
+GRACEFUL_EXIT=true
+EXIT_CODE=1

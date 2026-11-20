@@ -1,0 +1,36 @@
+PAR-10-T6-3 lifecycle node repeat record (2026-11-19, UTC+8)
+Command shape (cwd = <worktree>/core):
+  python -m pytest -q -p no:cacheprovider --basetemp=<worktree>/.tmp/<run> tests/test_mcp_lifecycle_shutdown.py
+Interpreter: C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe (3.11.16)
+
+Baseline product (HEAD 060071ab, no T5 changes), 2026-11-19 06:07:45:
+  FAILED test_stdio_session_shutdown_exits_its_real_child
+  FAILED test_cancelled_mcp_discovery_stops_its_real_stdio_child
+  FAILED test_cancelled_owner_does_not_skip_other_server_cleanup
+  3 failed, 5 warnings in 5.61s
+  Full trace: par10-t6-3-lifecycle-baseline060071ab.txt
+  Failure points:
+    test 1 line 93  get_server_names() == [] right after await client.start()
+    test 2 line 137 await start_task did not raise CancelledError (start() had already returned)
+    test 3 line 175 zero child processes right after await client.start()
+
+T5 product code only (same fixture, pre-fix), 2026-11-19 06:08:
+  same 3 nodes FAILED, same three lines; status shows "MCP server startup is still in progress"
+  Full log: par10-t6-3-lifecycle-t5code-prefix.txt
+
+Corrected fixture + T5 product code (final), first run 2026-11-19 06:11:
+  3 passed, 5 warnings in 8.81s ; exit 0
+  Full log: par10-t6-3-lifecycle-fixed.txt
+
+Repeat runs of the same three nodes (successive, independent basetemps):
+  RUN1 EXIT=0  3 passed, 5 warnings in 6.33s
+  RUN2 EXIT=0  3 passed, 5 warnings in 8.23s
+  RUN3 EXIT=0  3 passed, 5 warnings in 12.92s
+
+Corrected fixture + baseline product code (HEAD mcp_client.py swapped in, then restored):
+  3 passed, 5 warnings in 7.46s ; exit 0
+  This proves the three failures were fixture wait-semantics, not a product shutdown defect.
+
+Combined final same-tree run (lifecycle + T5 five suites):
+  50 passed, 5 warnings in 17.51s ; exit 0
+  Full log: par10-t6-3-combined-final.txt

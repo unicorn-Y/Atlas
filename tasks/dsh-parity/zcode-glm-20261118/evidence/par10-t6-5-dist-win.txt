@@ -1,0 +1,1364 @@
+PAR-10-T6-5 full dist:win chain
+2026-11-18T22:11:13Z
+CWD=/d/Atlas/.worktrees/zcode-par10-win-release-repro/frontend
+CMD: PYTHONPATH=<candidate>/core ATLAS_BUILD_PYTHON=D:/Atlas/core/.venv/Scripts/python.exe ATLAS_BUILD_SKIP_INSTALL=1 ATLAS_NODE_ARCHIVE=<T2 local node zip> NPM_CONFIG_USERCONFIG=<clean npmrc> NO_COLOR=1 npm run dist:win
+-----
+npm notice run @atlas/frontend@0.1.1 dist:win
+npm notice run npm run clean:release && npm run build && npm run package:backend && npm run package:node && node scripts/stage-electron.mjs && electron-builder --win nsis --x64 --publish never && node scripts/write-release-manifest.mjs
+npm notice run @atlas/frontend@0.1.1 clean:release
+npm notice run node scripts/clean-release-output.mjs
+Cleaning release output: D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\dist
+Cleaning release output: D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\dist-electron
+Cleaning release output: D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\out
+Cleaning release output: D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\windows-release
+Cleaning release output: D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\backend-release
+Cleaning release output: D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\backend-build
+npm notice run @atlas/frontend@0.1.1 build
+npm notice run tsc -p tsconfig.electron.json && npm run build:preload && tsc -p tsconfig.renderer.json --noEmit && vite build
+npm notice run @atlas/frontend@0.1.1 build:preload
+npm notice run node scripts/build-preload.mjs
+06:11:22 [vite] warning: `esbuild` option was specified by "vite:react-babel" plugin. This option is deprecated, please use `oxc` instead.
+06:11:22 [vite] warning: `optimizeDeps.esbuildOptions` option was specified by "vite:react-babel" plugin. This option is deprecated, please use `optimizeDeps.rolldownOptions` instead.
+You or a plugin you are using have set `optimizeDeps.esbuildOptions` but this option is now deprecated. Vite now uses Rolldown to optimize the dependencies. Please use `optimizeDeps.rolldownOptions` instead.
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 5381 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/pet-overlay.html                                               0.66 kB │ gzip:   0.35 kB
+dist/dashboard.html                                                 0.70 kB │ gzip:   0.37 kB
+dist/floating-composer.html                                         0.73 kB │ gzip:   0.38 kB
+dist/voice-hud.html                                                 0.89 kB │ gzip:   0.40 kB
+dist/task-hud.html                                                  0.97 kB │ gzip:   0.43 kB
+dist/index.html                                                     1.84 kB │ gzip:   0.76 kB
+dist/assets/KaTeX_Size3-Regular-CTq5MqoE.woff                       4.42 kB
+dist/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2                      4.92 kB
+dist/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2                      5.20 kB
+dist/assets/noto-serif-sc-87-700-normal-Cqnu-oYh.woff2              5.41 kB
+dist/assets/noto-serif-sc-87-600-normal-DV5DGk8Y.woff2              5.43 kB
+dist/assets/noto-serif-sc-87-400-normal-Bvr1WGbA.woff2              5.46 kB
+dist/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2                      5.46 kB
+dist/assets/noto-serif-sc-latin-ext-400-normal-gIH_qXVp.woff2       5.72 kB
+dist/assets/noto-serif-sc-latin-ext-600-normal-CKIGwhVt.woff2       5.74 kB
+dist/assets/noto-serif-sc-latin-ext-700-normal-tD-5dTGT.woff2       5.75 kB
+dist/assets/noto-serif-sc-91-600-normal-BmWFjXaT.woff2              5.86 kB
+dist/assets/noto-serif-sc-vietnamese-600-normal-IATmd2p1.woff2      5.86 kB
+dist/assets/noto-serif-sc-91-400-normal-qXnKBASq.woff2              5.90 kB
+dist/assets/noto-serif-sc-91-700-normal-DNwW9-F2.woff2              5.90 kB
+dist/assets/noto-serif-sc-90-600-normal-DEC_HMBk.woff2              5.92 kB
+dist/assets/noto-serif-sc-90-700-normal-DEc3LqDv.woff2              5.94 kB
+dist/assets/noto-serif-sc-90-400-normal-B4B7KpSz.woff2              5.95 kB
+dist/assets/noto-serif-sc-vietnamese-400-normal-BDvw8C8Z.woff2      5.95 kB
+dist/assets/noto-serif-sc-vietnamese-700-normal-qkxpeDEW.woff2      5.97 kB
+dist/assets/KaTeX_Size4-Regular-BF-4gkZK.woff                       5.98 kB
+dist/assets/noto-serif-sc-88-600-normal-DkXoJX-V.woff2              6.12 kB
+dist/assets/noto-serif-sc-88-400-normal-w_viLXV3.woff2              6.15 kB
+dist/assets/noto-serif-sc-88-700-normal-BIJHlntW.woff2              6.17 kB
+dist/assets/KaTeX_Size2-Regular-oD1tc_U0.woff                       6.18 kB
+dist/assets/KaTeX_Size1-Regular-C195tn64.woff                       6.49 kB
+dist/assets/noto-serif-sc-87-400-normal-BGjr9P9B.woff               6.81 kB
+dist/assets/noto-serif-sc-87-700-normal-DCmGJ097.woff               6.84 kB
+dist/assets/noto-serif-sc-87-600-normal-BGRltzkO.woff               6.84 kB
+dist/assets/noto-serif-sc-99-600-normal-BU9QyKIb.woff2              6.88 kB
+dist/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2                6.90 kB
+dist/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2                   6.91 kB
+dist/assets/noto-serif-sc-99-700-normal-BMeb63a2.woff2              6.91 kB
+dist/assets/noto-serif-sc-99-400-normal-CcCfmhcb.woff2              6.92 kB
+dist/assets/noto-serif-sc-89-600-normal-BDhAhJVX.woff2              6.94 kB
+dist/assets/noto-serif-sc-89-700-normal-DvQlqD2R.woff2              6.96 kB
+dist/assets/noto-serif-sc-89-400-normal-lCxVBzmS.woff2              6.99 kB
+dist/assets/noto-serif-sc-latin-ext-400-normal-Iv_J2YnH.woff        7.24 kB
+dist/assets/noto-serif-sc-latin-ext-600-normal-Crdr1Iqv.woff        7.33 kB
+dist/assets/noto-serif-sc-latin-ext-700-normal-CgXcgj3y.woff        7.38 kB
+dist/assets/noto-serif-sc-91-400-normal-DoGQ3RJz.woff               7.48 kB
+dist/assets/noto-serif-sc-91-600-normal-dzPhYV2z.woff               7.53 kB
+dist/assets/noto-serif-sc-88-600-normal-5vpa2dJ_.woff               7.55 kB
+dist/assets/noto-serif-sc-88-400-normal-CMbkAMHR.woff               7.56 kB
+dist/assets/noto-serif-sc-88-700-normal-IACcUB99.woff               7.56 kB
+dist/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf                        7.58 kB
+dist/assets/noto-serif-sc-91-700-normal-HXqa3mq_.woff               7.59 kB
+dist/assets/noto-serif-sc-vietnamese-400-normal-Bv_ce-n0.woff       7.64 kB
+dist/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff                 7.65 kB
+dist/assets/noto-serif-sc-90-400-normal-BgpljIOb.woff               7.66 kB
+dist/assets/noto-serif-sc-90-600-normal-E1rh_Ede.woff               7.68 kB
+dist/assets/noto-serif-sc-90-700-normal-28dKep1g.woff               7.70 kB
+dist/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff                    7.71 kB
+dist/assets/noto-serif-sc-vietnamese-600-normal-CJ4Qcv7o.woff       7.73 kB
+dist/assets/noto-serif-sc-vietnamese-700-normal-BxgUXoJz.woff       7.77 kB
+dist/assets/noto-serif-sc-cyrillic-400-normal-E6O3Ay2Z.woff2        8.04 kB
+dist/assets/noto-serif-sc-cyrillic-700-normal-Cr3zANUE.woff2        8.09 kB
+dist/assets/noto-serif-sc-cyrillic-600-normal-C3MRdUTw.woff2        8.12 kB
+dist/assets/noto-serif-sc-99-400-normal-Bd6NEUiQ.woff               8.58 kB
+dist/assets/noto-serif-sc-99-600-normal-Bz7_OzLZ.woff               8.59 kB
+dist/assets/noto-serif-sc-99-700-normal-BPWVk8P1.woff               8.60 kB
+dist/assets/noto-serif-sc-6-600-normal-BD86pU7T.woff2               8.89 kB
+dist/assets/noto-serif-sc-6-700-normal-4vBQOnZB.woff2               8.89 kB
+dist/assets/noto-serif-sc-6-400-normal-DeDrdmIV.woff2               8.90 kB
+dist/assets/noto-serif-sc-cyrillic-400-normal-C8SYfPzS.woff         8.94 kB
+dist/assets/noto-serif-sc-89-400-normal-BunMnOrT.woff               8.97 kB
+dist/assets/noto-serif-sc-cyrillic-600-normal-C5tz3aB8.woff         9.00 kB
+dist/assets/noto-serif-sc-89-600-normal-DrBf4mto.woff               9.01 kB
+dist/assets/noto-serif-sc-89-700-normal-DyMUxKiz.woff               9.04 kB
+dist/assets/noto-serif-sc-cyrillic-700-normal-DuGxYrui.woff         9.04 kB
+dist/assets/KaTeX_Script-Regular-D3wIWfF6.woff2                     9.64 kB
+dist/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2                 10.34 kB
+dist/assets/KaTeX_Size4-Regular-DWFBv043.ttf                       10.36 kB
+dist/assets/KaTeX_Script-Regular-D5yQViql.woff                     10.58 kB
+dist/assets/noto-serif-sc-6-400-normal-CISTeE1_.woff               11.25 kB
+dist/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2                   11.31 kB
+dist/assets/noto-serif-sc-6-600-normal-DEIfUrQn.woff               11.34 kB
+dist/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2                      11.34 kB
+dist/assets/noto-serif-sc-6-700-normal-Djd8renY.woff               11.39 kB
+dist/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf                       11.50 kB
+dist/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2                  12.02 kB
+dist/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2                    12.21 kB
+dist/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf                       12.22 kB
+dist/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff                  12.31 kB
+dist/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf                 12.34 kB
+dist/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf                    12.36 kB
+dist/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff                    13.20 kB
+dist/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff                       13.29 kB
+dist/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2                13.56 kB
+dist/assets/noto-serif-sc-21-400-normal-JNqf8ldM.woff2             13.96 kB
+dist/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff                   14.11 kB
+dist/assets/noto-serif-sc-21-600-normal-_PQd8BN_.woff2             14.11 kB
+dist/assets/noto-serif-sc-21-700-normal-CZ821J_U.woff2             14.27 kB
+dist/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff                     14.40 kB
+dist/assets/noto-serif-sc-5-400-normal-B0zLr2XL.woff2              15.26 kB
+dist/assets/noto-serif-sc-5-700-normal-BMRPbpvN.woff2              15.30 kB
+dist/assets/noto-serif-sc-5-600-normal-spwXrOMa.woff2              15.38 kB
+dist/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff                 16.02 kB
+dist/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2                   16.40 kB
+dist/assets/KaTeX_Math-Italic-t53AETM-.woff2                       16.44 kB
+dist/assets/KaTeX_Script-Regular-C5JkGWo-.ttf                      16.64 kB
+dist/assets/noto-serif-sc-21-400-normal-C7mGDn1x.woff              16.70 kB
+dist/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2                   16.78 kB
+dist/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2                       16.98 kB
+dist/assets/noto-serif-sc-21-600-normal-DBXs0RHo.woff              17.03 kB
+dist/assets/noto-serif-sc-21-700-normal-C0vnPFmY.woff              17.46 kB
+dist/assets/noto-serif-sc-5-700-normal-wAcgunnT.woff               17.86 kB
+dist/assets/noto-serif-sc-5-400-normal-DsAhfvEY.woff               17.89 kB
+dist/assets/noto-serif-sc-5-600-normal-BgdU_-kv.woff               17.92 kB
+dist/assets/noto-serif-sc-latin-400-normal-Dbyzi_OP.woff2          18.61 kB
+dist/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff                    18.66 kB
+dist/assets/noto-serif-sc-latin-700-normal-Fy84wm_t.woff2          18.66 kB
+dist/assets/noto-serif-sc-latin-600-normal-Dsry-7AE.woff2          18.67 kB
+dist/assets/KaTeX_Math-Italic-DA0__PXp.woff                        18.74 kB
+dist/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff                    19.41 kB
+dist/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf                   19.43 kB
+dist/assets/KaTeX_Fraktur-Regular-CB_wures.ttf                     19.57 kB
+dist/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf                        19.58 kB
+dist/assets/KaTeX_Main-Italic-BMLOBm91.woff                        19.67 kB
+dist/assets/noto-serif-sc-85-400-normal-D6KUxyVS.woff2             21.81 kB
+dist/assets/noto-serif-sc-85-600-normal-Cia0LasY.woff2             21.98 kB
+dist/assets/noto-serif-sc-85-700-normal-DvCTO7Mp.woff2             22.16 kB
+dist/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf                    22.36 kB
+dist/assets/noto-serif-sc-84-400-normal-Cm-NqSUF.woff2             22.54 kB
+dist/assets/noto-serif-sc-latin-400-normal-CIgGI3sg.woff           22.66 kB
+dist/assets/noto-serif-sc-latin-700-normal-wrVJucZD.woff           22.75 kB
+dist/assets/noto-serif-sc-latin-600-normal-CMOzFgLF.woff           22.80 kB
+dist/assets/noto-serif-sc-84-600-normal-C9alyfXE.woff2             22.87 kB
+dist/assets/noto-serif-sc-84-700-normal-DSwbGCsT.woff2             23.14 kB
+dist/assets/noto-serif-sc-80-400-normal-2KipuDMA.woff2             23.40 kB
+dist/assets/noto-serif-sc-80-600-normal-CDfycluH.woff2             23.86 kB
+dist/assets/noto-serif-sc-80-700-normal-H7WAE7o6.woff2             24.18 kB
+dist/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf                      24.50 kB
+dist/assets/noto-serif-sc-86-400-normal-Bz2KOH-v.woff2             25.28 kB
+dist/assets/KaTeX_Main-Bold-Cx986IdX.woff2                         25.32 kB
+dist/assets/noto-serif-sc-86-600-normal-Btqlh5aX.woff2             25.46 kB
+dist/assets/noto-serif-sc-86-700-normal-Dka6ShRX.woff2             25.55 kB
+dist/assets/KaTeX_Main-Regular-B22Nviop.woff2                      26.27 kB
+dist/assets/noto-serif-sc-41-400-normal-2yGRlUJ3.woff2             26.57 kB
+dist/assets/noto-serif-sc-85-400-normal-Bktfnpot.woff              26.84 kB
+dist/assets/noto-serif-sc-41-600-normal-YeKaF0XT.woff2             26.88 kB
+dist/assets/noto-serif-sc-85-600-normal-CBRjfhAV.woff              26.92 kB
+dist/assets/noto-serif-sc-85-700-normal-DKalFJys.woff              26.99 kB
+dist/assets/noto-serif-sc-64-400-normal-CD7LrdzK.woff2             27.05 kB
+dist/assets/noto-serif-sc-41-700-normal-D47h1Bz3.woff2             27.22 kB
+dist/assets/noto-serif-sc-77-400-normal-DXmeg5Qd.woff2             27.22 kB
+dist/assets/noto-serif-sc-64-600-normal-BQ4G_liA.woff2             27.28 kB
+dist/assets/noto-serif-sc-64-700-normal-Dqwqb5Ja.woff2             27.55 kB
+dist/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf                  27.55 kB
+dist/assets/noto-serif-sc-77-600-normal-DttXU36r.woff2             27.56 kB
+dist/assets/noto-serif-sc-70-400-normal-DGgPTQo8.woff2             27.82 kB
+dist/assets/noto-serif-sc-77-700-normal-tGcYdB9B.woff2             27.86 kB
+dist/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2                       28.07 kB
+dist/assets/noto-serif-sc-70-600-normal-B3KIj-92.woff2             28.12 kB
+dist/assets/noto-serif-sc-70-700-normal-BwGvGG92.woff2             28.48 kB
+dist/assets/noto-serif-sc-53-400-normal-DdrtXsQA.woff2             28.51 kB
+dist/assets/noto-serif-sc-84-400-normal-DStkEFfC.woff              28.52 kB
+dist/assets/noto-serif-sc-68-400-normal-S26xQ_RE.woff2             28.55 kB
+dist/assets/noto-serif-sc-84-600-normal-b1RfBq73.woff              28.77 kB
+dist/assets/noto-serif-sc-53-600-normal-gS-rjJhY.woff2             28.91 kB
+dist/assets/noto-serif-sc-84-700-normal-rp9lNqy5.woff              28.95 kB
+dist/assets/noto-serif-sc-80-400-normal-CipLvdtL.woff              29.12 kB
+dist/assets/noto-serif-sc-68-600-normal-Cu5PSJ9e.woff2             29.15 kB
+dist/assets/noto-serif-sc-73-400-normal-CzLG5u1x.woff2             29.20 kB
+dist/assets/noto-serif-sc-53-700-normal-CnFjY4lw.woff2             29.29 kB
+dist/assets/noto-serif-sc-68-700-normal-D5bzlisL.woff2             29.38 kB
+dist/assets/noto-serif-sc-80-600-normal-DsOaUBwK.woff              29.61 kB
+dist/assets/noto-serif-sc-73-600-normal-CbYPXTWi.woff2             29.65 kB
+dist/assets/KaTeX_Main-Bold-Jm3AIy58.woff                          29.91 kB
+dist/assets/noto-serif-sc-80-700-normal-DNWGaCuE.woff              29.93 kB
+dist/assets/noto-serif-sc-51-400-normal-K2vB_amj.woff2             30.04 kB
+dist/assets/noto-serif-sc-73-700-normal-aXjv6QCT.woff2             30.09 kB
+dist/assets/noto-serif-sc-65-400-normal-Bk8SN5Oo.woff2             30.35 kB
+dist/assets/noto-serif-sc-51-600-normal-nHUiYj73.woff2             30.48 kB
+dist/assets/noto-serif-sc-75-400-normal-C3rovZtN.woff2             30.71 kB
+dist/assets/noto-serif-sc-36-400-normal-DEHcJKlW.woff2             30.71 kB
+dist/assets/noto-serif-sc-79-400-normal-CAkm9YG8.woff2             30.73 kB
+dist/assets/noto-serif-sc-51-700-normal-0L8UuWiQ.woff2             30.75 kB
+dist/assets/KaTeX_Main-Regular-Dr94JaBh.woff                       30.77 kB
+dist/assets/noto-serif-sc-118-400-normal-ChWZxDuM.woff2            30.80 kB
+dist/assets/noto-serif-sc-43-400-normal-Dz2xm4_C.woff2             30.83 kB
+dist/assets/noto-serif-sc-36-600-normal-Ducnbglz.woff2             30.84 kB
+dist/assets/noto-serif-sc-83-400-normal-B4MQ4cnu.woff2             30.89 kB
+dist/assets/noto-serif-sc-65-600-normal-Bd9BN6aw.woff2             30.94 kB
+dist/assets/noto-serif-sc-79-600-normal-DVfmjx1b.woff2             31.08 kB
+dist/assets/noto-serif-sc-75-600-normal-DsXXCaJ8.woff2             31.14 kB
+dist/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf                     31.19 kB
+dist/assets/noto-serif-sc-118-600-normal-BSmUe1b3.woff2            31.20 kB
+dist/assets/noto-serif-sc-65-700-normal-YasLSCsA.woff2             31.22 kB
+dist/assets/noto-serif-sc-43-600-normal-fdH3n3TW.woff2             31.24 kB
+dist/assets/noto-serif-sc-83-600-normal-CxNt5b9H.woff2             31.27 kB
+dist/assets/KaTeX_Math-Italic-flOr_0UB.ttf                         31.30 kB
+dist/assets/noto-serif-sc-86-700-normal-e61YPmJB.woff              31.30 kB
+dist/assets/noto-serif-sc-86-600-normal-gRMIF_Sn.woff              31.40 kB
+dist/assets/noto-serif-sc-86-400-normal-DpKNfY0x.woff              31.43 kB
+dist/assets/noto-serif-sc-118-700-normal-wbv3HSJj.woff2            31.50 kB
+dist/assets/noto-serif-sc-43-700-normal-BuP6J4Fy.woff2             31.52 kB
+dist/assets/noto-serif-sc-36-700-normal-clTkaUKV.woff2             31.60 kB
+dist/assets/noto-serif-sc-75-700-normal-CgLSOFzu.woff2             31.64 kB
+dist/assets/noto-serif-sc-79-700-normal-Du81IyYb.woff2             31.69 kB
+dist/assets/noto-serif-sc-83-700-normal-CJZvi9jV.woff2             31.69 kB
+dist/assets/noto-serif-sc-60-400-normal-DR2IcHGH.woff2             31.86 kB
+dist/assets/noto-serif-sc-81-400-normal-CtmR2MQs.woff2             31.92 kB
+dist/assets/noto-serif-sc-61-400-normal-LGTmzE8I.woff2             32.14 kB
+dist/assets/noto-serif-sc-60-600-normal-D7VLrwpW.woff2             32.28 kB
+dist/assets/noto-serif-sc-81-600-normal-a7j_jqcg.woff2             32.40 kB
+dist/assets/noto-serif-sc-55-400-normal-OR21fGsv.woff2             32.45 kB
+dist/assets/noto-serif-sc-61-600-normal-BqnnDMe4.woff2             32.51 kB
+dist/assets/noto-serif-sc-82-400-normal-BYIYywsb.woff2             32.60 kB
+dist/assets/noto-serif-sc-81-700-normal-CR6zeE_M.woff2             32.62 kB
+dist/assets/noto-serif-sc-55-600-normal-BGp_sKT8.woff2             32.85 kB
+dist/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf                     32.96 kB
+dist/assets/noto-serif-sc-61-700-normal-jFInwl-W.woff2             32.98 kB
+dist/assets/noto-serif-sc-82-600-normal-qWSV0sqg.woff2             32.98 kB
+dist/assets/noto-serif-sc-60-700-normal-3q15SVpN.woff2             33.01 kB
+dist/assets/noto-serif-sc-42-400-normal-CB0Lgo3r.woff2             33.11 kB
+dist/assets/noto-serif-sc-71-400-normal-D7w4Y-ST.woff2             33.12 kB
+dist/assets/noto-serif-sc-55-700-normal-CseiVrsm.woff2             33.16 kB
+dist/assets/noto-serif-sc-35-400-normal-CzfTX1U2.woff2             33.38 kB
+dist/assets/noto-serif-sc-41-400-normal-DNbv1lfl.woff              33.39 kB
+dist/assets/noto-serif-sc-42-600-normal-DNL8lEL-.woff2             33.43 kB
+dist/assets/noto-serif-sc-82-700-normal-D1xMsdGx.woff2             33.43 kB
+dist/assets/KaTeX_AMS-Regular-DMm9YOAa.woff                        33.51 kB
+dist/assets/noto-serif-sc-71-600-normal-IpCSs6ls.woff2             33.54 kB
+dist/assets/noto-serif-sc-41-600-normal-Dmz_EKw2.woff              33.57 kB
+dist/assets/KaTeX_Main-Italic-3WenGoN9.ttf                         33.58 kB
+dist/assets/noto-serif-sc-35-600-normal-DQYFY9nS.woff2             33.68 kB
+dist/assets/noto-serif-sc-48-400-normal-BL8ILOHO.woff2             33.70 kB
+dist/assets/noto-serif-sc-63-400-normal-Cwyt48md.woff2             33.80 kB
+dist/assets/noto-serif-sc-31-400-normal-BnWU33m3.woff2             33.85 kB
+dist/assets/noto-serif-sc-50-400-normal-CL92OsA_.woff2             33.90 kB
+dist/assets/noto-serif-sc-71-700-normal-Cisz9b5y.woff2             33.91 kB
+dist/assets/noto-serif-sc-42-700-normal-Z53x-ehE.woff2             33.94 kB
+dist/assets/noto-serif-sc-34-400-normal-D9Gw4Yxs.woff2             33.96 kB
+dist/assets/noto-serif-sc-41-700-normal-AG16AEQ3.woff              33.97 kB
+dist/assets/noto-serif-sc-27-400-normal-Y6AvStvM.woff2             34.04 kB
+dist/assets/noto-serif-sc-63-600-normal-DS1bP-c2.woff2             34.05 kB
+dist/assets/noto-serif-sc-35-700-normal-Cus063T8.woff2             34.05 kB
+dist/assets/noto-serif-sc-48-600-normal-Cgzk7A-m.woff2             34.16 kB
+dist/assets/noto-serif-sc-31-600-normal-2BmGlKeS.woff2             34.20 kB
+dist/assets/noto-serif-sc-27-600-normal-DkUFPCZd.woff2             34.26 kB
+dist/assets/noto-serif-sc-50-600-normal-DKHiFV3R.woff2             34.26 kB
+dist/assets/noto-serif-sc-77-400-normal-Bmgf8Ouu.woff              34.28 kB
+dist/assets/noto-serif-sc-34-600-normal-DKigZWC6.woff2             34.36 kB
+dist/assets/noto-serif-sc-40-400-normal-BILW2C8W.woff2             34.36 kB
+dist/assets/noto-serif-sc-31-700-normal-BEZu4djC.woff2             34.40 kB
+dist/assets/noto-serif-sc-48-700-normal-E3BVnch6.woff2             34.46 kB
+dist/assets/noto-serif-sc-72-400-normal-B61Z4Jd8.woff2             34.46 kB
+dist/assets/noto-serif-sc-64-400-normal-CvBGfQsI.woff              34.52 kB
+dist/assets/noto-serif-sc-77-600-normal-IrWzFEQY.woff              34.55 kB
+dist/assets/noto-serif-sc-40-600-normal-fcME6L_n.woff2             34.58 kB
+dist/assets/noto-serif-sc-63-700-normal-DjV4RnNp.woff2             34.58 kB
+dist/assets/noto-serif-sc-76-400-normal-DcB08CFh.woff2             34.61 kB
+dist/assets/noto-serif-sc-33-400-normal-D957xGZn.woff2             34.76 kB
+dist/assets/noto-serif-sc-27-700-normal-BQdh75qI.woff2             34.77 kB
+dist/assets/noto-serif-sc-50-700-normal-D69gDKvI.woff2             34.78 kB
+dist/assets/noto-serif-sc-64-600-normal-BYEnucln.woff              34.82 kB
+dist/assets/noto-serif-sc-34-700-normal-CIClKzB-.woff2             34.90 kB
+dist/assets/noto-serif-sc-77-700-normal-0ut8NFC9.woff              34.94 kB
+dist/assets/noto-serif-sc-76-600-normal-CtcmdgJ2.woff2             34.99 kB
+dist/assets/noto-serif-sc-72-600-normal-CFJRieib.woff2             35.01 kB
+dist/assets/noto-serif-sc-117-400-normal-DOZHOKDT.woff2            35.12 kB
+dist/assets/noto-serif-sc-40-700-normal-DLKtbKBP.woff2             35.12 kB
+dist/assets/noto-serif-sc-76-700-normal-5LGRuf4H.woff2             35.21 kB
+dist/assets/noto-serif-sc-64-700-normal-DIbNLO9b.woff              35.29 kB
+dist/assets/noto-serif-sc-72-700-normal-Bf61z91E.woff2             35.34 kB
+dist/assets/noto-serif-sc-33-600-normal-Cv7tiXLq.woff2             35.36 kB
+dist/assets/noto-serif-sc-70-400-normal-BIUSA_ZY.woff              35.40 kB
+dist/assets/noto-serif-sc-116-400-normal-4K5BIzu1.woff2            35.46 kB
+dist/assets/noto-serif-sc-28-400-normal-CKZqodJm.woff2             35.52 kB
+dist/assets/noto-serif-sc-117-600-normal-mh88gUWl.woff2            35.57 kB
+dist/assets/noto-serif-sc-73-400-normal-CjFHe9hh.woff              35.62 kB
+dist/assets/noto-serif-sc-32-400-normal-CO8YV2jx.woff2             35.63 kB
+dist/assets/noto-serif-sc-37-400-normal-4EafqbAq.woff2             35.70 kB
+dist/assets/noto-serif-sc-52-400-normal-wKOWPyMs.woff2             35.77 kB
+dist/assets/noto-serif-sc-33-700-normal-CYf0FEeO.woff2             35.92 kB
+dist/assets/noto-serif-sc-32-600-normal-DP-j0Lfs.woff2             35.93 kB
+dist/assets/noto-serif-sc-117-700-normal-Cr2W9jHA.woff2            35.95 kB
+dist/assets/noto-serif-sc-28-600-normal-XaL8GGeQ.woff2             35.96 kB
+dist/assets/noto-serif-sc-116-600-normal-D2qgXL0Q.woff2            35.97 kB
+dist/assets/noto-serif-sc-52-600-normal-9RNk20kp.woff2             36.10 kB
+dist/assets/noto-serif-sc-70-600-normal-BTBV158M.woff              36.13 kB
+dist/assets/noto-serif-sc-37-600-normal-McTCeQzZ.woff2             36.20 kB
+dist/assets/noto-serif-sc-73-600-normal-DHwqf-J8.woff              36.27 kB
+dist/assets/noto-serif-sc-32-700-normal-BiVIeTVY.woff2             36.32 kB
+dist/assets/noto-serif-sc-116-700-normal-DA7klnQL.woff2            36.36 kB
+dist/assets/noto-serif-sc-59-400-normal-CeSjNpXe.woff2             36.41 kB
+dist/assets/noto-serif-sc-52-700-normal-CdewxP6S.woff2             36.42 kB
+dist/assets/noto-serif-sc-53-400-normal-CUr7o7PI.woff              36.42 kB
+dist/assets/noto-serif-sc-66-400-normal-ZUojjDZW.woff2             36.50 kB
+dist/assets/noto-serif-sc-54-400-normal-fnBxYYH4.woff2             36.65 kB
+dist/assets/noto-serif-sc-73-700-normal-B6I_Eelf.woff              36.66 kB
+dist/assets/noto-serif-sc-70-700-normal-by-P9-JP.woff              36.68 kB
+dist/assets/noto-serif-sc-37-700-normal-Rsx-NKWX.woff2             36.76 kB
+dist/assets/noto-serif-sc-59-600-normal-Cira1fIq.woff2             36.78 kB
+dist/assets/noto-serif-sc-66-600-normal-DSrxtfqE.woff2             36.86 kB
+dist/assets/noto-serif-sc-53-600-normal-Dq0D5V0P.woff              36.96 kB
+dist/assets/noto-serif-sc-54-600-normal-B_o-8ntD.woff2             36.97 kB
+dist/assets/noto-serif-sc-56-400-normal-VKrJZN4n.woff2             37.05 kB
+dist/assets/noto-serif-sc-49-400-normal-DzLACwr8.woff2             37.08 kB
+dist/assets/noto-serif-sc-78-400-normal-Ciy80LJH.woff2             37.09 kB
+dist/assets/noto-serif-sc-28-700-normal-DcJx41cj.woff2             37.10 kB
+dist/assets/noto-serif-sc-51-400-normal-CpN_EEt1.woff              37.16 kB
+dist/assets/noto-serif-sc-49-600-normal-vldr0UIr.woff2             37.20 kB
+dist/assets/noto-serif-sc-54-700-normal-uub44o1E.woff2             37.22 kB
+dist/assets/noto-serif-sc-66-700-normal-CsGNFNJx.woff2             37.27 kB
+dist/assets/noto-serif-sc-53-700-normal-ZlwjZggX.woff              37.47 kB
+dist/assets/noto-serif-sc-26-400-normal-BSzuGlng.woff2             37.51 kB
+dist/assets/noto-serif-sc-56-600-normal-DT8nGt-C.woff2             37.54 kB
+dist/assets/noto-serif-sc-78-600-normal-BusMfsVJ.woff2             37.57 kB
+dist/assets/noto-serif-sc-59-700-normal-BjMVRgbk.woff2             37.60 kB
+dist/assets/noto-serif-sc-51-600-normal-Bb_aJvXX.woff              37.62 kB
+dist/assets/noto-serif-sc-67-400-normal-C1Oz0pFt.woff2             37.65 kB
+dist/assets/noto-serif-sc-68-400-normal-DqkwUB1L.woff              37.74 kB
+dist/assets/noto-serif-sc-49-700-normal-B2KiGw8z.woff2             37.76 kB
+dist/assets/noto-serif-sc-39-400-normal-DBlVs41-.woff2             37.82 kB
+dist/assets/noto-serif-sc-56-700-normal-B7OUDijB.woff2             37.84 kB
+dist/assets/noto-serif-sc-44-400-normal-KrwQkVb4.woff2             37.97 kB
+dist/assets/noto-serif-sc-51-700-normal-yEwfIwJy.woff              38.07 kB
+dist/assets/noto-serif-sc-29-400-normal-lQml1r-l.woff2             38.10 kB
+dist/assets/noto-serif-sc-39-600-normal-D0Q8YpL5.woff2             38.12 kB
+dist/assets/noto-serif-sc-26-600-normal-cWrhG_Uf.woff2             38.14 kB
+dist/assets/noto-serif-sc-78-700-normal-CD6yteXu.woff2             38.14 kB
+dist/assets/noto-serif-sc-65-400-normal-C8Sx_a9W.woff              38.15 kB
+dist/assets/noto-serif-sc-115-400-normal-Bah1xX7z.woff2            38.21 kB
+dist/assets/noto-serif-sc-68-600-normal-_499lIiV.woff              38.23 kB
+dist/assets/noto-serif-sc-79-400-normal-DdbG_TsO.woff              38.23 kB
+dist/assets/noto-serif-sc-67-600-normal-DhJqqc0a.woff2             38.39 kB
+dist/assets/noto-serif-sc-69-400-normal-DrCsa2Sr.woff2             38.46 kB
+dist/assets/noto-serif-sc-44-600-normal-DAMFuI24.woff2             38.49 kB
+dist/assets/noto-serif-sc-26-700-normal-CUpml4bZ.woff2             38.50 kB
+dist/assets/noto-serif-sc-39-700-normal-BTlPC4nf.woff2             38.55 kB
+dist/assets/noto-serif-sc-115-600-normal-BZu-6rb9.woff2            38.59 kB
+dist/assets/noto-serif-sc-29-600-normal-8lGnoht7.woff2             38.64 kB
+dist/assets/noto-serif-sc-68-700-normal-CUBYDdYt.woff              38.72 kB
+dist/assets/noto-serif-sc-79-600-normal-VVxt57-x.woff              38.80 kB
+dist/assets/noto-serif-sc-69-600-normal-rb2BrEVf.woff2             38.80 kB
+dist/assets/noto-serif-sc-67-700-normal-DmscbtKu.woff2             38.82 kB
+dist/assets/noto-serif-sc-47-400-normal-BImRhQuH.woff2             38.90 kB
+dist/assets/noto-serif-sc-65-600-normal-BEUyBkbJ.woff              38.92 kB
+dist/assets/noto-serif-sc-44-700-normal-pb3BTK0X.woff2             38.95 kB
+dist/assets/noto-serif-sc-115-700-normal-B_-C_VGP.woff2            39.06 kB
+dist/assets/noto-serif-sc-57-400-normal-C6PkFoaO.woff2             39.07 kB
+dist/assets/noto-serif-sc-23-400-normal-CAhTnGkw.woff2             39.09 kB
+dist/assets/noto-serif-sc-43-400-normal-DN9kCyno.woff              39.15 kB
+dist/assets/noto-serif-sc-83-400-normal-Cr0AUYZ5.woff              39.18 kB
+dist/assets/noto-serif-sc-47-600-normal-Dt6vpqbe.woff2             39.22 kB
+dist/assets/noto-serif-sc-118-400-normal-CHsjkmbl.woff             39.25 kB
+dist/assets/noto-serif-sc-65-700-normal--G9ovNNu.woff              39.25 kB
+dist/assets/noto-serif-sc-29-700-normal-JLpMO6ch.woff2             39.32 kB
+dist/assets/noto-serif-sc-81-400-normal-DwVKpWL7.woff              39.32 kB
+dist/assets/noto-serif-sc-79-700-normal-PWiT6XKP.woff              39.34 kB
+dist/assets/noto-serif-sc-114-400-normal-BByM65_k.woff2            39.36 kB
+dist/assets/noto-serif-sc-69-700-normal-DX6UmFtZ.woff2             39.39 kB
+dist/assets/noto-serif-sc-74-400-normal-BwgdtHTO.woff2             39.46 kB
+dist/assets/noto-serif-sc-118-600-normal-DGqj20Qr.woff             39.52 kB
+dist/assets/noto-serif-sc-57-600-normal-Cgb0wYNl.woff2             39.55 kB
+dist/assets/noto-serif-sc-36-400-normal-hS-x6gUQ.woff              39.62 kB
+dist/assets/noto-serif-sc-23-600-normal-uiZnJP_P.woff2             39.64 kB
+dist/assets/noto-serif-sc-38-400-normal-LeDesBQa.woff2             39.68 kB
+dist/assets/noto-serif-sc-60-400-normal-B-su3nCf.woff              39.71 kB
+dist/assets/noto-serif-sc-47-700-normal-DoJA7Gis.woff2             39.72 kB
+dist/assets/noto-serif-sc-83-600-normal-COXK547x.woff              39.75 kB
+dist/assets/noto-serif-sc-43-600-normal-tEpPRReM.woff              39.76 kB
+dist/assets/noto-serif-sc-113-400-normal-mBNpFg1t.woff2            39.82 kB
+dist/assets/noto-serif-sc-114-600-normal-C-hrBGSG.woff2            39.85 kB
+dist/assets/noto-serif-sc-118-700-normal-BP2NT0ww.woff             39.85 kB
+dist/assets/noto-serif-sc-81-600-normal-Cmb8SzCP.woff              39.88 kB
+dist/assets/noto-serif-sc-74-600-normal-CB3LHEvz.woff2             39.92 kB
+dist/assets/noto-serif-sc-112-400-normal-Bjzy25E6.woff2            39.94 kB
+dist/assets/noto-serif-sc-38-600-normal-CJ3lCqLY.woff2             39.99 kB
+dist/assets/noto-serif-sc-60-600-normal-CW27FFLH.woff              39.99 kB
+dist/assets/noto-serif-sc-57-700-normal-DfFSQaP_.woff2             40.03 kB
+dist/assets/noto-serif-sc-83-700-normal-DTFWgxFA.woff              40.05 kB
+dist/assets/noto-serif-sc-23-700-normal-C-BfTkoL.woff2             40.11 kB
+dist/assets/noto-serif-sc-43-700-normal-Ct9nn_BE.woff              40.18 kB
+dist/assets/noto-serif-sc-61-400-normal-DEdGYtwD.woff              40.24 kB
+dist/assets/noto-serif-sc-82-400-normal-CFz5wBm3.woff              40.27 kB
+dist/assets/noto-serif-sc-81-700-normal-sfVV_ISK.woff              40.29 kB
+dist/assets/noto-serif-sc-114-700-normal-YTHoh8U0.woff2            40.37 kB
+dist/assets/noto-serif-sc-30-400-normal-O7SnWSLf.woff2             40.41 kB
+dist/assets/noto-serif-sc-112-600-normal-Duud2wIz.woff2            40.45 kB
+dist/assets/noto-serif-sc-36-600-normal-B2iOPYHQ.woff              40.46 kB
+dist/assets/noto-serif-sc-113-600-normal-YtVfFfTz.woff2            40.46 kB
+dist/assets/noto-serif-sc-74-700-normal-CwyDgPeh.woff2             40.51 kB
+dist/assets/noto-serif-sc-38-700-normal-BXFfye3m.woff2             40.56 kB
+dist/assets/noto-serif-sc-60-700-normal-gTPM7FyU.woff              40.61 kB
+dist/assets/noto-serif-sc-30-600-normal-C9Y_cE8D.woff2             40.70 kB
+dist/assets/noto-serif-sc-82-600-normal-C-YW0U4U.woff              40.72 kB
+dist/assets/noto-serif-sc-46-600-normal-BYbgSWBW.woff2             40.76 kB
+dist/assets/noto-serif-sc-42-400-normal-BWxcIMdh.woff              40.77 kB
+dist/assets/noto-serif-sc-46-400-normal-Cbp-mPea.woff2             40.77 kB
+dist/assets/noto-serif-sc-61-600-normal-CuAlgWR6.woff              40.85 kB
+dist/assets/noto-serif-sc-112-700-normal-o4ipG6Xn.woff2            40.87 kB
+dist/assets/noto-serif-sc-113-700-normal-D3tg29YE.woff2            40.88 kB
+dist/assets/noto-serif-sc-25-400-normal-aJ-D48u6.woff2             41.08 kB
+dist/assets/noto-serif-sc-101-400-normal-BDfk0zJO.woff2            41.21 kB
+dist/assets/noto-serif-sc-82-700-normal-BRrKsLzv.woff              41.30 kB
+dist/assets/noto-serif-sc-36-700-normal-ChDMQPJz.woff              41.31 kB
+dist/assets/noto-serif-sc-46-700-normal-Cmw7SSVj.woff2             41.33 kB
+dist/assets/noto-serif-sc-42-600-normal-DQB4K185.woff              41.35 kB
+dist/assets/noto-serif-sc-30-700-normal-DJqFp00h.woff2             41.47 kB
+dist/assets/noto-serif-sc-25-600-normal-BrYZKcM-.woff2             41.50 kB
+dist/assets/noto-serif-sc-71-400-normal-D3dkJTAV.woff              41.52 kB
+dist/assets/noto-serif-sc-61-700-normal-DcMBx08-.woff              41.53 kB
+dist/assets/noto-serif-sc-101-600-normal-sSY5cmak.woff2            41.70 kB
+dist/assets/noto-serif-sc-55-400-normal-Ce9hQ0YZ.woff              41.71 kB
+dist/assets/noto-serif-sc-35-400-normal-9OurGiuq.woff              41.75 kB
+dist/assets/noto-serif-sc-109-400-normal-DdTeJTKp.woff2            41.81 kB
+dist/assets/noto-serif-sc-107-400-normal-ygG4MA5M.woff2            41.84 kB
+dist/assets/noto-serif-sc-110-400-normal-DYDJXw43.woff2            41.90 kB
+dist/assets/noto-serif-sc-62-400-normal-gHAN3JT1.woff2             41.94 kB
+dist/assets/noto-serif-sc-71-600-normal-COX7UMqX.woff              42.00 kB
+dist/assets/noto-serif-sc-25-700-normal-BJclhnMJ.woff2             42.08 kB
+dist/assets/noto-serif-sc-42-700-normal-hQRtAUD9.woff              42.14 kB
+dist/assets/noto-serif-sc-102-400-normal-BbQbiaew.woff2            42.17 kB
+dist/assets/noto-serif-sc-101-700-normal-BkcSU4lK.woff2            42.17 kB
+dist/assets/noto-serif-sc-55-600-normal-Di3k_EiC.woff              42.18 kB
+dist/assets/noto-serif-sc-62-600-normal-jrKoNELA.woff2             42.26 kB
+dist/assets/noto-serif-sc-27-400-normal-6ChHYUYB.woff              42.28 kB
+dist/assets/noto-serif-sc-72-400-normal-DI-xiaI8.woff              42.32 kB
+dist/assets/noto-serif-sc-109-600-normal-DMcxl-Xc.woff2            42.34 kB
+dist/assets/noto-serif-sc-107-600-normal-BuP4Qox7.woff2            42.40 kB
+dist/assets/noto-serif-sc-110-600-normal-D8IPITsR.woff2            42.45 kB
+dist/assets/noto-serif-sc-55-700-normal-BhMcv-AY.woff              42.48 kB
+dist/assets/noto-serif-sc-35-600-normal-BDkEBMeO.woff              42.49 kB
+dist/assets/noto-serif-sc-75-400-normal-GyGkoHle.woff              42.58 kB
+dist/assets/noto-serif-sc-104-400-normal-C7Um0QjD.woff2            42.61 kB
+dist/assets/noto-serif-sc-50-400-normal-BOcV9pBm.woff              42.66 kB
+dist/assets/noto-serif-sc-62-700-normal-Ct56n-aN.woff2             42.67 kB
+dist/assets/noto-serif-sc-102-600-normal-Btf3Yi3y.woff2            42.67 kB
+dist/assets/noto-serif-sc-71-700-normal-BDxHHKwx.woff              42.67 kB
+dist/assets/noto-serif-sc-34-400-normal-D4pub3cv.woff              42.71 kB
+dist/assets/noto-serif-sc-109-700-normal-7AOMxlP8.woff2            42.71 kB
+dist/assets/noto-serif-sc-111-400-normal-B4UjboLF.woff2            42.72 kB
+dist/assets/noto-serif-sc-105-400-normal-BHHNimkF.woff2            42.78 kB
+dist/assets/noto-serif-sc-75-600-normal-Bnmj-KpS.woff              42.84 kB
+dist/assets/noto-serif-sc-63-400-normal-BGjjA31f.woff              42.85 kB
+dist/assets/noto-serif-sc-35-700-normal-B5my4UNZ.woff              42.85 kB
+dist/assets/noto-serif-sc-110-700-normal-Dv7tyBy5.woff2            42.94 kB
+dist/assets/noto-serif-sc-107-700-normal-BDE6VEHk.woff2            42.96 kB
+dist/assets/noto-serif-sc-32-400-normal-DJHDmhYT.woff              42.97 kB
+dist/assets/noto-serif-sc-27-600-normal-BpxoLOyZ.woff              43.05 kB
+dist/assets/noto-serif-sc-50-600-normal-DlmMI7tS.woff              43.08 kB
+dist/assets/noto-serif-sc-63-600-normal-C0cZs2RR.woff              43.11 kB
+dist/assets/noto-serif-sc-72-600-normal-DhePn2NL.woff              43.12 kB
+dist/assets/noto-serif-sc-106-400-normal-By0PBMMN.woff2            43.14 kB
+dist/assets/noto-serif-sc-104-600-normal-DLLqwPPR.woff2            43.20 kB
+dist/assets/noto-serif-sc-111-600-normal-XLxRoWaL.woff2            43.22 kB
+dist/assets/noto-serif-sc-58-400-normal-DVaM_vK5.woff2             43.31 kB
+dist/assets/noto-serif-sc-75-700-normal-DJf5AFgM.woff              43.32 kB
+dist/assets/noto-serif-sc-40-400-normal-BNaG2NzN.woff              43.38 kB
+dist/assets/noto-serif-sc-105-600-normal-CCTiQ5qX.woff2            43.45 kB
+dist/assets/noto-serif-sc-48-400-normal-DkKcK2Tm.woff              43.48 kB
+dist/assets/noto-serif-sc-31-400-normal-Dgp7wka8.woff              43.58 kB
+dist/assets/noto-serif-sc-33-400-normal-DgFRWyb3.woff              43.60 kB
+dist/assets/noto-serif-sc-104-700-normal-C3oXCaHW.woff2            43.62 kB
+dist/assets/noto-serif-sc-111-700-normal-ZQBfvahQ.woff2            43.66 kB
+dist/assets/noto-serif-sc-34-600-normal-BbwvFD97.woff              43.68 kB
+dist/assets/noto-serif-sc-32-600-normal-CaqhOLip.woff              43.68 kB
+dist/assets/noto-serif-sc-72-700-normal-BaqvCfo9.woff              43.69 kB
+dist/assets/noto-serif-sc-102-700-normal-DyiwFoSz.woff2            43.72 kB
+dist/assets/noto-serif-sc-24-400-normal-DWWywIBv.woff2             43.74 kB
+dist/assets/noto-serif-sc-31-600-normal-Bi4FUK-F.woff              43.74 kB
+dist/assets/noto-serif-sc-58-600-normal-BqYlXKg9.woff2             43.83 kB
+dist/assets/noto-serif-sc-106-600-normal-4qYMwCDO.woff2            43.83 kB
+dist/assets/noto-serif-sc-108-400-normal-DCLtaPv5.woff2            43.85 kB
+dist/assets/noto-serif-sc-76-400-normal-Bohz5vWe.woff              43.85 kB
+dist/assets/noto-serif-sc-40-600-normal-DjGcPvdj.woff              43.86 kB
+dist/assets/noto-serif-sc-50-700-normal-BsAy8zDT.woff              43.91 kB
+dist/assets/noto-serif-sc-63-700-normal-BODRvjwN.woff              43.92 kB
+dist/assets/noto-serif-sc-27-700-normal-Ba0trb4H.woff              43.93 kB
+dist/assets/noto-serif-sc-105-700-normal-DB974Amt.woff2            43.97 kB
+dist/assets/noto-serif-sc-106-700-normal-B_589JJS.woff2            44.23 kB
+dist/assets/noto-serif-sc-34-700-normal-CBSh6ESf.woff              44.24 kB
+dist/assets/noto-serif-sc-24-600-normal-CwutompM.woff2             44.25 kB
+dist/assets/noto-serif-sc-32-700-normal-BuUltVp3.woff              44.35 kB
+dist/assets/noto-serif-sc-117-400-normal-Cg-LkokN.woff             44.37 kB
+dist/assets/noto-serif-sc-76-600-normal-BYyntmnN.woff              44.38 kB
+dist/assets/noto-serif-sc-48-600-normal-Dz-ghDy5.woff              44.38 kB
+dist/assets/noto-serif-sc-108-600-normal-CwDLTI0X.woff2            44.40 kB
+dist/assets/noto-serif-sc-103-400-normal-D8vZovO8.woff2            44.47 kB
+dist/assets/noto-serif-sc-40-700-normal-W1jH3tci.woff              44.49 kB
+dist/assets/noto-serif-sc-116-400-normal-DANlmn-z.woff             44.56 kB
+dist/assets/noto-serif-sc-33-600-normal-BeCKouo2.woff              44.58 kB
+dist/assets/noto-serif-sc-31-700-normal-BMTwHiDF.woff              44.60 kB
+dist/assets/noto-serif-sc-28-400-normal-CMYAtxzL.woff              44.61 kB
+dist/assets/noto-serif-sc-22-400-normal-BA2TjkoN.woff2             44.63 kB
+dist/assets/noto-serif-sc-58-700-normal-BwhKn4GO.woff2             44.63 kB
+dist/assets/noto-serif-sc-100-400-normal-ReL1GkIj.woff2            44.80 kB
+dist/assets/noto-serif-sc-117-600-normal-DU3kTwR3.woff             44.80 kB
+dist/assets/noto-serif-sc-76-700-normal-B3wVGJ8y.woff              44.85 kB
+dist/assets/noto-serif-sc-24-700-normal-sgvhFHSE.woff2             44.91 kB
+dist/assets/noto-serif-sc-108-700-normal-CzOCZ4yz.woff2            44.94 kB
+dist/assets/noto-serif-sc-28-600-normal-D9EM6Q4F.woff              45.09 kB
+dist/assets/noto-serif-sc-103-600-normal-mbgyha-0.woff2            45.10 kB
+dist/assets/noto-serif-sc-116-600-normal-CvJ__AZa.woff             45.10 kB
+dist/assets/noto-serif-sc-52-400-normal-CcNwQIpz.woff              45.15 kB
+dist/assets/noto-serif-sc-22-600-normal-D5jlEshw.woff2             45.15 kB
+dist/assets/noto-serif-sc-117-700-normal-BwLx21zy.woff             45.16 kB
+dist/assets/noto-serif-sc-48-700-normal-CbFc--az.woff              45.16 kB
+dist/assets/noto-serif-sc-37-400-normal-CNlOiofx.woff              45.17 kB
+dist/assets/noto-serif-sc-100-600-normal-CDb7jLSQ.woff2            45.28 kB
+dist/assets/noto-serif-sc-33-700-normal-BgXEYeeo.woff              45.37 kB
+dist/assets/noto-serif-sc-54-400-normal-_890vp0f.woff              45.53 kB
+dist/assets/noto-serif-sc-59-400-normal--c1WTjBh.woff              45.55 kB
+dist/assets/noto-serif-sc-116-700-normal-DDMAqUXr.woff             45.55 kB
+dist/assets/noto-serif-sc-103-700-normal-CID7J8R_.woff2            45.65 kB
+dist/assets/noto-serif-sc-22-700-normal-CoNFrMmU.woff2             45.66 kB
+dist/assets/noto-serif-sc-100-700-normal-JS0RH0gU.woff2            45.71 kB
+dist/assets/noto-serif-sc-52-600-normal-BgeEGtAt.woff              45.80 kB
+dist/assets/noto-serif-sc-37-600-normal-BlAKZHot.woff              45.82 kB
+dist/assets/noto-serif-sc-59-600-normal-BMvglOJ1.woff              45.84 kB
+dist/assets/noto-serif-sc-78-400-normal-BV2anfcn.woff              45.89 kB
+dist/assets/noto-serif-sc-28-700-normal-Cj8IH8Gu.woff              46.01 kB
+dist/assets/noto-serif-sc-54-600-normal-BwU7AQtJ.woff              46.12 kB
+dist/assets/noto-serif-sc-66-400-normal-DTx716Vm.woff              46.16 kB
+dist/assets/noto-serif-sc-26-400-normal-BmHpHid6.woff              46.32 kB
+dist/assets/noto-serif-sc-52-700-normal-8HbO8bt4.woff              46.39 kB
+dist/assets/noto-serif-sc-78-600-normal-CCNKcNdm.woff              46.46 kB
+dist/assets/noto-serif-sc-37-700-normal-C2zbKDjo.woff              46.59 kB
+dist/assets/noto-serif-sc-66-600-normal-6RCE9i8x.woff              46.62 kB
+dist/assets/noto-serif-sc-39-400-normal-CmWHGiVB.woff              46.67 kB
+dist/assets/noto-serif-sc-59-700-normal-BwjGL0Mq.woff              46.73 kB
+dist/assets/noto-serif-sc-54-700-normal-CXzeXcrB.woff              46.74 kB
+dist/assets/noto-serif-sc-66-700-normal-CO_LtITL.woff              47.22 kB
+dist/assets/noto-serif-sc-26-600-normal-CzoEKMWw.woff              47.27 kB
+dist/assets/noto-serif-sc-78-700-normal-qRPaDkpO.woff              47.27 kB
+dist/assets/noto-serif-sc-49-400-normal-DjfBJfAV.woff              47.35 kB
+dist/assets/noto-serif-sc-39-600-normal-bLcsDhbT.woff              47.37 kB
+dist/assets/noto-serif-sc-56-400-normal-BiGVW4p9.woff              47.46 kB
+dist/assets/noto-serif-sc-115-400-normal-B-Rty9ST.woff             47.48 kB
+dist/assets/noto-serif-sc-44-400-normal-7RpHTAzV.woff              47.64 kB
+dist/assets/noto-serif-sc-39-700-normal-BCUSk5VV.woff              47.84 kB
+dist/assets/noto-serif-sc-49-600-normal-CIQEwWAN.woff              47.88 kB
+dist/assets/noto-serif-sc-26-700-normal-CeksxXQE.woff              47.94 kB
+dist/assets/noto-serif-sc-45-400-normal-BBf5fyo-.woff2             47.97 kB
+dist/assets/noto-serif-sc-115-600-normal-D2X8fJT5.woff             48.04 kB
+dist/assets/noto-serif-sc-56-600-normal-JX9fZz4l.woff              48.20 kB
+dist/assets/noto-serif-sc-29-400-normal-y9MQBnJu.woff              48.27 kB
+dist/assets/noto-serif-sc-45-600-normal-w-zsCBKj.woff2             48.42 kB
+dist/assets/noto-serif-sc-115-700-normal-X1yd1KuJ.woff             48.47 kB
+dist/assets/noto-serif-sc-44-600-normal-CSmgD1o5.woff              48.58 kB
+dist/assets/noto-serif-sc-67-400-normal-DTZkQT91.woff              48.64 kB
+dist/assets/noto-serif-sc-29-600-normal--rcOevi5.woff              48.70 kB
+dist/assets/noto-serif-sc-49-700-normal-BGf_iecL.woff              48.76 kB
+dist/assets/noto-serif-sc-56-700-normal-B5pup1-r.woff              48.83 kB
+dist/assets/noto-serif-sc-38-400-normal-D5KrRhdB.woff              49.06 kB
+dist/assets/noto-serif-sc-45-700-normal-4K9EcLaW.woff2             49.07 kB
+dist/assets/noto-serif-sc-57-400-normal-X9crklJp.woff              49.14 kB
+dist/assets/noto-serif-sc-23-400-normal-Dp0nGeFG.woff              49.17 kB
+dist/assets/noto-serif-sc-114-400-normal-BVQ-X6tH.woff             49.27 kB
+dist/assets/noto-serif-sc-44-700-normal-BGEQuVkQ.woff              49.34 kB
+dist/assets/noto-serif-sc-67-600-normal-CWhjQIcy.woff              49.44 kB
+dist/assets/noto-serif-sc-114-600-normal-1OMqqXLQ.woff             49.58 kB
+dist/assets/noto-serif-sc-29-700-normal-B2rDe716.woff              49.71 kB
+dist/assets/noto-serif-sc-38-600-normal-B3XTNQ62.woff              49.72 kB
+dist/assets/noto-serif-sc-69-400-normal-BrosfOW1.woff              49.72 kB
+dist/assets/noto-serif-sc-57-600-normal-G9eMxaIL.woff              49.86 kB
+dist/assets/noto-serif-sc-47-400-normal-CA_5s-Dr.woff              49.92 kB
+dist/assets/noto-serif-sc-114-700-normal-CNAMGDai.woff             50.12 kB
+dist/assets/noto-serif-sc-113-400-normal-BqfX6qRL.woff             50.13 kB
+dist/assets/noto-serif-sc-112-400-normal-9sI071hl.woff             50.16 kB
+dist/assets/noto-serif-sc-67-700-normal-Dsvy0KXe.woff              50.22 kB
+dist/assets/noto-serif-sc-38-700-normal-HC1ydmgB.woff              50.28 kB
+dist/assets/noto-serif-sc-23-600-normal-tM7FuOUQ.woff              50.30 kB
+dist/assets/noto-serif-sc-112-600-normal-JZi-FJB1.woff             50.49 kB
+dist/assets/noto-serif-sc-69-600-normal-CHN0AqGC.woff              50.49 kB
+dist/assets/noto-serif-sc-113-600-normal-C2Pn5bG7.woff             50.56 kB
+dist/assets/noto-serif-sc-57-700-normal-7-c9lFBy.woff              50.64 kB
+dist/assets/noto-serif-sc-47-600-normal-BybY9_YI.woff              50.91 kB
+dist/assets/noto-serif-sc-69-700-normal-CmWtZLzQ.woff              50.92 kB
+dist/assets/noto-serif-sc-113-700-normal-DYQExg9A.woff             51.01 kB
+dist/assets/noto-serif-sc-112-700-normal-DeOkSmGH.woff             51.12 kB
+dist/assets/KaTeX_Main-Bold-waoOVXN0.ttf                           51.33 kB
+dist/assets/noto-serif-sc-23-700-normal-DKiU8E5D.woff              51.43 kB
+dist/assets/noto-serif-sc-47-700-normal-DQAZijA5.woff              51.44 kB
+dist/assets/noto-serif-sc-74-400-normal-Br35r17P.woff              51.56 kB
+dist/assets/noto-serif-sc-46-400-normal-DzGlH9qb.woff              51.71 kB
+dist/assets/noto-serif-sc-101-400-normal-xYvoHK9m.woff             51.76 kB
+dist/assets/noto-serif-sc-25-400-normal-BqETRGLD.woff              51.76 kB
+dist/assets/noto-serif-sc-46-600-normal-DikPLwIp.woff              52.11 kB
+dist/assets/noto-serif-sc-110-400-normal-CoCVPqeb.woff             52.24 kB
+dist/assets/noto-serif-sc-109-400-normal-Cb2jf7XO.woff             52.27 kB
+dist/assets/noto-serif-sc-101-600-normal-CKfbEt7T.woff             52.30 kB
+dist/assets/noto-serif-sc-74-600-normal-BL5z9zR1.woff              52.34 kB
+dist/assets/noto-serif-sc-62-400-normal-C68ACm04.woff              52.44 kB
+dist/assets/noto-serif-sc-107-400-normal-C8C13wwv.woff             52.48 kB
+dist/assets/noto-serif-sc-102-400-normal-CSgCCFa9.woff             52.51 kB
+dist/assets/noto-serif-sc-109-600-normal-C2t7fBk5.woff             52.69 kB
+dist/assets/noto-serif-sc-30-400-normal-D18vuEb9.woff              52.72 kB
+dist/assets/noto-serif-sc-101-700-normal-DkvY03Yk.woff             52.83 kB
+dist/assets/noto-serif-sc-110-600-normal-BpxcMgcG.woff             52.88 kB
+dist/assets/noto-serif-sc-74-700-normal-Ckzu6E-x.woff              52.95 kB
+dist/assets/noto-serif-sc-25-600-normal-CUYC4k15.woff              52.99 kB
+dist/assets/noto-serif-sc-46-700-normal-CcfVY2jr.woff              53.06 kB
+dist/assets/noto-serif-sc-104-400-normal-CD8YcV0B.woff             53.09 kB
+dist/assets/noto-serif-sc-109-700-normal-Blt9KLbG.woff             53.15 kB
+dist/assets/noto-serif-sc-102-600-normal-bhkrgRJp.woff             53.18 kB
+dist/assets/noto-serif-sc-107-600-normal-DMySAahz.woff             53.25 kB
+dist/assets/noto-serif-sc-62-600-normal-Qtr5wKwL.woff              53.32 kB
+dist/assets/noto-serif-sc-30-600-normal-BeeHv3Wg.woff              53.36 kB
+dist/assets/noto-serif-sc-25-700-normal-KCwRQEsp.woff              53.39 kB
+dist/assets/noto-serif-sc-110-700-normal-CmGIFaf6.woff             53.50 kB
+dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf                        53.58 kB
+dist/assets/noto-serif-sc-105-400-normal-C9hFvF4k.woff             53.68 kB
+dist/assets/noto-serif-sc-111-400-normal-D0YWUhMA.woff             53.69 kB
+dist/assets/noto-serif-sc-104-600-normal-D0Kz0PQt.woff             53.76 kB
+dist/assets/noto-serif-sc-102-700-normal-CR3t4YFJ.woff             53.76 kB
+dist/assets/noto-serif-sc-107-700-normal-fbzXu7zb.woff             53.86 kB
+dist/assets/noto-serif-sc-111-600-normal-CIQ7ATpi.woff             54.15 kB
+dist/assets/noto-serif-sc-62-700-normal-D9xz8a6P.woff              54.16 kB
+dist/assets/noto-serif-sc-106-400-normal-0U-wz-KB.woff             54.16 kB
+dist/assets/noto-serif-sc-58-400-normal-CCDg5UE-.woff              54.16 kB
+dist/assets/noto-serif-sc-105-600-normal-Chf5891R.woff             54.17 kB
+dist/assets/noto-serif-sc-104-700-normal-CzPZet85.woff             54.29 kB
+dist/assets/noto-serif-sc-119-400-normal-BrIWc_nj.woff2            54.34 kB
+dist/assets/noto-serif-sc-30-700-normal-CRG3eLL0.woff              54.50 kB
+dist/assets/noto-serif-sc-108-400-normal-CnSV0C_u.woff             54.66 kB
+dist/assets/noto-serif-sc-106-600-normal-CCHn00mD.woff             54.74 kB
+dist/assets/noto-serif-sc-111-700-normal-BXaMb35Z.woff             54.78 kB
+dist/assets/noto-serif-sc-105-700-normal-B4dOpN1W.woff             54.86 kB
+dist/assets/noto-serif-sc-106-700-normal-BkdsXo0w.woff             55.07 kB
+dist/assets/noto-serif-sc-108-600-normal-bJuRODPI.woff             55.09 kB
+dist/assets/noto-serif-sc-22-400-normal-CmEjSfFB.woff              55.11 kB
+dist/assets/noto-serif-sc-58-600-normal-DoPwXIB0.woff              55.13 kB
+dist/assets/noto-serif-sc-24-400-normal-5FVPkn6z.woff              55.24 kB
+dist/assets/noto-serif-sc-119-700-normal-BpOXMoXs.woff2            55.25 kB
+dist/assets/noto-serif-sc-119-600-normal-Cz_fHJPM.woff2            55.31 kB
+dist/assets/noto-serif-sc-103-400-normal-CUHTi12k.woff             55.47 kB
+dist/assets/noto-serif-sc-108-700-normal-fdG4Izce.woff             55.66 kB
+dist/assets/noto-serif-sc-103-600-normal-SUFjNM3e.woff             56.05 kB
+dist/assets/noto-serif-sc-22-600-normal-BUrT-lAs.woff              56.08 kB
+dist/assets/noto-serif-sc-100-400-normal-C4-86xa_.woff             56.18 kB
+dist/assets/noto-serif-sc-58-700-normal-rd6xtMbq.woff              56.19 kB
+dist/assets/noto-serif-sc-24-600-normal-ChOIOAhb.woff              56.24 kB
+dist/assets/noto-serif-sc-103-700-normal-COA9_BEo.woff             56.69 kB
+dist/assets/noto-serif-sc-100-600-normal-CTzDBqXf.woff             56.84 kB
+dist/assets/noto-serif-sc-24-700-normal-Be9VM6hU.woff              57.18 kB
+dist/assets/noto-serif-sc-100-700-normal-CWJ1dzw_.woff             57.30 kB
+dist/assets/noto-serif-sc-22-700-normal-ClnOhr-w.woff              57.46 kB
+dist/assets/noto-serif-sc-45-400-normal-D3U2i4Fh.woff              60.14 kB
+dist/assets/noto-serif-sc-45-600-normal-BdEAtdua.woff              61.32 kB
+dist/assets/noto-serif-sc-45-700-normal-B5FcXl1s.woff              62.30 kB
+dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf                         63.63 kB
+dist/assets/noto-serif-sc-119-400-normal--Fele97i.woff             70.03 kB
+dist/assets/noto-serif-sc-119-700-normal-D2zIucfp.woff             70.99 kB
+dist/assets/noto-serif-sc-119-600-normal-BylB86AG.woff             71.12 kB
+dist/assets/task-hud-Cb_nfkOw.css                                   1.51 kB │ gzip:   0.69 kB
+dist/assets/voice-hud-CUp8_maW.css                                  1.85 kB │ gzip:   0.80 kB
+dist/assets/xterm-BrP-ENHg.css                                      3.93 kB │ gzip:   1.01 kB
+dist/assets/app-BAa849j1.css                                      521.03 kB │ gzip: 193.77 kB
+dist/assets/mermaid-MCJ5UELQ-xv0alQDM.js                            0.04 kB │ gzip:   0.06 kB
+dist/assets/cn-DgsnS9O3.js                                          0.09 kB │ gzip:   0.10 kB
+dist/assets/array-BifhSqXX.js                                       0.10 kB │ gzip:   0.11 kB
+dist/assets/pie-XZMESJXO-BZUZoJ6_.js                                0.10 kB │ gzip:   0.12 kB
+dist/assets/info-OHQRW6UA-CZDFtPWB.js                               0.10 kB │ gzip:   0.12 kB
+dist/assets/radar-ABXABTNO-DwJhtXE9.js                              0.10 kB │ gzip:   0.12 kB
+dist/assets/packet-JDAUHWVQ-Cp-VW8a6.js                             0.11 kB │ gzip:   0.12 kB
+dist/assets/cynefin-EF2NZ3EQ-BJLqS1lt.js                            0.11 kB │ gzip:   0.12 kB
+dist/assets/treemap-SAJKECNS-u79Blxbu.js                            0.11 kB │ gzip:   0.12 kB
+dist/assets/wardley-7MLQ67FV-DzdSRXSP.js                            0.11 kB │ gzip:   0.12 kB
+dist/assets/gitGraph-VSP46ZUC-BzTkWjup.js                           0.11 kB │ gzip:   0.12 kB
+dist/assets/railroad-I3PHUGI6-CrIS8_pX.js                           0.11 kB │ gzip:   0.12 kB
+dist/assets/treeView-D4JQ5SDB-DCE3VQYC.js                           0.11 kB │ gzip:   0.12 kB
+dist/assets/channel-D-6BzreH.js                                     0.11 kB │ gzip:   0.12 kB
+dist/assets/railroad-peg-JR7BVNR7-Cgc31G0B.js                       0.11 kB │ gzip:   0.13 kB
+dist/assets/architecture-WOLXFQ4H-Bxv0rxwc.js                       0.11 kB │ gzip:   0.13 kB
+dist/assets/railroad-abnf-LNEFI6M7-CfXQQK02.js                      0.11 kB │ gzip:   0.13 kB
+dist/assets/railroad-ebnf-DWYD2UWJ-DeHJEnpH.js                      0.11 kB │ gzip:   0.13 kB
+dist/assets/eventmodeling-K75KTNOO-DqHROu5F.js                      0.11 kB │ gzip:   0.13 kB
+dist/assets/init-C-OQMol4.js                                        0.14 kB │ gzip:   0.12 kB
+dist/assets/chunk-Y2CYZVJY-DsF7k-Jl.js                              0.15 kB │ gzip:   0.14 kB
+dist/assets/check-XWKuuzaP.js                                       0.16 kB │ gzip:   0.16 kB
+dist/assets/chunk-2Q5K7J3B-C1jixKkw.js                              0.19 kB │ gzip:   0.16 kB
+dist/assets/power-D8KEd3qh.js                                       0.21 kB │ gzip:   0.19 kB
+dist/assets/chunk-JWPE2WC7-DVXcaiue.js                              0.22 kB │ gzip:   0.17 kB
+dist/assets/rotate-cw-DdXcmM99.js                                   0.24 kB │ gzip:   0.21 kB
+dist/assets/chunk-XXDRQBXY-RlzOQ08v.js                              0.26 kB │ gzip:   0.22 kB
+dist/assets/git-merge-kKZaNkbO.js                                   0.26 kB │ gzip:   0.21 kB
+dist/assets/lock-open-Ck-EjtKK.js                                   0.26 kB │ gzip:   0.23 kB
+dist/assets/upload-DoFzeTiY.js                                      0.27 kB │ gzip:   0.22 kB
+dist/assets/timer-Cmz2mOB1.js                                       0.27 kB │ gzip:   0.21 kB
+dist/assets/x-DXzOy_cT.js                                           0.28 kB │ gzip:   0.20 kB
+dist/assets/square-check-big-DQdUtyyX.js                            0.29 kB │ gzip:   0.24 kB
+dist/assets/eye-zPTxvun1.js                                         0.29 kB │ gzip:   0.23 kB
+dist/assets/rotate-ccw-clock-DA3yG5fb.js                            0.30 kB │ gzip:   0.24 kB
+dist/assets/git-commit-horizontal-CkSP4-Fr.js                       0.31 kB │ gzip:   0.23 kB
+dist/assets/inbox-D7gy9y56.js                                       0.32 kB │ gzip:   0.25 kB
+dist/assets/monitor-up-CLfmhE8W.js                                  0.34 kB │ gzip:   0.25 kB
+dist/assets/folder-plus-yku49Q6H.js                                 0.34 kB │ gzip:   0.25 kB
+dist/assets/box-Ov2yKwUN.js                                         0.35 kB │ gzip:   0.25 kB
+dist/assets/message-square-plus-B09RunPO.js                         0.35 kB │ gzip:   0.26 kB
+dist/assets/chunk-5VM5RSS4-ZNzvKenW.js                              0.36 kB │ gzip:   0.27 kB
+dist/assets/heart-pulse-BII6l_Fz.js                                 0.37 kB │ gzip:   0.28 kB
+dist/assets/message-square-text-B4JB0rTY.js                         0.38 kB │ gzip:   0.27 kB
+dist/assets/scroll-text-CoMjp-UP.js                                 0.38 kB │ gzip:   0.26 kB
+dist/assets/key-round-CNPW9ciM.js                                   0.39 kB │ gzip:   0.28 kB
+dist/assets/hand-DKoLMszT.js                                        0.44 kB │ gzip:   0.28 kB
+dist/assets/eye-off-D8Yzwiam.js                                     0.47 kB │ gzip:   0.30 kB
+dist/assets/star-KIKiBQkC.js                                        0.51 kB │ gzip:   0.32 kB
+dist/assets/git-pull-request-DqcygK6A.js                            0.52 kB │ gzip:   0.32 kB
+dist/assets/flowDiagram-IUGLLWBU-BjdlRKJA.js                        0.56 kB │ gzip:   0.31 kB
+dist/assets/chunk-VQ5W62QI-DqS45vup.js                              0.57 kB │ gzip:   0.40 kB
+dist/assets/thumbs-up-BYjCXUwO.js                                   0.61 kB │ gzip:   0.35 kB
+dist/assets/chunk-J5ZVWO5B-oDCd-gWO.js                              0.63 kB │ gzip:   0.43 kB
+dist/assets/highlighted-body-KQOG7T2V-B4_V7EKs.js                   0.64 kB │ gzip:   0.41 kB
+dist/assets/square-terminal-DLtjAa5p.js                             0.65 kB │ gzip:   0.39 kB
+dist/assets/infoDiagram-MVDRKAX5-Bk5Gautc.js                        0.65 kB │ gzip:   0.42 kB
+dist/assets/api-CNrlVmfY.js                                         0.82 kB │ gzip:   0.53 kB
+dist/assets/swimlanesDiagram-AYQRV4AK-DW357RtI.js                   0.83 kB │ gzip:   0.48 kB
+dist/assets/sizeCapture-INFHLROL-3uHXrFqA.js                        0.87 kB │ gzip:   0.51 kB
+dist/assets/chunk-DUW6YSOI-Dgx8z5s3.js                              0.89 kB │ gzip:   0.46 kB
+dist/assets/line-DvCR1n0B.js                                        0.94 kB │ gzip:   0.47 kB
+dist/assets/audioDevices-PhW8ipQf.js                                1.06 kB │ gzip:   0.57 kB
+dist/assets/rolldown-runtime-Dd_uD5pT.js                            1.10 kB │ gzip:   0.62 kB
+dist/assets/describe-nk3VbRdY.js                                    1.14 kB │ gzip:   0.67 kB
+dist/assets/ordinal-BDEzSJ7C.js                                     1.17 kB │ gzip:   0.56 kB
+dist/assets/shared-D7l3AJIX.js                                      1.28 kB │ gzip:   0.66 kB
+dist/assets/trajectory-C3GZQbM4.js                                  1.37 kB │ gzip:   0.62 kB
+dist/assets/chunk-ZAUX2LTX-Cy6QwVi_.js                              1.41 kB │ gzip:   0.79 kB
+dist/assets/railroadDiagram-Y72NRBL7-B6Yjkt3m.js                    1.65 kB │ gzip:   0.76 kB
+dist/assets/TabStrip-D-auid3T.js                                    1.68 kB │ gzip:   0.98 kB
+dist/assets/ConversationMemoryPanel-jukkD-g0.js                     1.73 kB │ gzip:   0.87 kB
+dist/assets/abnfDiagram-WEYOIA3C-IE9dhLCZ.js                        1.84 kB │ gzip:   0.89 kB
+dist/assets/chunk-UHW7PFBP-DRVXd7P1.js                              1.95 kB │ gzip:   0.95 kB
+dist/assets/chunk-55XCU76K-C3QRU6DO.js                              1.97 kB │ gzip:   0.88 kB
+dist/assets/pegDiagram-ECIUJNBX-CzWj3E3Q.js                         2.01 kB │ gzip:   0.94 kB
+dist/assets/ebnfDiagram-V4P3TTPT-DCUzg1ly.js                        2.05 kB │ gzip:   0.89 kB
+dist/assets/dist-B_J_HbC0.js                                        2.17 kB │ gzip:   0.97 kB
+dist/assets/task-hud-CZhlOWOJ.js                                    2.20 kB │ gzip:   1.00 kB
+dist/assets/path-fybaL0A-.js                                        2.27 kB │ gzip:   0.98 kB
+dist/assets/ToolSearchModePanel-54yVkEmH.js                         2.30 kB │ gzip:   1.14 kB
+dist/assets/TimelineNav-BUdM45p8.js                                 2.53 kB │ gzip:   1.42 kB
+dist/assets/SettingsProposalCards-CKulJBK5.js                       2.54 kB │ gzip:   1.36 kB
+dist/assets/ConnectorDirectory-BXUV8BVd.js                          2.74 kB │ gzip:   1.36 kB
+dist/assets/LspStatusSection-C8prxJd9.js                            2.79 kB │ gzip:   1.35 kB
+dist/assets/pet-overlay-BFrPGCj1.js                                 2.99 kB │ gzip:   1.52 kB
+dist/assets/ChaptersNav-B2S6jqGF.js                                 3.05 kB │ gzip:   1.53 kB
+dist/assets/RemoteFolderDialog-C1ZoqjZQ.js                          3.10 kB │ gzip:   1.65 kB
+dist/assets/createLucideIcon-BPPz9RSd.js                            3.13 kB │ gzip:   1.50 kB
+dist/assets/RecipesDialog-CQdNGFbh.js                               3.15 kB │ gzip:   1.60 kB
+dist/assets/FallbackModelsDialog-B4_ZyOW-.js                        3.19 kB │ gzip:   1.50 kB
+dist/assets/ConversationModelSettings-B_6zBeU_.js                   3.27 kB │ gzip:   1.46 kB
+dist/assets/Palette-BKAvqOa5.js                                     3.28 kB │ gzip:   1.57 kB
+dist/assets/arc-DgcGdgmL.js                                         3.47 kB │ gzip:   1.46 kB
+dist/assets/IDEManagerDialog-VhK_eTHd.js                            3.60 kB │ gzip:   1.61 kB
+dist/assets/RunLimitsPanel-QruTnsPZ.js                              3.69 kB │ gzip:   1.70 kB
+dist/assets/ConfigTransferPanel-DHPD-339.js                         3.86 kB │ gzip:   1.88 kB
+dist/assets/ConversationQueuePanel-BmttUfAL.js                      3.89 kB │ gzip:   1.63 kB
+dist/assets/dashboard-DxFAwj0F.js                                   3.97 kB │ gzip:   1.98 kB
+dist/assets/SecretsPanel-atOh21eg.js                                4.00 kB │ gzip:   1.59 kB
+dist/assets/ForkTree-irg_TxTv.js                                    4.03 kB │ gzip:   1.93 kB
+dist/assets/InitDialog-gVORxgEv.js                                  4.07 kB │ gzip:   1.86 kB
+dist/assets/StorageRetentionPanel-CMcoqa6Q.js                       4.09 kB │ gzip:   1.70 kB
+dist/assets/ResumePickerDialog-5e6_iSrY.js                          4.28 kB │ gzip:   1.94 kB
+dist/assets/diagram-I5XIIV2D-B_Xnx7vU.js                            4.34 kB │ gzip:   1.89 kB
+dist/assets/OutputStyleSettingsPanel-Dv8KgQ0t.js                    4.49 kB │ gzip:   2.09 kB
+dist/assets/defaultLocale-BFoDCU3G.js                               4.63 kB │ gzip:   2.12 kB
+dist/assets/AudioDevicesPanel-CAQ-JEgH.js                           4.66 kB │ gzip:   1.77 kB
+dist/assets/ScreenRecorderDialog-DHV0o4Cz.js                        4.79 kB │ gzip:   2.26 kB
+dist/assets/SideChat-skwj1qZR.js                                    5.00 kB │ gzip:   2.62 kB
+dist/assets/TelegramPanel-DepzgX8J.js                               5.29 kB │ gzip:   2.45 kB
+dist/assets/NetworkSettingsPanel-CtghtjRl.js                        5.34 kB │ gzip:   2.50 kB
+dist/assets/chunk-4EMNKR2T-BoqBx_Xj.js                              5.43 kB │ gzip:   2.50 kB
+dist/assets/skillsMarketApi-D09YWG6M.js                             5.49 kB │ gzip:   2.14 kB
+dist/assets/linear-DzP0d4la.js                                      5.51 kB │ gzip:   2.25 kB
+dist/assets/voice-hud-DmJspamK.js                                   5.77 kB │ gzip:   2.47 kB
+dist/assets/RunSetupMenu-BK9dA4Z2.js                                5.77 kB │ gzip:   2.70 kB
+dist/assets/chunk-YZO67HFG-HC1wOAWY.js                              5.83 kB │ gzip:   2.68 kB
+dist/assets/PetsPanel-BdPOLG_h.js                                   5.83 kB │ gzip:   2.34 kB
+dist/assets/BrowserRecorderPanel-DYCvJlxc.js                        5.90 kB │ gzip:   2.52 kB
+dist/assets/FeatureLessons-CqeX68iZ.js                              5.95 kB │ gzip:   2.76 kB
+dist/assets/BackgroundTasksPanel-C1584EPS.js                        5.98 kB │ gzip:   2.27 kB
+dist/assets/DesktopTeachPanel-Cp6pn4Nb.js                           6.02 kB │ gzip:   2.34 kB
+dist/assets/diagram-RJA3I4VV-DFbIJZW1.js                            6.07 kB │ gzip:   2.56 kB
+dist/assets/ProfilesPanel-DEobfRVt.js                               6.15 kB │ gzip:   2.42 kB
+dist/assets/TakeoverSection-_jb8JxWB.js                             6.19 kB │ gzip:   2.59 kB
+dist/assets/floating-composer-CHeDmlZ6.js                           6.20 kB │ gzip:   2.64 kB
+dist/assets/pieDiagram-GNMPY74T-6_fbzuIy.js                         6.22 kB │ gzip:   2.60 kB
+dist/assets/MainConfigPanel-BlZ3IyRZ.js                             6.94 kB │ gzip:   2.97 kB
+dist/assets/OnboardingDialog-DDZCcDLq.js                            6.96 kB │ gzip:   2.88 kB
+dist/assets/jsx-runtime-BShSzW0e.js                                 7.11 kB │ gzip:   2.72 kB
+dist/assets/ScriptToolsPanel-CczdWAk1.js                            7.24 kB │ gzip:   3.06 kB
+dist/assets/CustomCommandsPanel-BeoD6zZq.js                         7.26 kB │ gzip:   3.18 kB
+dist/assets/LinearIntegrationPanel-DaYHEPos.js                      7.66 kB │ gzip:   2.84 kB
+dist/assets/TodoPanel-CvzZMNi4.js                                   7.97 kB │ gzip:   3.04 kB
+dist/assets/UltraplanPanel-CUmSJAql.js                              8.06 kB │ gzip:   2.82 kB
+dist/assets/diagram-ODIL2UCW-Dvp8lvYq.js                            8.12 kB │ gzip:   3.64 kB
+dist/assets/ThinkbackPage-CUZyVqjk.js                               8.15 kB │ gzip:   3.24 kB
+dist/assets/U4SettingsPanel-B6kzEqA_.js                             8.22 kB │ gzip:   2.88 kB
+dist/assets/ShortcutsPanel-Br067yRI.js                              8.28 kB │ gzip:   3.12 kB
+dist/assets/IntrospectionPanel-UL1Ry-sX.js                          8.46 kB │ gzip:   3.49 kB
+dist/assets/WorkflowManagerDialog-BOFEh0UP.js                       8.75 kB │ gzip:   3.12 kB
+dist/assets/PaneWorkspace-BbaFeWB1.js                               8.79 kB │ gzip:   3.49 kB
+dist/assets/ProgressCapsule-DyYZf48V.js                             9.09 kB │ gzip:   3.48 kB
+dist/assets/LocalModelsPanel-BglFVdlP.js                            9.11 kB │ gzip:   3.27 kB
+dist/assets/ExtensionPackagesPanel-BE6zo-Ph.js                      9.23 kB │ gzip:   3.61 kB
+dist/assets/cynefinDiagram-WF24UDRP-H-ki-q9M.js                     9.94 kB │ gzip:   3.51 kB
+dist/assets/ExtensionCatalogPanel-Dgl7PlUu.js                      10.12 kB │ gzip:   4.05 kB
+dist/assets/BoardPage-C09BTiqm.js                                  10.21 kB │ gzip:   3.92 kB
+dist/assets/chunk-ZCHMQSOR-CH1XoInL.js                             10.39 kB │ gzip:   4.33 kB
+dist/assets/diagram-PFBEJUXE-CZ2ngP9W.js                           10.92 kB │ gzip:   4.26 kB
+dist/assets/PlatformSettingsPanel-D53YiMxG.js                      12.19 kB │ gzip:   3.18 kB
+dist/assets/McpResourcesPanel-BuRrFc3_.js                          12.43 kB │ gzip:   3.87 kB
+dist/assets/RecipeManagerPanel-PfcL1diw.js                         12.63 kB │ gzip:   4.28 kB
+dist/assets/LocalModelsSettings-nj0Vcrrt.js                        13.17 kB │ gzip:   4.42 kB
+dist/assets/GroupsView-C1zXj2JR.js                                 13.20 kB │ gzip:   4.54 kB
+dist/assets/HooksPanel-BanwBnla.js                                 13.21 kB │ gzip:   4.81 kB
+dist/assets/VoiceOverlay-C2o21WDM.js                               13.31 kB │ gzip:   5.26 kB
+dist/assets/AgentsOverview-CalOYt2S.js                             13.60 kB │ gzip:   4.68 kB
+dist/assets/McpServersPanel-pnCFnlPD.js                            13.77 kB │ gzip:   4.96 kB
+dist/assets/chunk-HNE4Q36P-B2sNwryP.js                             14.84 kB │ gzip:   4.19 kB
+dist/assets/CreatePage-DpRTTs70.js                                 15.03 kB │ gzip:   6.19 kB
+dist/assets/ImportPanel-ZF7JcDUA.js                                15.13 kB │ gzip:   5.12 kB
+dist/assets/chunk-2E7WHVMD-VHgV3Voh.js                             15.64 kB │ gzip:   4.35 kB
+dist/assets/diagram-CBK3MWTC-DbUWUgWV.js                           15.75 kB │ gzip:   5.52 kB
+dist/assets/mermaid-parser.core-3nUHa5bU.js                        16.60 kB │ gzip:   3.92 kB
+dist/assets/WorkspaceSecurityPanel-Z-SAhIxK.js                     17.06 kB │ gzip:   5.77 kB
+dist/assets/ishikawaDiagram-HPEHV2GE-8l26cYaG.js                   17.30 kB │ gzip:   6.54 kB
+dist/assets/UsagePanel-DqNMd9jI.js                                 18.36 kB │ gzip:   6.31 kB
+dist/assets/kanban-definition-FNSA4HC5-Dz-z10mY.js                 20.26 kB │ gzip:   7.15 kB
+dist/assets/dist-0Y6LIZUO.js                                       21.04 kB │ gzip:   7.28 kB
+dist/assets/ConsolePage-Dok8ztwe.js                                21.11 kB │ gzip:   6.39 kB
+dist/assets/AppearanceNotificationsPanel-CPjSX5Hg.js               22.59 kB │ gzip:   7.15 kB
+dist/assets/sankeyDiagram-SY24JHO5-YzkAFoRX.js                     22.79 kB │ gzip:   8.26 kB
+dist/assets/journeyDiagram-BOSHW7O7-CbPbu9Zf.js                    23.15 kB │ gzip:   8.16 kB
+dist/assets/mindmap-definition-6OY57UG3-BmK-VocJ.js                23.66 kB │ gzip:   8.06 kB
+dist/assets/graphlib-DS17s2tU.js                                   23.90 kB │ gzip:   8.31 kB
+dist/assets/LibraryPage-DpLCbZU5.js                                24.27 kB │ gzip:   7.68 kB
+dist/assets/wardleyDiagram-IVAIDKWA-B2d_3BZ1.js                    25.20 kB │ gzip:   6.55 kB
+dist/assets/rough.esm-Dy-Kn_BL.js                                  27.10 kB │ gzip:   8.85 kB
+dist/assets/bundle-mjs-CdK3cBzO.js                                 27.53 kB │ gzip:   8.71 kB
+dist/assets/SettingsIntegrationsPanel-DLJ-wd4M.js                  27.73 kB │ gzip:   8.25 kB
+dist/assets/x2-Benqn_zo.js                                         28.61 kB │ gzip:   8.72 kB
+dist/assets/gitGraphDiagram-PDYL7XHY-rQX7uNsG.js                   29.01 kB │ gzip:   8.55 kB
+dist/assets/ChannelsSettings-CCwH6oKX.js                           29.14 kB │ gzip:   8.63 kB
+dist/assets/timeline-definition-JXYKGLGB-ZwMpO-I5.js               30.45 kB │ gzip:  10.03 kB
+dist/assets/erDiagram-KYQIGQAA-BEOpDOac.js                         30.65 kB │ gzip:  10.57 kB
+dist/assets/chunk-7S6XSTFO-B7FbydsN.js                             30.75 kB │ gzip:   8.51 kB
+dist/assets/requirementDiagram-EQYSW5RA-jhZy14KT.js                31.07 kB │ gzip:   9.82 kB
+dist/assets/CodePage-RccWNMqV.js                                   31.52 kB │ gzip:   9.40 kB
+dist/assets/quadrantDiagram-D57K4MC3-DdgnAKYV.js                   33.52 kB │ gzip:   9.74 kB
+dist/assets/MessageThread-DSnomxOy.js                              34.56 kB │ gzip:  11.84 kB
+dist/assets/ChangesPanel-LeMQrW3K.js                               36.65 kB │ gzip:  11.58 kB
+dist/assets/chunk-WQQL4CDK-CIU_9vJQ.js                             37.88 kB │ gzip:   8.20 kB
+dist/assets/AgentsPage-p4znC3eO.js                                 38.72 kB │ gzip:  11.28 kB
+dist/assets/DevicesPage-D4o7Ykjo.js                                38.92 kB │ gzip:  10.44 kB
+dist/assets/WorkbenchPage-Dt-CRleE.js                              38.97 kB │ gzip:  12.34 kB
+dist/assets/vennDiagram-Q3Y3IDCW-LKPj_Zpo.js                       41.18 kB │ gzip:  15.11 kB
+dist/assets/stateDiagram-v2-A6IESKWZ-BZ69b0A4.js                   41.55 kB │ gzip:  13.89 kB
+dist/assets/blockDiagram-RJAE7QA3-CF9ubIxw.js                      42.44 kB │ gzip:  13.87 kB
+dist/assets/xychartDiagram-4URNHDU4-GlAuL5t4.js                    44.52 kB │ gzip:  12.35 kB
+dist/assets/src-BbHDS76q.js                                        45.66 kB │ gzip:  16.00 kB
+dist/assets/dagre-NK4GIZVX-DhO9oFuX.js                             47.83 kB │ gzip:  17.11 kB
+dist/assets/DiagnosticsPanel-CSABNohU.js                           48.82 kB │ gzip:  13.65 kB
+dist/assets/classDiagram-v2-4MYWR3UA-CW_nOtzi.js                   49.70 kB │ gzip:  16.15 kB
+dist/assets/SettingsPage-lwO2fLm-.js                               49.74 kB │ gzip:  14.46 kB
+dist/assets/MemoryPage-DTHxlRZZ.js                                 50.44 kB │ gzip:  14.59 kB
+dist/assets/chunk-AQDTSKZB-TGPEvJbw.js                             51.23 kB │ gzip:  16.63 kB
+dist/assets/AutomationPage-CkjK9oAL.js                             56.01 kB │ gzip:  16.94 kB
+dist/assets/EvolutionPage-ES1G4pnH.js                              56.03 kB │ gzip:  16.34 kB
+dist/assets/SkillsMarketPage-pB48TIBl.js                           58.97 kB │ gzip:  16.53 kB
+dist/assets/dist-LwdjLgQr.js                                       60.82 kB │ gzip:  19.67 kB
+dist/assets/chunk-NQOKRVIF-ClvPKnF6.js                             62.79 kB │ gzip:  20.36 kB
+dist/assets/c4Diagram-XDPPPE54-C3YZYtk0.js                         65.08 kB │ gzip:  18.61 kB
+dist/assets/ganttDiagram-R7GPNTJY-p-_FzIwn.js                      70.01 kB │ gzip:  23.02 kB
+dist/assets/diagram-TYUNFSNR-DQBmQxbR.js                           80.45 kB │ gzip:  25.15 kB
+dist/assets/cose-bilkent-JH36ORCC-B-PA8joy.js                      81.22 kB │ gzip:  21.52 kB
+dist/assets/mermaid.core-BpgOnDU5.js                               86.44 kB │ gzip:  29.58 kB
+dist/assets/swimlanes-B3ENRKFQ-gZB1m_OC.js                        106.44 kB │ gzip:  36.22 kB
+dist/assets/chunk-HAGFOTED-7oKy-tBw.js                            115.56 kB │ gzip:  29.28 kB
+dist/assets/sequenceDiagram-BLEHNHQU-D05G7Qge.js                  117.67 kB │ gzip:  31.37 kB
+dist/assets/client-BYH8cd4I.js                                    133.42 kB │ gzip:  43.38 kB
+dist/assets/architectureDiagram-ZHVYKT53-B0wZz1ve.js              148.87 kB │ gzip:  41.11 kB
+dist/assets/usecaseDiagram-WPOLBNNX-C9TZ7TNY.js                   187.90 kB │ gzip:  49.20 kB
+dist/assets/Inspector-BCuhayIF.js                                 212.46 kB │ gzip:  60.35 kB
+dist/assets/chunk-DSNLSHJZ-_qHCNw3F.js                            240.37 kB │ gzip:  39.96 kB
+dist/assets/katex-B_JcIwqj.js                                     258.80 kB │ gzip:  77.65 kB
+dist/assets/xterm-_bgiv7-h.js                                     332.43 kB │ gzip:  83.51 kB
+dist/assets/cytoscape.esm-CHBj4VkZ.js                             434.61 kB │ gzip: 137.74 kB
+dist/assets/chunk-NGNAAXSQ-C2Wy9Xmz.js                            629.04 kB │ gzip: 127.32 kB
+dist/assets/elk-QONTBCTQ-DILdAKNh.js                            1,462.90 kB │ gzip: 455.89 kB
+dist/assets/app-DYFL5sIv.js                                     2,467.99 kB │ gzip: 798.74 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0msrc/renderer/components/settings/ExpertModePanel.tsx is dynamically imported by src/renderer/App.tsx but also statically imported by src/renderer/components/Composer.tsx, dynamic import will not move module into another chunk.
+
+✓ built in 4.39s
+npm notice run @atlas/frontend@0.1.1 package:backend
+npm notice run node scripts/build-backend.mjs && node scripts/package-sqlite.mjs
+211 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.7
+211 INFO: Python: 3.14.7
+233 INFO: Platform: Windows-11-10.0.26200-SP0
+234 INFO: Python environment: D:\Atlas\core\.venv
+236 INFO: wrote D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\backend-build\atlas_backend.spec
+245 INFO: Removing temporary files and cleaning cache in C:\Users\25011\AppData\Local\pyinstaller
+13736 WARNING: Failed to collect submodules for 'litellm.proxy.ui_crud_endpoints' because importing 'litellm.proxy.ui_crud_endpoints' raised: ModuleNotFoundError: No module named 'redis'
+5767 WARNING: Failed to collect submodules for 'browser_use.llm.oci_raw' because importing 'browser_use.llm.oci_raw' raised: ModuleNotFoundError: No module named 'oci'
+184282 INFO: Module search paths (PYTHONPATH):
+['D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro',
+ 'D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro\\core',
+ 'C:\\Users\\25011\\AppData\\Local\\Programs\\Python\\Python314\\python314.zip',
+ 'C:\\Users\\25011\\AppData\\Local\\Programs\\Python\\Python314\\DLLs',
+ 'C:\\Users\\25011\\AppData\\Local\\Programs\\Python\\Python314\\Lib',
+ 'C:\\Users\\25011\\AppData\\Local\\Programs\\Python\\Python314',
+ 'D:\\Atlas\\core\\.venv',
+ 'D:\\Atlas\\core\\.venv\\Lib\\site-packages',
+ '__editable__.hermes_agent-0.0.0.finder.__path_hook__',
+ 'D:\\Atlas\\core',
+ 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\win32',
+ 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\win32\\lib',
+ 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\pythonwin',
+ 'D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro\\core',
+ 'D:\\hermes-agent']
+184990 INFO: Appending 'binaries' from .spec
+184991 INFO: Appending 'datas' from .spec
+186949 INFO: checking Analysis
+186949 INFO: Building Analysis because Analysis-00.toc is non existent
+186949 INFO: Looking for Python shared library...
+186949 INFO: Using Python shared library: C:\Users\25011\AppData\Local\Programs\Python\Python314\python314.dll
+186949 INFO: Running Analysis Analysis-00.toc
+186949 INFO: Target bytecode optimization level: 0
+186949 INFO: Initializing module dependency graph...
+186951 INFO: Initializing module graph hook caches...
+186996 INFO: Analyzing modules for base_library.zip ...
+189035 INFO: Processing standard module hook 'hook-encodings.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+189679 INFO: Processing standard module hook 'hook-pickle.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+189951 INFO: Processing standard module hook 'hook-math.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+190155 INFO: Processing standard module hook 'hook-difflib.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+190177 INFO: Processing standard module hook 'hook-heapq.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+193564 INFO: Caching module dependency graph...
+193613 INFO: Analyzing D:\Atlas\.worktrees\zcode-par10-win-release-repro\core\atlas\desktop_entry.py
+193858 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+194031 INFO: Processing standard module hook 'hook-xml.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+194410 INFO: Processing standard module hook 'hook-sysconfig.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+194479 INFO: Processing standard module hook 'hook-_ctypes.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+195166 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+195178 INFO: SetuptoolsInfo: initializing cached setuptools info...
+197873 INFO: Processing standard module hook 'hook-rich.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+199143 INFO: Processing standard module hook 'hook-pygments.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+202517 INFO: Processing standard module hook 'hook-platform.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+202945 INFO: Processing standard module hook 'hook-webbrowser.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+203522 INFO: Processing standard module hook 'hook-pydantic.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+204762 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+205963 INFO: Processing standard module hook 'hook-anyio.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+207681 INFO: Processing standard module hook 'hook-opentelemetry.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+208906 INFO: Processing standard module hook 'hook-uvicorn.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+210930 INFO: Processing standard module hook 'hook-websockets.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+212185 INFO: Processing standard module hook 'hook-urllib3.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+212319 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+212322 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+212330 INFO: Processing standard module hook 'hook-setuptools.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+212354 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+212398 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+212401 INFO: Setuptools: 'jaraco' appears to be a partial setuptools-vendored copy - extending search paths to ['D:\\Atlas\\core\\.venv\\Lib\\site-packages\\jaraco', 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\setuptools\\_vendor\\jaraco']!
+212405 INFO: Processing pre-safe-import-module hook 'hook-jaraco.functools.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+212420 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+212576 INFO: Processing standard module hook 'hook-_osx_support.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+212598 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+212867 INFO: Processing pre-safe-import-module hook 'hook-jaraco.text.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+212870 INFO: Setuptools: 'jaraco.text' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.text'!
+212933 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+212939 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+212946 INFO: Processing pre-safe-import-module hook 'hook-jaraco.context.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+213511 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+214090 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+214092 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+214818 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+215030 INFO: Processing standard module hook 'hook-cryptography.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+216977 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+217461 INFO: Processing standard module hook 'hook-certifi.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+218640 INFO: Processing standard module hook 'hook-pywintypes.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+219079 INFO: Processing standard module hook 'hook-jsonschema.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+219390 INFO: Processing standard module hook 'hook-jsonschema_specifications.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+220361 INFO: Processing standard module hook 'hook-keyring.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+221372 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+221417 INFO: Processing standard module hook 'hook-importlib_metadata.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+221474 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+221589 INFO: Processing standard module hook 'hook-sqlite3.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+222983 INFO: Processing standard module hook 'hook-PIL.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+223092 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+223707 INFO: Processing standard module hook 'hook-numpy.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+226141 INFO: Processing standard module hook 'hook-psutil.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+226912 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+227058 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+227849 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+240568 INFO: Processing standard module hook 'hook-orjson.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+241601 INFO: Processing standard module hook 'hook-jinja2.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+252149 INFO: Processing standard module hook 'hook-pytest.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+253185 INFO: Processing standard module hook 'hook-py.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+259572 INFO: Processing standard module hook 'hook-regex.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+260081 INFO: Processing standard module hook 'hook-docx.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+260715 INFO: Processing standard module hook 'hook-lxml.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+261695 INFO: Processing standard module hook 'hook-lxml.etree.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+262323 INFO: Processing standard module hook 'hook-openpyxl.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+264430 INFO: Processing standard module hook 'hook-pptx.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+269907 INFO: Processing standard module hook 'hook-pythoncom.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+270386 INFO: Processing standard module hook 'hook-comtypes.client.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+D:\Atlas\core\.venv\Lib\site-packages\pywinauto\keyboard.py:105: SyntaxWarning: "\;" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\;"? A raw string is also an option.
+  option only affects the behavior of keys matching [-=[]\;',./a-zA-Z0-9 ].  Note
+D:\Atlas\core\.venv\Lib\site-packages\pywinauto\linux\keyboard.py:55: SyntaxWarning: "\e" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\e"? A raw string is also an option.
+  '\e': "Escape",
+271788 INFO: Processing pre-safe-import-module hook 'hook-win32com.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\pre_safe_import_module'
+272201 INFO: Processing standard module hook 'hook-win32com.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+272876 INFO: Processing standard module hook 'hook-babel.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+274915 INFO: Processing standard module hook 'hook-dateutil.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+275173 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+275598 INFO: Processing standard module hook 'hook-dateparser.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+276468 INFO: Processing standard module hook 'hook-pytz.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+277703 INFO: Processing standard module hook 'hook-dateparser.utils.strptime.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+284535 INFO: Processing standard module hook 'hook-pycparser.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+285103 INFO: Processing standard module hook 'hook-botocore.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+296472 INFO: Processing standard module hook 'hook-boto3.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+307523 INFO: Processing standard module hook 'hook-fsspec.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+309506 INFO: Processing standard module hook 'hook-onnxruntime.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+309806 INFO: Processing pre-safe-import-module hook 'hook-tensorflow.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\pre_safe_import_module'
+311999 INFO: Processing standard module hook 'hook-psycopg_binary.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+312687 INFO: Processing standard module hook 'hook-sqlalchemy.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+324934 INFO: Processing standard module hook 'hook-markdown.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+D:\Atlas\core\.venv\Lib\site-packages\schedula\utils\form\server\credits\stripe\webhook.py:142: SyntaxWarning: "\d" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\d"? A raw string is also an option.
+  _re_freq = re.compile("^(?P<interval>[1-9]\d*)?(?P<freq>[MWDYhms])$")
+326639 INFO: Processing standard module hook 'hook-wcwidth.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+328110 INFO: Processing standard module hook 'hook-apscheduler.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+328984 INFO: Processing standard module hook 'hook-cv2.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+D:\Atlas\core\.venv\Lib\site-packages\rapidocr\inference_engine\pytorch\networks\heads\multiheadAttention.py:14: SyntaxWarning: "\d" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\d"? A raw string is also an option.
+  \text{MultiHead}(Q, K, V) = \text{Concat}(head_1,\dots,head_h)W^O
+333871 INFO: Processing standard module hook 'hook-shapely.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+336178 INFO: Processing standard module hook 'hook-Crypto.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+339219 INFO: Processing standard module hook 'hook-pynput.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+344578 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+354267 INFO: Processing standard module hook 'hook-google.api_core.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+362583 INFO: Processing standard module hook 'hook-scipy.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+364368 INFO: Processing standard module hook 'hook-scipy.linalg.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+364520 INFO: Processing standard module hook 'hook-scipy.special._ufuncs.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+366436 INFO: Processing standard module hook 'hook-scipy.spatial._ckdtree.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+367053 INFO: Processing standard module hook 'hook-scipy.spatial.transform.rotation.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+367978 INFO: Processing standard module hook 'hook-scipy.stats._stats.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+368540 INFO: Processing standard module hook 'hook-scipy.sparse.csgraph.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+369464 INFO: Processing standard module hook 'hook-scipy.special._ellip_harm_2.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+391254 INFO: Processing standard module hook 'hook-reportlab.lib.utils.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+391357 INFO: Processing standard module hook 'hook-reportlab.pdfbase._fontdata.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+395099 INFO: Processing standard module hook 'hook-cloudpickle.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+396086 INFO: Analyzing hidden import 'hermes_constants'
+401397 INFO: Processing standard module hook 'hook-ruamel.yaml.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+421800 INFO: Processing standard module hook 'hook-ddgs.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+451282 INFO: Analyzing hidden import 'tiktoken_ext.openai_public'
+451305 INFO: Analyzing hidden import 'atlas.automation.triggers'
+451315 INFO: Analyzing hidden import 'atlas.channels.adapters._vendor.dingtalk_inbound'
+451328 INFO: Analyzing hidden import 'atlas.channels.adapters._vendor.slack_block_kit'
+451354 INFO: Analyzing hidden import 'atlas.channels.adapters._vendor.wecom_crypto'
+451370 INFO: Analyzing hidden import 'atlas.channels.adapters._vendor.wecom_send_queue'
+451381 INFO: Analyzing hidden import 'atlas.channels.adapters.dingtalk'
+D:\Atlas\core\.venv\Lib\site-packages\dingtalk_stream\stream.py:195: SyntaxWarning: 'return' in a 'finally' block
+  return ip
+451530 INFO: Analyzing hidden import 'atlas.channels.adapters.feishu'
+512918 INFO: Analyzing hidden import 'atlas.channels.adapters.slack'
+513067 INFO: Analyzing hidden import 'atlas.channels.adapters.wecom'
+513088 INFO: Analyzing hidden import 'atlas.channels.adapters.whatsapp'
+513108 INFO: Analyzing hidden import 'atlas.cli'
+513418 INFO: Analyzing hidden import 'atlas.desktop_entry'
+513430 INFO: Analyzing hidden import 'atlas.engine.agent.agent_hooks'
+513435 INFO: Analyzing hidden import 'atlas.engine.agent.context_breakdown'
+513452 INFO: Analyzing hidden import 'atlas.engine.atlas_policy'
+513471 INFO: Analyzing hidden import 'atlas.engine.state.derive_messages'
+513477 INFO: Analyzing hidden import 'atlas.engine.tools.environments.daytona'
+513491 INFO: Analyzing hidden import 'atlas.engine.tools.environments.managed_modal'
+513514 INFO: Analyzing hidden import 'atlas.engine.tools.environments.modal'
+513531 INFO: Analyzing hidden import 'atlas.engine.tools.environments.vercel_sandbox'
+513560 INFO: Analyzing hidden import 'atlas.engine.tools.mcp_liveness'
+513566 INFO: Analyzing hidden import 'atlas.evolution.skill_sleep'
+514381 INFO: Analyzing hidden import 'atlas.memory.aml_adapter'
+514406 INFO: Analyzing hidden import 'atlas.memory.library.cleanup'
+514422 INFO: Analyzing hidden import 'atlas.models.cache_diagnostics'
+514439 INFO: Analyzing hidden import 'atlas.run_replay.__main__'
+514455 INFO: Analyzing hidden import 'atlas.runtime.hub'
+514504 INFO: Analyzing hidden import 'atlas.safety.floors'
+514512 INFO: Analyzing hidden import 'atlas.upstream.__main__'
+514589 INFO: Analyzing hidden import 'atlas.websearch.providers._ddgs_worker'
+514597 INFO: Analyzing hidden import 'hermes_cli._update_takeover'
+514614 INFO: Analyzing hidden import 'hermes_cli.auth_commands'
+514679 INFO: Analyzing hidden import 'hermes_cli.auth_oauth_pkce_plugin'
+514704 INFO: Analyzing hidden import 'hermes_cli.claw'
+514732 INFO: Analyzing hidden import 'hermes_cli.container_boot'
+514750 INFO: Analyzing hidden import 'hermes_cli.desktop_update_verify'
+514759 INFO: Analyzing hidden import 'hermes_cli.dingtalk_auth'
+514772 INFO: Analyzing hidden import 'hermes_cli.doctor'
+514994 INFO: Analyzing hidden import 'hermes_cli.gateway_enroll'
+515006 INFO: Analyzing hidden import 'hermes_cli.hooks'
+515027 INFO: Analyzing hidden import 'hermes_cli.managed_uv'
+515034 INFO: Analyzing hidden import 'hermes_cli.npm_engine'
+515038 INFO: Analyzing hidden import 'hermes_cli.pairing'
+515048 INFO: Analyzing hidden import 'hermes_cli.plugin_compat'
+515052 INFO: Analyzing hidden import 'hermes_cli.plugin_events'
+515058 INFO: Analyzing hidden import 'hermes_cli.plugin_host_child'
+515098 INFO: Analyzing hidden import 'hermes_cli.plugins_settings'
+515110 INFO: Analyzing hidden import 'hermes_cli.psutil_android'
+515116 INFO: Analyzing hidden import 'hermes_cli.runtime_paths'
+515121 INFO: Analyzing hidden import 'hermes_cli.session_recap'
+515136 INFO: Analyzing hidden import 'hermes_cli.skin_cmd'
+515144 INFO: Analyzing hidden import 'hermes_cli.update_finish'
+515161 INFO: Analyzing hidden import 'hermes_cli.update_serve_resume'
+515169 INFO: Analyzing hidden import 'hermes_cli.windows_appinstaller_update'
+515386 INFO: Analyzing hidden import 'hermes_cli.windows_store_update'
+515461 INFO: Analyzing hidden import 'pm._marker_eval'
+515467 INFO: Analyzing hidden import 'pm._venv_entry'
+515475 INFO: Analyzing hidden import 'pm.build_env'
+515498 INFO: Analyzing hidden import 'pm.build_operations'
+515519 INFO: Analyzing hidden import 'pm.launch'
+515529 INFO: Analyzing hidden import 'pm.security_packages'
+515544 INFO: Analyzing hidden import 'pm.worker'
+515554 INFO: Analyzing hidden import 'agent.acp_openai_bridge'
+515567 INFO: Analyzing hidden import 'agent.agent_hooks'
+515572 INFO: Analyzing hidden import 'agent.agent_runtime_helpers_dead_connections'
+515581 INFO: Analyzing hidden import 'agent.copilot_acp_client'
+515614 INFO: Analyzing hidden import 'agent.lmstudio_reasoning'
+515621 INFO: Analyzing hidden import 'agent.secret_sources.command'
+515635 INFO: Analyzing hidden import 'agent.transports.anthropic'
+515648 INFO: Analyzing hidden import 'agent.transports.bedrock'
+515657 INFO: Analyzing hidden import 'agent.vault_login_classifier'
+515715 INFO: Analyzing hidden import 'agent.video_gen_provider'
+515731 INFO: Analyzing hidden import 'agent.video_gen_registry'
+515736 INFO: Analyzing hidden import 'litellm.anthropic_interface.exceptions'
+515751 INFO: Analyzing hidden import 'litellm.caching._internal_lru_cache'
+515756 INFO: Analyzing hidden import 'litellm.integrations.custom_sso_handler'
+515761 INFO: Analyzing hidden import 'litellm.integrations.generic_prompt_management'
+515779 INFO: Analyzing hidden import 'litellm.integrations.rubrik'
+515818 INFO: Analyzing hidden import 'litellm.integrations.test_httpx'
+515821 INFO: Analyzing hidden import 'litellm.llms.a2a.chat.guardrail_translation'
+515841 INFO: Analyzing hidden import 'litellm.llms.watsonx.completion.handler'
+515843 INFO: Analyzing hidden import 'litellm.models.base'
+515848 INFO: Analyzing hidden import 'litellm.proxy._logging'
+515853 INFO: Analyzing hidden import 'litellm.proxy.a2a'
+515872 INFO: Analyzing hidden import 'litellm.proxy.a2a.endpoints'
+515879 INFO: Analyzing hidden import 'litellm.proxy.a2a.version_convert'
+515895 INFO: Analyzing hidden import 'litellm.proxy.client'
+515970 INFO: Analyzing hidden import 'litellm.proxy.collector'
+515982 INFO: Analyzing hidden import 'litellm.proxy.compliance_checks'
+515996 INFO: Analyzing hidden import 'litellm.proxy.custom_auth_auto'
+516000 INFO: Analyzing hidden import 'litellm.proxy.custom_prompt_management'
+516005 INFO: Analyzing hidden import 'litellm.proxy.custom_sso'
+516009 INFO: Analyzing hidden import 'litellm.proxy.custom_validate'
+516012 INFO: Analyzing hidden import 'litellm.proxy.lambda'
+516021 INFO: Analyzing hidden import 'litellm.proxy.mcp_tools'
+516025 INFO: Analyzing hidden import 'litellm.proxy.policy_engine.policy_endpoints'
+516054 INFO: Analyzing hidden import 'litellm.proxy.policy_engine.policy_resolve_endpoints'
+516072 INFO: Analyzing hidden import 'litellm.proxy.post_call_rules'
+516076 INFO: Analyzing hidden import 'litellm.proxy.prisma_migration'
+516080 INFO: Analyzing hidden import 'litellm.proxy.read_model_list'
+516084 INFO: Analyzing hidden import 'litellm.proxy.realtime_endpoints'
+516086 INFO: Analyzing hidden import 'litellm.proxy.realtime_endpoints.endpoints'
+516107 INFO: Analyzing hidden import 'litellm.proxy.vector_store_files_endpoints'
+516109 INFO: Analyzing hidden import 'litellm.proxy.vector_store_files_endpoints.endpoints'
+516134 INFO: Analyzing hidden import 'litellm.proxy_auth'
+516144 INFO: Analyzing hidden import 'litellm.rag.utils'
+516167 INFO: Analyzing hidden import 'litellm.rust_bridge.lifecycle'
+516177 INFO: Analyzing hidden import 'litellm.timeout'
+516182 INFO: Analyzing hidden import 'langchain_core._security'
+516208 INFO: Analyzing hidden import 'langchain_core._security._ssrf_protection'
+516215 INFO: Analyzing hidden import 'langchain_core.chat_loaders'
+516223 INFO: Analyzing hidden import 'langchain_core.cross_encoders'
+516226 INFO: Analyzing hidden import 'langchain_core.document_loaders'
+516250 INFO: Analyzing hidden import 'langchain_core.indexing'
+516288 INFO: Analyzing hidden import 'langchain_core.indexing.in_memory'
+516296 INFO: Analyzing hidden import 'langchain_core.output_parsers.openai_functions'
+516308 INFO: Analyzing hidden import 'langchain_core.stores'
+516317 INFO: Analyzing hidden import 'langchain_core.structured_query'
+516325 INFO: Analyzing hidden import 'langchain_core.sys_info'
+516331 INFO: Analyzing hidden import 'langchain_core.utils.html'
+516337 INFO: Analyzing hidden import 'uvicorn.__main__'
+516339 INFO: Analyzing hidden import 'uvicorn.lifespan'
+516341 INFO: Analyzing hidden import 'uvicorn.lifespan.off'
+516346 INFO: Analyzing hidden import 'uvicorn.lifespan.on'
+516355 INFO: Analyzing hidden import 'uvicorn.loops'
+516357 INFO: Analyzing hidden import 'uvicorn.loops.asyncio'
+516361 INFO: Analyzing hidden import 'uvicorn.loops.auto'
+516369 INFO: Analyzing hidden import 'uvicorn.loops.zuvloop'
+516377 INFO: Analyzing hidden import 'uvicorn.protocols.http.auto'
+516380 INFO: Analyzing hidden import 'uvicorn.protocols.websockets.auto'
+516383 INFO: Analyzing hidden import 'uvicorn.workers'
+516389 INFO: Analyzing hidden import 'fastapi.__main__'
+516400 INFO: Analyzing hidden import 'fastapi.middleware.gzip'
+516413 INFO: Analyzing hidden import 'fastapi.middleware.httpsredirect'
+516419 INFO: Analyzing hidden import 'fastapi.middleware.trustedhost'
+516427 INFO: Analyzing hidden import 'fastapi.middleware.wsgi'
+516438 INFO: Analyzing hidden import 'fastapi.templating'
+516448 INFO: Analyzing hidden import 'fastapi.testclient'
+516474 INFO: Analyzing hidden import 'apscheduler.datastores.mongodb'
+516517 INFO: Analyzing hidden import 'apscheduler.datastores.sqlalchemy'
+516580 INFO: Analyzing hidden import 'apscheduler.eventbrokers.asyncpg'
+516593 INFO: Analyzing hidden import 'apscheduler.eventbrokers.mqtt'
+516606 INFO: Analyzing hidden import 'apscheduler.eventbrokers.psycopg'
+516618 INFO: Analyzing hidden import 'apscheduler.eventbrokers.redis'
+516627 INFO: Analyzing hidden import 'apscheduler.executors.qt'
+516644 INFO: Analyzing hidden import 'apscheduler.serializers.cbor'
+516655 INFO: Analyzing hidden import 'apscheduler.triggers.calendarinterval'
+516662 INFO: Analyzing hidden import 'apscheduler.triggers.combining'
+516669 INFO: Analyzing hidden import 'cua_driver.__main__'
+516673 INFO: Analyzing hidden import 'cua_driver.fleet'
+516684 INFO: Analyzing hidden import 'pywinauto.clipboard'
+516692 INFO: Analyzing hidden import 'pywinauto.fuzzydict'
+516697 INFO: Analyzing hidden import 'pywinauto.linux.clipboard'
+516701 INFO: Analyzing hidden import 'pywinauto.taskbar'
+516706 INFO: Analyzing hidden import 'pywinauto.tests._menux'
+516709 INFO: Analyzing hidden import 'pywinauto.tests.allcontrols'
+516712 INFO: Analyzing hidden import 'pywinauto.tests.asianhotkey'
+516721 INFO: Analyzing hidden import 'pywinauto.tests.comboboxdroppedheight'
+516725 INFO: Analyzing hidden import 'pywinauto.tests.comparetoreffont'
+516729 INFO: Analyzing hidden import 'pywinauto.tests.leadtrailspaces'
+516733 INFO: Analyzing hidden import 'pywinauto.tests.miscvalues'
+516737 INFO: Analyzing hidden import 'pywinauto.tests.missalignment'
+516741 INFO: Analyzing hidden import 'pywinauto.tests.missingextrastring'
+516746 INFO: Analyzing hidden import 'pywinauto.tests.overlapping'
+516751 INFO: Analyzing hidden import 'pywinauto.tests.translation'
+516755 INFO: Analyzing hidden import 'pywinauto.tests.truncation'
+516767 INFO: Analyzing hidden import 'pywinauto.win32_hooks'
+516784 INFO: Analyzing hidden import 'browser_use.__main__'
+517345 INFO: Analyzing hidden import 'browser_use.agent.system_prompts'
+517349 INFO: Analyzing hidden import 'browser_use.browser.python_highlights'
+517364 INFO: Analyzing hidden import 'browser_use.browser.watchdogs.crash_watchdog'
+517384 INFO: Analyzing hidden import 'browser_use.controller'
+517388 INFO: Analyzing hidden import 'browser_use.exceptions'
+517392 INFO: Analyzing hidden import 'browser_use.mcp'
+517478 INFO: Analyzing hidden import 'browser_use.mcp.__main__'
+517481 INFO: Analyzing hidden import 'browser_use.mcp.cli_mcp'
+517491 INFO: Analyzing hidden import 'dbos._docker_pg_helper'
+517499 INFO: Analyzing hidden import 'claude_agent_sdk._cli_version'
+517501 INFO: Analyzing hidden import 'claude_agent_sdk.testing'
+517521 INFO: Analyzing hidden import 'acp._cookies'
+517526 INFO: Analyzing hidden import 'acp._sse'
+517531 INFO: Analyzing hidden import 'acp.contrib'
+517567 INFO: Analyzing hidden import 'acp.http'
+517608 INFO: Analyzing hidden import 'acp.http.asgi'
+517636 INFO: Processing module hooks (post-graph stage)...
+520025 INFO: Processing standard module hook 'hook-lxml.isoschematron.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+520238 WARNING: Hidden import "pycparser.lextab" not found!
+520238 WARNING: Hidden import "pycparser.yacctab" not found!
+521340 INFO: Processing standard module hook 'hook-win32ctypes.core.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+523872 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+527574 WARNING: Hidden import "scipy.special._cdflib" not found!
+527613 INFO: Processing standard module hook 'hook-sqlalchemy.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+529118 WARNING: Hidden import "pysqlite2" not found!
+529123 WARNING: Hidden import "MySQLdb" not found!
+529958 INFO: Processing standard module hook 'hook-lxml.objectify.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+529963 INFO: Processing standard module hook 'hook-tzdata.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+533137 INFO: Performing binary vs. data reclassification (10285 entries)
+556181 INFO: Looking for ctypes DLLs
+556555 WARNING: Library GetUserDefaultUILanguage.dll required via ctypes not found
+557404 INFO: Analyzing run-time hooks ...
+557481 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+557487 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+557497 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+557502 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+557506 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+557511 INFO: Including run-time hook 'pyi_rth_pywintypes.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+557515 INFO: Including run-time hook 'pyi_rth_pythoncom.py' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+557931 INFO: Creating base_library.zip...
+557962 INFO: Looking for dynamic libraries
+INFO     [comtypes.client._code_cache] Imported existing <module 'comtypes.gen' from 'D:\\Atlas\\core\\.venv\\Lib\\site-packages\\comtypes\\gen\\__init__.py'>
+INFO     [comtypes.client._code_cache] Using writeable comtypes cache directory: 'D:\Atlas\core\.venv\Lib\site-packages\comtypes\gen'
+D:\Atlas\core\.venv\Lib\site-packages\pywinauto\__init__.py:80: UserWarning: Revert to STA COM threading mode
+  warnings.warn("Revert to STA COM threading mode", UserWarning)
+Traceback (most recent call last):
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\building\build_main.py", line 287, in find_binary_dependencies
+    child.call(import_library, package)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\isolated\_parent.py", line 322, in call
+    raise SubprocessDiedError(
+    ...<2 lines>...
+    ) from None
+PyInstaller.isolated._parent.SubprocessDiedError: Child process died calling import_library() with args=('rapidocr.inference_engine.onnxruntime',) and kwargs={}. Its exit code was 3221225477.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\__main__.py", line 321, in <module>
+    run()
+    ~~~^^
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\__main__.py", line 215, in run
+    run_build(pyi_config, spec_file, **vars(args))
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\__main__.py", line 70, in run_build
+    PyInstaller.building.build_main.main(pyi_config, spec_file, **kwargs)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\building\build_main.py", line 1275, in main
+    build(specfile, distpath, workpath, clean_build)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\building\build_main.py", line 1213, in build
+    exec(code, spec_namespace)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\backend-build\atlas_backend.spec", line 53, in <module>
+    a = Analysis(
+        ['D:/Atlas/.worktrees/zcode-par10-win-release-repro/core/atlas/desktop_entry.py'],
+    ...<9 lines>...
+        optimize=0,
+    )
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\building\build_main.py", line 584, in __init__
+    self.__postinit__()
+    ~~~~~~~~~~~~~~~~~^^
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\building\datastruct.py", line 184, in __postinit__
+    self.assemble()
+    ~~~~~~~~~~~~~^^
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\building\build_main.py", line 967, in assemble
+    find_binary_dependencies(self.binaries, collected_packages, self.graph._bindepend_symlink_suppression)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\.venv\Lib\site-packages\PyInstaller\building\build_main.py", line 291, in find_binary_dependencies
+    raise isolated.SubprocessDiedError(
+    ...<2 lines>...
+    ) from e
+PyInstaller.isolated._parent.SubprocessDiedError: Isolated subprocess crashed while importing package 'rapidocr.inference_engine.onnxruntime'! Package import list: ['_distutils_hack', 'importlib.metadata', 'string', 'urllib', 'compression._common', 'compression.zstd', 'compression', 'zipfile', 'zipfile._path', 'email', 'json', 'importlib.resources', 'importlib', 'setuptools', 'setuptools._distutils', 'jaraco.functools', 'setuptools._vendor.jaraco.text', 'jaraco.context', 'setuptools._vendor.backports.tarfile', 'setuptools._vendor.backports', 'setuptools._vendor.backports.tarfile.compat', 'http', 'sysconfig', 'packaging', 'ctypes', 'tomllib', 'setuptools.compat', 'more_itertools', 'setuptools._distutils.command', 'concurrent.futures', 'concurrent.interpreters', 'multiprocessing.dummy', 'xmlrpc', 'pydoc_data', '_pyrepl', 'html', 'xml.parsers', 'xml', 'xml.sax', 'multiprocessing', 'concurrent', 'setuptools._distutils.compat', 'setuptools._vendor.wheel', 'setuptools.config._validate_pyproject', 'packaging.licenses', 'setuptools._vendor.packaging', 'setuptools.config', 'setuptools.command', 'websockets.asyncio', 'websockets.extensions', 'websockets', 'websockets.sync', 'websockets.legacy', 'acp.ws', 'pydantic', 'dotenv', 'pydantic.v1', 'pydantic.plugin', 'annotated_types', 'pydantic.experimental', 'pydantic.deprecated', 'typing_inspection', 'zoneinfo', 'tzdata', 'tzdata.zoneinfo.US', 'tzdata.zoneinfo.Pacific', 'tzdata.zoneinfo.Mexico', 'tzdata.zoneinfo.Indian', 'tzdata.zoneinfo.Europe', 'tzdata.zoneinfo.Etc', 'tzdata.zoneinfo.Chile', 'tzdata.zoneinfo.Canada', 'tzdata.zoneinfo.Brazil', 'tzdata.zoneinfo.Australia', 'tzdata.zoneinfo.Atlantic', 'tzdata.zoneinfo.Asia', 'tzdata.zoneinfo.Arctic', 'tzdata.zoneinfo.Antarctica', 'tzdata.zoneinfo.America.North_Dakota', 'tzdata.zoneinfo.America.Kentucky', 'tzdata.zoneinfo.America.Indiana', 'tzdata.zoneinfo.America.Argentina', 'tzdata.zoneinfo.America', 'tzdata.zoneinfo.Africa', 'tzdata.zoneinfo', 'pygments', 'numpy.typing', 'numpy', 'numpy.strings', 'numpy._utils', 'numpy.core', 'numpy.char', 'numpy.rec', 'numpy.f2py', 'charset_normalizer', 'numpy.f2py._backends', 'numpy.testing', 'psutil', 'numpy.testing._private', 'unittest', 'numpy.ctypeslib', 'numpy.ma', 'numpy.polynomial', 'numpy.random', 'numpy.fft', 'numpy.linalg', 'numpy.matrixlib', 'numpy.lib', 'numpy._core', 'yaml', 'numpy._typing', 'xml.etree', 'defusedxml', 'xml.dom', 'PIL', 'pygments.formatters', 'pygments.styles', 'pygments.lexers', 'pygments.filters', 'rich._unicode_data', 'attr', 'rich', 'markdown_it', 'markdown_it.rules_core', 'markdown_it.rules_inline', 'mdurl', 'markdown_it.common', 'markdown_it.rules_block', 'markdown_it.presets', 'markdown_it.helpers', 'pydantic._internal', 'pydantic_core', 'opentelemetry.trace', 'opentelemetry.metrics', 'opentelemetry.metrics._internal', 'opentelemetry.trace.propagation', 'opentelemetry.environment_variables', 'opentelemetry.attributes', 'opentelemetry.context', 'opentelemetry.sdk.resources', 'opentelemetry.sdk.util', 'opentelemetry.semconv.resource', 'opentelemetry.semconv', 'opentelemetry.sdk.version', 'opentelemetry.sdk.metrics', 'opentelemetry.sdk.metrics._internal.exponential_histogram.mapping', 'opentelemetry.sdk.metrics._internal.exponential_histogram', 'opentelemetry.sdk.metrics._internal.exemplar', 'opentelemetry.sdk.metrics._internal', 'opentelemetry.sdk.metrics.view', 'opentelemetry.baggage.propagation', 'opentelemetry.baggage', 'opentelemetry.sdk.trace', 'opentelemetry.semconv.attributes', 'opentelemetry.sdk._logs.export', 'opentelemetry.sdk._logs._internal.export', 'opentelemetry.sdk._logs._internal', 'opentelemetry._logs', 'opentelemetry._logs.severity', 'opentelemetry._logs._internal', 'opentelemetry.sdk._shared_internal', 'opentelemetry.sdk.metrics.export', 'opentelemetry.sdk.metrics._internal.export', 'opentelemetry.exporter.otlp.proto.http._log_exporter', 'opentelemetry.exporter.http.transport', 'urllib3.util', 'idna', 'urllib3.http2', 'h2', 'hyperframe', 'hpack', 'urllib3', 'urllib3.contrib.emscripten', 'urllib3.contrib', 'cryptography.hazmat.backends.openssl', 'cryptography.hazmat.backends', 'cryptography.hazmat', 'cryptography.hazmat.decrepit.ciphers', 'cryptography.hazmat.decrepit', 'cryptography.hazmat.primitives.ciphers', 'cryptography.hazmat.bindings.openssl', 'cryptography.hazmat.bindings', 'cryptography.hazmat.primitives.asymmetric', 'cryptography.hazmat.primitives', 'cryptography.hazmat.primitives.serialization', 'cryptography.x509', 'cryptography', 'requests', 'certifi', 'opentelemetry.exporter.otlp.proto.http._common', 'opentelemetry.exporter.otlp.proto.http', 'opentelemetry.exporter.otlp.proto.http.version', 'opentelemetry.exporter.otlp.proto.common', 'opentelemetry.exporter.otlp.proto.common.version', 'opentelemetry.exporter.otlp.proto.common._internal._log_encoder', 'opentelemetry.proto', 'opentelemetry.proto.resource.v1', 'opentelemetry.proto.resource', 'opentelemetry.proto.common.v1', 'opentelemetry.proto.common', 'google.protobuf.pyext', 'google.protobuf.internal', 'google.protobuf', 'opentelemetry.proto.collector', 'opentelemetry.exporter.otlp.proto.common._internal', 'opentelemetry.exporter.otlp.common', 'opentelemetry.sdk.trace.export', 'opentelemetry.sdk.environment_variables', 'opentelemetry.exporter.otlp.proto.http.metric_exporter', 'opentelemetry.proto.metrics.v1', 'opentelemetry.proto.metrics', 'opentelemetry.proto.collector.metrics.v1', 'opentelemetry.proto.collector.metrics', 'opentelemetry.exporter.otlp.proto.common._internal.metrics_encoder', 'opentelemetry.sdk._logs', 'opentelemetry.exporter.otlp.proto.http.trace_exporter', 'opentelemetry.exporter.otlp.proto.common._internal.trace_encoder', 'opentelemetry.proto.trace.v1', 'opentelemetry.proto.trace', 'opentelemetry.proto.collector.trace.v1', 'opentelemetry.proto.collector.trace', 'acp.task', 'httpx', 'httpcore', 'httpcore._backends', 'anyio', 'anyio.streams', 'anyio.abc', 'anyio._core', '_pytest', 'pytest', 'pluggy', 'iniconfig', '_pytest._py', '_pytest._io', 'colorama', '_pytest.mark', '_pytest.config', '_pytest.assertion', '_pytest._code', 'anyio._backends', 'sniffio', 'httpcore._sync', 'socksio', 'h11', 'httpcore._async', 'click', 'httpx._transports', 'zstandard', 'acp.http', 'acp.contrib', 'acp.client', 'acp.agent', 'acp', 'mcp.server', 'mcp_types', 'mcp.server.mcpserver', 'mcp.server.mcpserver.utilities', 'mcp.server.auth', 'mcp.shared', 'mcp.server.auth.middleware', 'mcp.server.auth.handlers', 'starlette', 'opentelemetry.propagate', 'mcp_types._v2026_07_28', 'mcp_types._v2025_11_25', 'sse_starlette', 'mcp.os.win32', 'mcp.os', 'mcp.server.mcpserver.tools', 'mcp.server.mcpserver.prompts', 'multipart', 'python_multipart', 'starlette.middleware', 'mcp.server.mcpserver.resources', 'httpx2', 'httpcore2', 'httpcore2._backends', 'httpcore2._sync', 'truststore', 'ctypes.macholib', 'httpcore2._async', 'httpx2._transports', 'httpx2.websockets', 'cryptography.hazmat.primitives.kdf', 'mcp.server.lowlevel', 'mcp', 'mcp.client', 'mcp.os.posix', 'referencing', 'rpds', 'jsonschema_specifications', 'attrs', 'jsonschema', 'mcp.types', 'claude_agent_sdk.testing', 'claude_agent_sdk._internal.transport', 'claude_agent_sdk._internal', 'claude_agent_sdk', 'sqlalchemy.pool', 'greenlet', 'sqlalchemy.event', 'sqlalchemy.dialects', 'sqlalchemy.engine', 'sqlalchemy.sql', 'sqlalchemy', 'sqlalchemy.dialects.sqlite', 'sqlite3', 'sqlalchemy.connectors', 'sqlalchemy.dialects.postgresql', 'psycopg_binary', 'psycopg.pq', 'psycopg.types', 'sqlalchemy.dialects.oracle', 'sqlalchemy.dialects.mysql', 'sqlalchemy.dialects.mssql', 'sqlalchemy.ext', 'sqlalchemy.ext.asyncio', 'sqlalchemy.orm', 'sqlalchemy.future', 'sqlalchemy.util', 'psycopg', 'dateutil.parser', 'dateutil.tz', 'dateutil.zoneinfo', 'dateutil', 'dbos._schemas', 'dbos', 'groq', 'distro', 'groq.types.audio', 'groq.types.shared_params', 'groq.types.chat', 'groq.resources.audio', 'groq.resources.chat', 'groq.resources', 'groq._utils', 'groq.types', 'groq.types.shared', 'openai', 'openai.resources.vector_stores', 'openai.resources', 'openai.resources.conversations', 'openai.types.responses', 'openai.types.shared_params', 'openai.types.shared', 'openai.types.chat', 'openai.types.conversations', 'openai.resources.responses', 'openai.resources.realtime', 'openai.types.realtime', 'openai.resources.fine_tuning', 'openai.resources.fine_tuning.checkpoints', 'openai.types.fine_tuning.checkpoints', 'openai.types.fine_tuning', 'openai.types.graders', 'openai.resources.fine_tuning.alpha', 'openai.types.fine_tuning.alpha', 'openai.resources.fine_tuning.jobs', 'openai.types.fine_tuning.jobs', 'openai.resources.containers', 'openai.resources.containers.files', 'openai.types.containers', 'openai.resources.uploads', 'openai.types.uploads', 'openai.resources.skills', 'openai.resources.skills.versions', 'openai.types.skills', 'openai.resources.evals', 'openai.resources.evals.runs', 'openai.types.evals', 'openai.types.evals.runs', 'openai.resources.audio', 'openai.types.audio', 'openai.resources.chat', 'openai.resources.chat.completions', 'openai.lib.streaming.chat', 'jiter', 'openai.lib._parsing', 'openai.types.chat.completions', 'openai.resources.beta', 'openai.types.beta', 'openai.types.beta.threads', 'openai.types.beta.threads.runs', 'openai.resources.beta.threads', 'openai.resources.beta.threads.runs', 'openai.resources.beta.chatkit', 'openai.types.beta.chatkit', 'openai.types.vector_stores', 'openai.lib.streaming.responses', 'openai.resources.webhooks', 'openai.types.webhooks', 'openai._extras', 'openai.resources.beta.realtime', 'openai.types.beta.realtime', 'openai.lib.streaming', 'openai.lib', 'openai._utils', 'openai.types', 'browser_use.tokens', 'posthog', 'backoff', 'uuid_extensions', 'browser_use.telemetry', 'bubus', 'browser_use.sync', 'browser_use_sdk', 'browser_use_sdk.generated.v2', 'browser_use_sdk.generated', 'browser_use_sdk.v2', 'browser_use_sdk.v2.resources', 'browser_use_sdk._core', 'cdp_use.cdp.network', 'cdp_use.cdp.runtime', 'cdp_use.cdp.page', 'cdp_use.cdp.dom', 'cdp_use.cdp.io', 'cdp_use.cdp.emulation', 'cdp_use.cdp.debugger', 'cdp_use.cdp.security', 'cdp_use.cdp', 'cdp_use', 'cdp_use.cdp.browseruse', 'cdp_use.cdp.webauthn', 'cdp_use.cdp.webaudio', 'cdp_use.cdp.tracing', 'cdp_use.cdp.tethering', 'cdp_use.cdp.target', 'cdp_use.cdp.systeminfo', 'cdp_use.cdp.storage', 'cdp_use.cdp.serviceworker', 'cdp_use.cdp.preload', 'cdp_use.cdp.performancetimeline', 'cdp_use.cdp.performance', 'cdp_use.cdp.pwa', 'cdp_use.cdp.overlay', 'cdp_use.cdp.memory', 'cdp_use.cdp.media', 'cdp_use.cdp.log', 'cdp_use.cdp.layertree', 'cdp_use.cdp.inspector', 'cdp_use.cdp.input', 'cdp_use.cdp.indexeddb', 'cdp_use.cdp.headlessexperimental', 'cdp_use.cdp.filesystem', 'cdp_use.cdp.fetch', 'cdp_use.cdp.fedcm', 'cdp_use.cdp.extensions', 'cdp_use.cdp.eventbreakpoints', 'cdp_use.cdp.deviceorientation', 'cdp_use.cdp.deviceaccess', 'cdp_use.cdp.domstorage', 'cdp_use.cdp.domsnapshot', 'cdp_use.cdp.domdebugger', 'cdp_use.cdp.cast', 'cdp_use.cdp.cachestorage', 'cdp_use.cdp.css', 'cdp_use.cdp.browser', 'cdp_use.cdp.bluetoothemulation', 'cdp_use.cdp.backgroundservice', 'cdp_use.cdp.autofill', 'cdp_use.cdp.audits', 'cdp_use.cdp.animation', 'cdp_use.cdp.accessibility', 'cdp_use.cdp.schema', 'cdp_use.cdp.profiler', 'cdp_use.cdp.heapprofiler', 'cdp_use.cdp.console', 'browser_use.skills', 'browser_use.screenshots', 'cloudpickle', 'browser_use.sandbox', 'browser_use.tools.extraction', 'markdownify', 'bs4', 'soupsieve', 'bs4.builder', 'lxml', 'lxml.isoschematron', 'lxml.includes.libxslt', 'lxml.includes.libxml', 'lxml.includes.libexslt', 'lxml.includes.extlibs', 'lxml.includes', 'lxml_html_clean', 'lxml.html', 'pyotp', 'pyotp.contrib', 'browser_use.mcp', 'browser_use.llm.vercel', 'anthropic._utils', 'anthropic.lib.streaming', 'anthropic.lib', 'anthropic.types.beta', 'anthropic.types.shared', 'anthropic.types.messages', 'anthropic.resources.beta.messages', 'docstring_parser', 'anthropic.lib.tools', 'anthropic.types.beta.messages', 'anthropic.resources.beta.skills', 'anthropic.types.beta.skills', 'anthropic.resources.messages', 'anthropic.resources.beta', 'anthropic.resources', 'anthropic.types', 'anthropic', 'anthropic.lib.bedrock', 'botocore', 'botocore.crt', 'jmespath', 'botocore.docs', 'botocore.docs.bcdoc', 'botocore.vendored.requests.packages.urllib3', 'botocore.vendored.requests.packages', 'botocore.vendored.requests', 'botocore.vendored', 'boto3', 's3transfer', 'botocore.retries', 'boto3.s3', 'boto3.resources', 'boto3.docs', 'boto3.ec2', 'boto3.dynamodb', 'anthropic.lib.vertex', 'google.auth.transport', 'google.auth.crypt', 'rsa', 'pyasn1', 'pyasn1.compat', 'pyasn1.codec.ber', 'pyasn1.codec', 'pyasn1.type', 'pyasn1.codec.cer', 'pyasn1_modules', 'pyasn1.codec.der', 'cffi', 'pycparser', 'google.oauth2', 'google.auth', 'google.auth.compute_engine', 'anthropic.lib._extras', 'browser_use.llm.oci_raw', 'browser_use.llm.mistral', 'litellm.types.proxy.guardrails.guardrail_hooks.ibm', 'litellm.llms.openai.responses.count_tokens', 'litellm.llms.openai_like.responses', 'multidict', 'tenacity', 'tenacity.asyncio', 'google.genai', 'google.genai._interactions.resources', 'google.genai._interactions._utils', 'google.genai._interactions.types', 'google.genai._interactions', 'litellm.types.google_genai', 'litellm.llms.vertex_ai.vertex_ai_partner_models', 'litellm.llms.vertex_ai.vertex_ai_partner_models.count_tokens', 'litellm.llms.vertex_ai.image_generation', 'litellm.llms.vertex_ai.videos', 'litellm.llms.vertex_ai.vector_stores', 'jwt', 'litellm.proxy.ui_crud_endpoints', 'litellm.llms.litellm_proxy.skills', 'litellm.proxy.agent_endpoints.auth', 'azure.identity', 'azure.core.rest', 'azure.core.utils', 'azure.core.pipeline.transport', 'aiohttp._websocket', 'propcache', 'frozenlist', 'aiosignal', 'yarl', 'aiohappyeyeballs', 'azure.core', 'azure.core.pipeline', 'azure.core.pipeline.policies', 'azure.core.tracing', 'msal_extensions', 'portalocker', 'msal', 'msal.oauth2cli', 'azure.identity._credentials', 'azure.identity._internal', 'pydantic_settings', 'pydantic_settings.sources', 'pydantic_settings.sources.providers', 'google.api_core', 'importlib_metadata', 'zipp.compat', 'zipp', 'importlib_metadata.compat', 'litellm.router_strategy.complexity_router', 'litellm.router_strategy.adaptive_router', 'litellm.proxy.guardrails.guardrail_hooks.aporia_ai', 'litellm.proxy.guardrails.guardrail_hooks.litellm_content_filter', 'litellm.proxy.guardrails.guardrail_hooks.litellm_content_filter.competitor_intent', 'litellm.proxy.guardrails.guardrail_hooks.panw_prisma_airs', 'litellm.proxy.guardrails.guardrail_hooks.lasso', 'litellm.proxy.guardrails.guardrail_hooks.llm_as_a_judge', 'litellm.llms.anthropic.experimental_pass_through.adapters', 'litellm.llms.anthropic.experimental_pass_through.context_management', 'litellm.llms.anthropic.experimental_pass_through.context_management.editors', 'litellm.proxy.guardrails.guardrail_hooks.grayswan', 'litellm.proxy.guardrails.guardrail_hooks.unified_guardrail', 'litellm.llms.openai.chat.guardrail_translation', 'litellm.proxy.guardrails.guardrail_hooks.custom_code', 'litellm.proxy.guardrails.guardrail_hooks.mcp_jwt_signer', 'litellm.proxy.management_endpoints.sso', 'litellm.proxy._experimental.mcp_server.faults', 'litellm.proxy._experimental.mcp_server.outbound_credentials', 'litellm.proxy.auth.resolvers', 'orjson', 'tokenizers', 'tokenizers.implementations', 'tokenizers.trainers', 'tokenizers.processors', 'tokenizers.pre_tokenizers', 'tokenizers.normalizers', 'tokenizers.models', 'tokenizers.decoders', 'litellm.llms.gemini.videos', 'jinja2', 'markupsafe', 'litellm.llms.bedrock.chat', 'litellm.llms.bedrock.chat.mantle', 'litellm.llms.bedrock.chat.agentcore', 'aiohttp', 'litellm.llms.azure_ai.anthropic', 'litellm.llms.azure_ai.azure_model_router', 'litellm.llms.azure_ai.anthropic.count_tokens', 'litellm.integrations.otel.presets', 'slack_bolt', 'slack_bolt.context.save_thread_context', 'slack_bolt.context.set_suggested_prompts', 'slack_sdk.web', 'slack_sdk.models.metadata', 'slack_sdk.models', 'slack_sdk.models.messages', 'slack_sdk.models.blocks', 'slack_sdk.models.attachments', 'slack_sdk.errors', 'slack_sdk.http_retry', 'slack_sdk.models.views', 'slack_sdk', 'slack_sdk.webhook', 'slack_bolt.context.set_title', 'slack_bolt.context.set_status', 'slack_bolt.context.assistant.thread_context_store.file', 'slack_bolt.context.assistant.thread_context_store', 'slack_bolt.context.assistant', 'slack_bolt.context.assistant.thread_context', 'slack_bolt.middleware.assistant', 'slack_bolt.util', 'slack_bolt.middleware', 'slack_bolt.middleware.attaching_function_token', 'slack_bolt.middleware.url_verification', 'slack_bolt.logger', 'slack_bolt.middleware.ssl_check', 'slack_bolt.middleware.request_verification', 'slack_sdk.signature', 'slack_bolt.middleware.ignoring_self_events', 'slack_bolt.authorization', 'slack_bolt.middleware.authorization', 'slack_bolt.context.get_thread_context', 'slack_sdk.oauth.token_rotation', 'slack_sdk.oauth.installation_store', 'slack_sdk.oauth.installation_store.models', 'slack_sdk.oauth.installation_store.file', 'slack_sdk.oauth', 'slack_sdk.oauth.state_utils', 'slack_sdk.oauth.state_store', 'slack_sdk.oauth.state_store.stateless', 'slack_sdk.oauth.state_store.file', 'slack_sdk.oauth.redirect_uri_page_renderer', 'slack_sdk.oauth.authorize_url_generator', 'slack_bolt.lazy_listener', 'slack_bolt.error', 'slack_bolt.middleware.attaching_conversation_kwargs', 'slack_bolt.response', 'slack_bolt.request', 'slack_bolt.listener_matcher', 'slack_bolt.listener', 'slack_bolt.kwargs_injection', 'slack_bolt.context.say_stream', 'slack_bolt.context.say', 'slack_bolt.context.respond', 'slack_bolt.context.fail', 'slack_bolt.context.complete', 'slack_bolt.context.ack', 'slack_bolt.context', 'slack_bolt.app', 'slack_bolt.workflows.step.utilities', 'slack_bolt.workflows.step', 'slack_bolt.workflows', 'slack_bolt.oauth', 'slack_sdk.oauth.state_store.sqlite3', 'slack_sdk.oauth.installation_store.sqlite3', 'slack_bolt.middleware.message_listener_matches', 'litellm.llms.openai.image_generation', 'litellm.llms.openai.image_generation.guardrail_translation', 'litellm.llms.gemini.image_edit', 'litellm.llms.cometapi.image_generation', 'litellm.llms.gemini.image_generation', 'litellm.llms.azure_ai.image_generation', 'litellm.integrations.opik.opik_payload_builder', 'litellm.types.interactions', 'proto', 'proto.marshal', 'proto.marshal.rules', 'proto.marshal.collections', 'tiktoken', 'regex', 'browser_use.llm.litellm', 'browser_use.llm.google', 'browser_use.llm.browser_use', 'browser_use.llm.aws', 'browser_use.llm', 'ollama', 'prompt_toolkit.filters', 'prompt_toolkit.output', 'wcwidth.table_grapheme_overrides', 'wcwidth', 'prompt_toolkit.widgets', 'prompt_toolkit.lexers', 'prompt_toolkit.input', 'prompt_toolkit.eventloop', 'prompt_toolkit.shortcuts', 'prompt_toolkit.shortcuts.progress_bar', 'prompt_toolkit.completion', 'prompt_toolkit.key_binding.bindings', 'prompt_toolkit.key_binding', 'prompt_toolkit.clipboard', 'prompt_toolkit.layout', 'prompt_toolkit.styles', 'prompt_toolkit.formatted_text', 'prompt_toolkit.application', 'prompt_toolkit', 'InquirerPy.base', 'InquirerPy.prompts', 'InquirerPy.containers', 'pfzy', 'InquirerPy', 'pypdf', 'pypdf.generic', 'pypdf._codecs', 'pypdf._text_extraction', 'pypdf._text_extraction._layout_mode', 'pypdf.actions', 'pypdf._crypt_providers', 'Crypto.Util', 'Crypto.Random', 'Crypto.Cipher', 'Crypto.Hash', 'Crypto.Protocol', 'Crypto', 'docx', 'docx.parts', 'docx.oxml', 'docx.oxml.text', 'docx.enum', 'docx.text', 'docx.dml', 'docx.styles', 'docx.image', 'docx.opc', 'docx.drawing', 'docx.opc.parts', 'reportlab.platypus', 'reportlab.pdfbase', 'reportlab.lib', 'reportlab.pdfgen', 'reportlab.graphics.charts', 'reportlab.graphics.widgets', 'reportlab.graphics', 'reportlab', 'browser_use.filesystem', 'browser_use.controller', 'fetch_use', 'browser_harness', 'browser_use.browser.watchdogs', 'screeninfo', 'screeninfo.enumerators', 'browser_use.browser', 'browser_use.beta', 'browser_use.agent.system_prompts', 'browser_use.agent', 'browser_use.actor', 'browser_use', 'comtypes', 'comtypes.client', 'comtypes.gen', 'comtypes.tools.codegenerator', 'comtypes.tools', 'comtypes.server', 'comtypes._post_coinit', 'pywinauto.tests', 'pywinauto.linux', 'pywinauto.controls', 'win32com.client', 'pywin.mfc', 'pywin.dialogs', 'pywin', 'win32com', 'win32com.server', 'pywinauto', 'cua_driver', 'apscheduler.triggers.cron', 'tzlocal', 'apscheduler.triggers', 'apscheduler.serializers', 'apscheduler.executors', 'apscheduler.eventbrokers', 'apscheduler.datastores', 'apscheduler._schedulers', 'apscheduler', 'annotated_doc', 'fastapi.security', 'fastapi.openapi', 'fastapi.middleware', 'fastapi.dependencies', 'fastapi._compat', 'fastapi', 'watchfiles', 'uvicorn.supervisors', 'uvicorn.protocols.websockets', 'httptools', 'httptools.parser', 'uvicorn.protocols.http', 'uvicorn.protocols', 'uvicorn.middleware', 'uvicorn.loops', 'uvicorn.lifespan', 'langchain_core.vectorstores', 'uuid_utils.compat', 'uuid_utils', 'langchain_core.utils', 'langsmith', 'langsmith._internal', 'langsmith._openapi_client.types', 'langsmith._openapi_client._utils', 'langsmith._openapi_client', 'langsmith._openapi_client.types.annotation_queues', 'langsmith._openapi_client.types.sandboxes', 'langsmith._openapi_client.types.datasets', 'langsmith._openapi_client.types.public', 'langsmith._openapi_client.types.runs', 'langsmith._openapi_client.resources.annotation_queues', 'langsmith._openapi_client.resources.sandboxes', 'langsmith._openapi_client.resources.datasets', 'langsmith._openapi_client.resources.public', 'langsmith._openapi_client.resources.runs', 'langsmith._openapi_client.resources', 'xxhash', 'langsmith.testing', 'langsmith.evaluation', 'tqdm', 'requests_toolbelt.multipart', 'requests_toolbelt', 'requests_toolbelt.utils', 'requests_toolbelt.auth', 'requests_toolbelt.adapters', 'langsmith.env', 'langchain_core.tracers', 'langchain_core.tools', 'langchain_core.runnables', 'langchain_core.prompts', 'langchain_core.outputs', 'langchain_core.output_parsers', 'langchain_core.messages.block_translators', 'langchain_core.messages', 'langchain_core.load', 'langchain_protocol', 'langchain_core.language_models', 'langchain_core.indexing', 'langchain_core.example_selectors', 'langchain_core.embeddings', 'langchain_core.documents', 'langchain_core.document_loaders', 'langchain_core.callbacks', 'langchain_core._security', 'langchain_core._api', 'langchain_core', 'litellm.videos', 'litellm.vector_stores', 'litellm.vector_store_files', 'litellm.llms.vertex_ai.interactions', 'litellm.llms.gemini.interactions', 'litellm.llms.azure.text_to_speech', 'litellm.llms.tinyfish.search', 'litellm.llms.tavily.search', 'litellm.llms.serper.search', 'litellm.llms.parallel_ai.search', 'litellm.llms.google_pse.search', 'litellm.llms.exa_ai.search', 'litellm.llms.duckduckgo.search', 'litellm.llms.dataforseo.search', 'litellm.llms.brave.search', 'litellm.llms.bedrock.search', 'litellm.llms.azure.search', 'litellm.llms.cohere.ocr', 'litellm.llms.vertex_ai.ocr', 'litellm.llms.azure_ai.ocr', 'litellm.llms.azure_ai.ocr.document_intelligence', 'litellm.llms.openrouter.image_edit', 'litellm.llms.bedrock.image_edit', 'litellm.llms.vertex_ai.image_edit', 'litellm.llms.azure_ai.image_edit', 'litellm.llms.hosted_vllm.image_edit', 'litellm.llms.openai.image_edit', 'litellm.llms.azure.containers', 'litellm.llms.hosted_vllm.videos', 'litellm.llms.modelscope.image_generation', 'litellm.llms.openrouter.image_generation', 'litellm.llms.recraft.image_generation', 'litellm.llms.xinference.image_generation', 'litellm.llms.azure.image_generation', 'litellm.llms.gemini.vector_stores', 'litellm.llms.milvus.vector_stores', 'litellm.llms.azure_ai.vector_stores', 'litellm.llms.openai.evals', 'litellm.llms.gemini.audio_transcription', 'litellm.llms.azure.audio_transcription', 'litellm.llms.openai_like.messages', 'litellm.llms.github_copilot.messages', 'litellm.llms.vercel_ai_gateway.embedding', 'litellm.llms.dashscope.image_generation', 'litellm.llms.dashscope.rerank', 'litellm.llms.dashscope.embed', 'litellm.llms.oci.embed', 'litellm.llms.mistral.ocr', 'litellm.skills', 'litellm.search', 'litellm.sandbox', 'litellm.rust_bridge', 'litellm.router_strategy.quality_router', 'litellm.repositories', 'litellm.llms.vertex_ai.rag_engine', 'litellm.rag.text_splitters', 'litellm.rag.ingestion.file_parsers', 'litellm.rag.ingestion', 'litellm.rag', 'litellm.proxy_auth', 'litellm.proxy.image_endpoints', 'litellm.proxy.video_endpoints', 'litellm.proxy.rag_endpoints', 'litellm.proxy.vector_store_files_endpoints', 'litellm.types.proxy.policy_engine', 'email.mime', 'litellm.proxy.shutdown', 'litellm.proxy.realtime_endpoints', 'litellm.proxy.search_endpoints', 'litellm.proxy.response_polling', 'litellm.proxy.public_endpoints.public_v1', 'litellm.proxy.public_endpoints', 'litellm.proxy.anthropic_endpoints.claude_code_endpoints', 'litellm.types.management_endpoints', 'litellm.proxy.management_endpoints.management_v1', 'litellm.proxy.prompts', 'litellm.proxy.policy_engine', 'litellm.proxy.ocr_endpoints', 'litellm.proxy.memory', 'litellm.proxy.logging_endpoints', 'litellm.proxy.list_api', 'litellm.responses.file_search', 'litellm.proxy.hooks.mcp_semantic_filter', 'litellm.proxy.hooks.litellm_skills', 'litellm.proxy.hooks', 'litellm.proxy.health_check_utils', 'litellm.proxy.enterprise_billing', 'litellm.proxy.discovery_endpoints', 'litellm.proxy.container_endpoints', 'litellm.proxy.config_resolvers', 'keyring', 'keyring.compat', 'jaraco.classes', 'keyring.backends.macOS', 'win32ctypes.core', 'win32ctypes.core.cffi', 'win32ctypes.core.ctypes', 'win32ctypes', 'win32ctypes.pywin32', 'keyring.backends', 'keyring.util', 'litellm.proxy.client', 'litellm.proxy.a2a', 'litellm.proxy', 'litellm.passthrough', 'litellm.ocr', 'litellm.models', 'litellm.llms.bedrock.audio_transcription', 'litellm.llms.vertex_ai.agent_engine', 'litellm.llms.azure_ai.agents', 'litellm.llms.vertex_ai.vertex_gemma_models', 'litellm.llms.azure_ai.embed', 'litellm.llms.xai.realtime', 'litellm.llms.vertex_ai.realtime', 'litellm.llms.zai.chat', 'litellm.llms.zai', 'litellm.llms.you_com.search', 'litellm.llms.you_com', 'litellm.llms.watsonx.rerank', 'litellm.llms.watsonx.passthrough', 'litellm.llms.watsonx.embed', 'litellm.llms.watsonx.completion', 'litellm.llms.watsonx.chat', 'litellm.llms.watsonx.audio_transcription', 'litellm.llms.watsonx', 'litellm.llms.wandb.chat', 'litellm.llms.wandb', 'litellm.llms.volcengine.embedding', 'litellm.llms.volcengine', 'litellm.llms.valkey.vector_stores', 'litellm.llms.valkey', 'litellm.llms.v0.chat', 'litellm.llms.v0', 'litellm.llms.tencent.messages', 'litellm.llms.tencent.chat', 'litellm.llms.tencent', 'litellm.llms.stability.image_generation', 'litellm.llms.stability.image_edit', 'litellm.llms.stability', 'litellm.llms.soniox.audio_transcription', 'litellm.llms.soniox', 'litellm.llms.searxng.search', 'litellm.llms.searxng', 'litellm.llms.searchapi.search', 'litellm.llms.searchapi', 'litellm.llms.sap.chat', 'litellm.llms.sap', 'litellm.llms.s3_vectors.vector_stores', 'litellm.llms.s3_vectors', 'litellm.llms.runwayml.videos', 'litellm.llms.runwayml.text_to_speech', 'litellm.llms.runwayml.image_generation', 'litellm.llms.runwayml', 'litellm.llms.reducto.ocr', 'litellm.llms.reducto', 'litellm.llms.ragflow.vector_stores', 'litellm.llms.ragflow.chat', 'litellm.llms.ragflow', 'litellm.llms.bedrock.passthrough.guardrail_translation', 'litellm.llms.pass_through.guardrail_translation', 'litellm.llms.pass_through', 'litellm.llms.opensandbox.sandbox', 'litellm.llms.opensandbox', 'scipy.signal', 'scipy._lib', 'scipy.special', 'scipy._external.array_api_extra', 'scipy._external.array_api_extra._lib', 'scipy._external.array_api_compat.numpy', 'scipy._external.array_api_compat.dask.array', 'scipy._external.array_api_compat.dask', 'scipy._external.array_api_compat.torch', 'scipy._external.array_api_compat.cupy', 'scipy._external.array_api_compat.common', 'scipy._external.array_api_compat', 'scipy._external.array_api_extra._lib._utils', 'scipy.integrate', 'scipy.integrate._rules', 'scipy.integrate._ivp', 'scipy.sparse', 'scipy.sparse.linalg', 'scipy.linalg', 'scipy.fft', 'scipy.fft._duccfft', 'scipy._lib._uarray', 'scipy.sparse.linalg._eigen', 'scipy.sparse.linalg._eigen.lobpcg', 'scipy.sparse.linalg._eigen.arpack', 'scipy.sparse.linalg._dsolve', 'scipy.sparse.linalg._isolve', 'scipy.interpolate', 'scipy.spatial', 'scipy.spatial.transform', 'scipy.constants', 'scipy.stats', 'scipy.ndimage', 'scipy.sparse.csgraph', 'scipy.stats._rcont', 'scipy.stats._levy_stable', 'scipy.optimize', 'scipy.optimize._highspy', 'scipy.optimize._shgo_lib', 'scipy.optimize._lsq', 'scipy._external.pyprima.common', 'scipy._external.pyprima', 'scipy._external.pyprima.cobyla', 'scipy._external.cobyqa', 'scipy._external.cobyqa.utils', 'scipy._external.cobyqa.subsolvers', 'scipy.optimize._trustregion_constr', 'scipy.optimize._trlib', 'scipy', 'scipy.signal.windows', 'litellm.llms.nvidia_riva.audio_transcription', 'litellm.llms.nvidia_riva', 'litellm.llms.nimble.search', 'litellm.llms.nimble', 'litellm.llms.morph.chat', 'litellm.llms.morph', 'litellm.llms.mongodb.vector_stores', 'litellm.llms.mongodb', 'litellm.llms.minimax.text_to_speech', 'litellm.llms.minimax.chat', 'litellm.llms.minimax', 'litellm.llms.manus.responses', 'litellm.llms.manus.files', 'litellm.llms.manus', 'litellm.llms.linkup.search', 'litellm.llms.linkup', 'litellm.llms.langgraph.chat', 'litellm.llms.langgraph', 'litellm.llms.langflow.chat', 'litellm.a2a_protocol', 'litellm.a2a_protocol.providers', 'litellm.a2a_protocol.providers.watsonx_orchestrate', 'litellm.a2a_protocol.providers.langflow', 'litellm.a2a_protocol.providers.bedrock_agentcore', 'litellm.a2a_protocol.providers.pydantic_ai_agents', 'litellm.a2a_protocol.litellm_completion_bridge', 'litellm.llms.langflow', 'litellm.llms.lambda_ai.chat', 'litellm.llms.lambda_ai', 'litellm.llms.inception.completion', 'litellm.llms.inception.chat', 'litellm.llms.inception', 'litellm.llms.hyperbolic.chat', 'litellm.llms.hyperbolic', 'litellm.llms.gigachat.passthrough', 'litellm.llms.gigachat.embedding', 'litellm.llms.gigachat.chat', 'litellm.llms.gigachat', 'litellm.llms.gdc.chat', 'litellm.llms.gdc', 'litellm.llms.firecrawl.search', 'litellm.llms.firecrawl', 'litellm.llms.fastcrw.search', 'litellm.llms.fastcrw', 'litellm.llms.fal_ai.image_generation', 'litellm.llms.fal_ai', 'litellm.llms.e2b.sandbox', 'litellm.llms.e2b', 'litellm.llms.compactifai.chat', 'litellm.llms.compactifai', 'litellm.llms.black_forest_labs.image_generation', 'litellm.llms.black_forest_labs.image_edit', 'litellm.llms.black_forest_labs', 'litellm.llms.base_llm.skills', 'litellm.llms.base_llm.search', 'litellm.llms.base_llm.sandbox', 'litellm.llms.base_llm.ocr', 'litellm.llms.base_llm.managed_resources', 'litellm.llms.base_llm.interactions', 'litellm.llms.base_llm.evals', 'litellm.llms.base_llm.agents', 'litellm.llms.base_llm', 'litellm.llms.aws_polly.text_to_speech', 'litellm.llms.aws_polly', 'litellm.llms.apiserpent.search', 'litellm.llms.apiserpent', 'litellm.llms.anthropic.skills', 'litellm.llms.anthropic.files', 'litellm.llms.anthropic.count_tokens', 'litellm.llms.anthropic.chat.guardrail_translation', 'litellm.llms.anthropic.chat', 'litellm.llms.anthropic.batches', 'litellm.llms.anthropic', 'litellm.llms.aiml.image_generation', 'litellm.llms.aiml', 'litellm.llms.a2a.chat.guardrail_translation', 'litellm.llms.a2a.chat', 'litellm.llms.a2a', 'litellm.llms', 'litellm.proxy._experimental.mcp_server.guardrail_translation', 'litellm.interactions.litellm_responses_transformation', 'litellm.llms.gemini.agents', 'litellm.interactions.agents', 'litellm.interactions', 'litellm.integrations.websearch_interception', 'litellm.integrations.weave', 'litellm.integrations.vantage', 'litellm.integrations.prometheus_helpers', 'litellm.integrations.pointfive', 'litellm.integrations.otel.plumbing', 'litellm.integrations.otel.model', 'litellm.integrations.otel.mappers', 'litellm.integrations.otel', 'litellm.integrations.newrelic', 'litellm.integrations.mavvrik_focus', 'litellm.integrations.litellm_agent', 'litellm.integrations.levo', 'litellm.integrations.gitlab', 'litellm.integrations.generic_prompt_management', 'litellm.integrations.focus.serializers', 'litellm.integrations.focus.destinations', 'litellm.integrations.focus', 'litellm.integrations.dotprompt', 'litellm.integrations.deepeval', 'litellm.integrations.compression_interception', 'litellm.integrations.code_interpreter_interception', 'litellm.integrations.bitbucket', 'litellm.integrations.azure_sentinel', 'litellm.integrations.arize', 'litellm.integrations.agentops', 'litellm.integrations', 'litellm.images', 'litellm.google_genai.adapters', 'litellm.google_genai', 'litellm.experimental_mcp_client', 'litellm.evals', 'litellm.containers', 'litellm.compression.scoring', 'litellm.compression', 'litellm.completion_extras.litellm_responses_transformation', 'litellm.completion_extras', 'azure.identity.aio', 'azure.identity.aio._credentials', 'azure.identity.aio._internal', 'litellm.caching', 'litellm.anthropic_interface.messages', 'litellm.llms.anthropic.experimental_pass_through.messages.interceptors', 'litellm.llms.anthropic.experimental_pass_through.responses_adapters', 'litellm.anthropic_interface.exceptions', 'litellm.anthropic_interface', 'fastuuid', 'litellm', 'litellm.llms.cometapi.embed', 'litellm.llms.bedrock_mantle.responses', 'litellm.llms.databricks.responses', 'litellm.llms.perplexity.responses', 'litellm.llms.perplexity.embedding', 'litellm.llms.together_ai.chat', 'litellm.llms.sagemaker.nova', 'litellm.llms.fireworks_ai.rerank', 'litellm.llms.bedrock.claude_platform', 'plugins.web.firecrawl', 'ruamel.yaml', 'tools', 'tui_gateway', 'tools.environments', 'huggingface_hub', 'huggingface_hub.utils', 'filelock', 'filelock._soft_rw', 'huggingface_hub.serialization', 'huggingface_hub.inference._mcp', 'huggingface_hub.inference', 'huggingface_hub.inference._providers', 'huggingface_hub.inference._generated.types', 'huggingface_hub.inference._generated', 'hf_xet', 'tqdm.contrib', 'fsspec.implementations', 'fsspec', 'huggingface_hub.cli', 'shellingham', 'typer._click', 'typer', 'fire', 'fire.console', 'termcolor', 'tools.bot_desktop', 'providers', 'pillow_heif', 'snowballstemmer', 'tools.connectors', 'tools.connectors.gateway', 'mcp.client.auth', 'tui_gateway.contracts', 'tools.connectors.portal', 'plugins.image_gen.krea', 'plugins', 'gateway.platforms', 'pytz', 'croniter', 'gateway.relay', 'cron', 'plugins.cron_providers', 'plugins.teams_pipeline', 'plugins.platforms.teams', 'plugins.memory', 'winpty', 'plugins.memory.holographic', 'concurrent_log_handler', 'gateway.platforms.qqbot', 'plugins.platforms.matrix', 'markdown', 'markdown.extensions', 'aiosqlite', 'plugins.platforms.telegram', 'gateway', 'tools.computer_use', 'plugins.computer_use', 'sherpa_onnx', 'plugins.browser.browserbase', 'plugins.browser.browser_use', 'ddgs', 'primp', 'ddgs.engines', 'plugins.web', 'agent.verify', 'agent.vault_backends', 'agent.transports', 'agent.secret_sources', 'agent.proxy_sources', 'agent.pet.generate', 'agent.pet', 'agent.monitoring', 'agent.lsp', 'plugins.context_engine', 'agent', 'tomli_w', 'pm', 'hermes_platform.resolver', 'hermes_platform.host', 'hermes_platform', 'winrt.runtime', 'winrt.windows.foundation.collections', 'winrt.system', 'winrt.windows.applicationmodel', 'winrt.windows.services.store', 'winrt.windows.foundation', 'plugins.dashboard_auth.nous', 'plugins.cron_providers.chronos', 'hermes_cli.web_routers', 'hermes_cli.subcommands', 'curses', 'nemo_relay', 'hermes_cli.proxy.adapters', 'hermes_cli.proxy', 'hermes_cli.observability', 'plugins.dashboard_auth.basic', 'acp_adapter', 'hermes_cli.local_runtime', 'hermes_cli.dashboard_auth', 'pip._vendor.distlib', 'pip._vendor', 'pip._vendor.truststore', 'pip._vendor.urllib3.http2', 'pip._vendor.urllib3.contrib', 'pip._vendor.certifi', 'pip._vendor.urllib3.util', 'pip._vendor.requests', 'pip._internal.utils', 'pip._internal', 'pip._internal.cli', 'pip._internal.req', 'pip._internal.operations.install', 'pip._internal.operations', 'pip._internal.models', 'pip._internal.vcs', 'pip._vendor.rich', 'pip._vendor.pygments.styles', 'pip._vendor.pygments', 'pip._vendor.pygments.filters', 'pip._vendor.pygments.lexers', 'pip._vendor.packaging', 'pip._internal.operations.build', 'pip._internal.metadata', 'pip._internal.metadata.importlib', 'pip._internal.build_env', 'venv', 'pip._internal.resolution.resolvelib', 'pip._internal.resolution', 'pip._vendor.resolvelib.resolvers', 'pip._vendor.resolvelib', 'pip._internal.distributions', 'pip._internal.resolution.legacy', 'pip._internal.index', 'pip._internal.network', 'pip._vendor.cachecontrol.caches', 'pip._vendor.cachecontrol', 'pip._vendor.pyproject_hooks', 'pip._vendor.pyproject_hooks._in_process', 'pip._internal.locations', 'pip._internal.commands', 'pip._vendor.distro', 'pip._vendor.msgpack', 'pip._vendor.pkg_resources', 'pip._vendor.platformdirs', 'pip._vendor.tomli', 'pip._vendor.urllib3', 'pip._vendor.urllib3.contrib.emscripten', 'pip._vendor.idna', 'pip', 'hermes_cli', 'atlas.workflow', 'structlog', 'atlas.workbench', 'atlas.websearch.providers', 'atlas.websearch', 'atlas.upstream', 'atlas.tools.x2', 'json_repair', 'json_repair.utils', 'json_repair.parse_string_helpers', 'youtube_transcript_api', 'trafilatura', 'courlan', 'tld', 'babel', 'babel.localtime', 'htmldate', 'dateparser.languages', 'dateparser.utils', 'dateparser.data', 'dateparser.data.date_translation_data', 'dateparser', 'dateparser.custom_language_detection', 'dateparser_data', 'justext', 'atlas.engine.kernel.toolkit', 'mss', 'mss.windows', 'mss.linux', 'atlas.tools', 'asyncssh', 'asyncssh.crypto', 'atlas.skills', 'atlas.scheduler', 'watchdog.observers', 'watchdog', 'watchdog.utils', 'watchdog.tricks', 'atlas.safety', 'openpyxl', 'openpyxl.reader', 'openpyxl.chart', 'openpyxl.utils', 'openpyxl.formula', 'openpyxl.worksheet', 'openpyxl.styles', 'openpyxl.formatting', 'openpyxl.compat', 'openpyxl.descriptors', 'openpyxl.drawing', 'et_xmlfile', 'openpyxl.chartsheet', 'openpyxl.packaging', 'openpyxl.pivot', 'openpyxl.workbook.external_link', 'openpyxl.comments', 'openpyxl.cell', 'openpyxl.workbook', 'openpyxl.writer', 'openpyxl.xml', 'rapidocr.utils', 'rapidocr', 'colorlog', 'omegaconf', 'omegaconf.vendor.antlr4.tree', 'omegaconf.vendor.antlr4', 'omegaconf.vendor', 'omegaconf.vendor.antlr4.error', 'omegaconf.vendor.antlr4.atn', 'omegaconf.vendor.antlr4.dfa', 'omegaconf.vendor.antlr4.xpath', 'omegaconf.grammar.gen', 'omegaconf.grammar', 'omegaconf.resolvers.oc', 'omegaconf.resolvers', 'cv2', 'cv2.utils', 'cv2.typing', 'cv2.misc', 'cv2.mat_wrapper', 'cv2.data', 'rapidocr.inference_engine.mnn', 'rapidocr.inference_engine.tensorrt', 'rapidocr.inference_engine.pytorch', 'rapidocr.inference_engine.pytorch.networks', 'rapidocr.inference_engine.pytorch.networks.architectures', 'rapidocr.inference_engine.pytorch.networks.transforms', 'rapidocr.inference_engine.pytorch.networks.necks', 'rapidocr.inference_engine.pytorch.networks.heads', 'rapidocr.inference_engine.pytorch.networks.backbones', 'rapidocr.inference_engine.paddle', 'rapidocr.inference_engine.openvino', 'rapidocr.inference_engine.onnxruntime', 'onnxruntime', 'onnxruntime.transformers', 'onnxruntime.capi', 'rapidocr.inference_engine', 'rapidocr.ch_ppocr_rec', 'rapidocr.ch_ppocr_det', 'shapely.geometry', 'shapely.algorithms', 'shapely', 'pyclipper', 'rapidocr.ch_ppocr_cls', 'rapidocr.cal_rec_boxes', 'atlas.runtime', 'atlas.run_replay', 'atlas.rewind', 'atlas.review', 'atlas.research', 'atlas.repomap', 'tree_sitter', 'tree_sitter_language_pack', 'grep_ast', 'atlas.projects', 'pptx', 'pptx.enum', 'pptx.chart', 'pptx.oxml', 'pptx.oxml.shapes', 'pptx.dml', 'pptx.oxml.dml', 'pptx.oxml.chart', 'xlsxwriter', 'pptx.text', 'pptx.shapes', 'pptx.parts', 'pptx.opc', 'atlas.plugins', 'atlas.persistent_agents', 'apprise', 'apprise.utils', 'apprise.conversion', 'apprise.compat', 'apprise.config', 'apprise.attachment', 'apprise.decorators', 'apprise.plugins', 'atlas.notifications', 'atlas.models', 'fastembed', 'fastembed.text', 'fastembed.common', 'loguru', 'win32_setctime', 'fastembed.sparse', 'py_rust_stemmers', 'fastembed.late_interaction_multimodal', 'fastembed.late_interaction', 'fastembed.image', 'atlas.memory.library', 'atlas.memory', 'atlas.lsp', 'formulas', 'formulas.tokens', 'schedula', 'schedula.utils.io', 'schedula.utils', 'schedula.utils.des', 'schedula.utils.drw', 'schedula.utils.form', 'schedula.utils.form.server', 'schedula.utils.form.server.export', 'schedula.utils.form.server.security.casbin', 'schedula.utils.form.server.openapi', 'schedula.utils.form.server.apis', 'schedula.utils.form.server.notifications.tasks', 'schedula.utils.form.server.contracts', 'schedula.utils.form.server.notifications', 'schedula.utils.form.server.items', 'tabulate', 'schedula.utils.form.server.credits', 'schedula.utils.form.server.credits.stripe', 'schedula.utils.form.server.credits.stripe.session', 'schedula.utils.form.server.security', 'schedula.utils.form.server.locale', 'schedula.utils.web', 'schedula.utils.asy', 'formulas.functions', 'formulas.excel', 'fitz', 'pymupdf', 'atlas.library', 'atlas.introspect.providers', 'atlas.introspect', 'atlas.heartbeat', 'atlas.groups', 'skillopt_sleep', 'atlas.evolution', 'atlas.engine.tools.environments', 'atlas.engine.tools.computer_use', 'atlas.engine.tools.bot_desktop', 'atlas.engine.tools', 'atlas.engine.state', 'atlas.engine.agent.proxy_sources', 'atlas.engine.agent', 'atlas.engine', 'atlas.devices', 'pynput.keyboard', 'pynput._util', 'pynput.mouse', 'pynput', 'atlas.commands', 'slack_sdk.socket_mode', 'slack_sdk.socket_mode.builtin', 'slack_sdk.socket_mode.logger', 'slack_sdk.socket_mode.aiohttp', 'lark_oapi.api.im.v1', 'lark_oapi.api.im', 'lark_oapi.api', 'lark_oapi.api.human_authentication', 'lark_oapi.api.human_authentication.v1', 'lark_oapi.api.human_authentication.v1.model', 'lark_oapi.core.model', 'lark_oapi.core', 'lark_oapi.core.utils', 'lark_oapi.core.cache', 'lark_oapi.api.bot', 'lark_oapi.api.bot.v4', 'lark_oapi.api.bot.v4.model', 'lark_oapi.api.application', 'lark_oapi.api.application.v7', 'lark_oapi.api.application.v7.model', 'lark_oapi.api.application.v6', 'lark_oapi.api.application.v6.model', 'lark_oapi.event', 'lark_oapi.api.application.v5', 'lark_oapi.api.application.v5.model', 'lark_oapi.api.verification', 'lark_oapi.api.verification.v1', 'lark_oapi.api.verification.v1.model', 'lark_oapi.api.speech_to_text', 'lark_oapi.api.speech_to_text.v1', 'lark_oapi.api.speech_to_text.v1.model', 'lark_oapi.api.meeting_room', 'lark_oapi.api.meeting_room.v1', 'lark_oapi.api.meeting_room.v1.model', 'lark_oapi.api.cardkit', 'lark_oapi.api.cardkit.v1', 'lark_oapi.api.cardkit.v1.model', 'lark_oapi.api.baike', 'lark_oapi.api.baike.v1', 'lark_oapi.api.baike.v1.model', 'lark_oapi.api.workplace', 'lark_oapi.api.workplace.v1', 'lark_oapi.api.workplace.v1.model', 'lark_oapi.api.apaas', 'lark_oapi.api.apaas.v1', 'lark_oapi.api.apaas.v1.model', 'lark_oapi.api.moments', 'lark_oapi.api.moments.v1', 'lark_oapi.api.moments.v1.model', 'lark_oapi.api.mail', 'lark_oapi.api.mail.v1', 'lark_oapi.api.mail.v1.model', 'lark_oapi.api.elearning', 'lark_oapi.api.elearning.v2', 'lark_oapi.api.elearning.v2.model', 'lark_oapi.api.directory', 'lark_oapi.api.directory.v1', 'lark_oapi.api.directory.v1.model', 'lark_oapi.api.wiki', 'lark_oapi.api.wiki.v2', 'lark_oapi.api.wiki.v2.model', 'lark_oapi.api.wiki.v1', 'lark_oapi.api.wiki.v1.model', 'lark_oapi.api.minutes', 'lark_oapi.api.minutes.v1', 'lark_oapi.api.minutes.v1.model', 'lark_oapi.api.event', 'lark_oapi.api.event.v1', 'lark_oapi.api.event.v1.model', 'lark_oapi.api.attendance', 'lark_oapi.api.attendance.v1', 'lark_oapi.api.attendance.v1.model', 'lark_oapi.api.aily', 'lark_oapi.api.aily.v1', 'lark_oapi.api.aily.v1.model', 'lark_oapi.api.spark', 'lark_oapi.api.spark.v1', 'lark_oapi.api.spark.v1.model', 'lark_oapi.api.payroll', 'lark_oapi.api.payroll.v1', 'lark_oapi.api.payroll.v1.model', 'lark_oapi.api.passport', 'lark_oapi.api.passport.v1', 'lark_oapi.api.passport.v1.model', 'lark_oapi.api.auth', 'lark_oapi.api.auth.v4', 'lark_oapi.api.auth.v4.model', 'lark_oapi.api.auth.v3', 'lark_oapi.api.auth.v3.model', 'lark_oapi.api.trust_party', 'lark_oapi.api.trust_party.v1', 'lark_oapi.api.trust_party.v1.model', 'lark_oapi.api.translation', 'lark_oapi.api.translation.v1', 'lark_oapi.api.translation.v1.model', 'lark_oapi.api.base', 'lark_oapi.api.base.v2', 'lark_oapi.api.base.v2.model', 'lark_oapi.api.search', 'lark_oapi.api.search.v2', 'lark_oapi.api.search.v2.model', 'lark_oapi.api.okr', 'lark_oapi.api.okr.v2', 'lark_oapi.api.okr.v2.model', 'lark_oapi.api.okr.v1', 'lark_oapi.api.okr.v1.model', 'lark_oapi.api.acs', 'lark_oapi.api.acs.v1', 'lark_oapi.api.acs.v1.model', 'lark_oapi.api.security_and_compliance', 'lark_oapi.api.security_and_compliance.v2', 'lark_oapi.api.security_and_compliance.v2.model', 'lark_oapi.api.security_and_compliance.v1', 'lark_oapi.api.security_and_compliance.v1.model', 'lark_oapi.api.ehr', 'lark_oapi.api.ehr.v1', 'lark_oapi.api.ehr.v1.model', 'lark_oapi.api.sheets', 'lark_oapi.api.sheets.v3', 'lark_oapi.api.sheets.v3.model', 'lark_oapi.api.drive', 'lark_oapi.api.drive.v2', 'lark_oapi.api.drive.v2.model', 'lark_oapi.api.drive.v1', 'lark_oapi.api.drive.v1.model', 'lark_oapi.api.compensation', 'lark_oapi.api.compensation.v1', 'lark_oapi.api.compensation.v1.model', 'lark_oapi.api.approval', 'lark_oapi.api.approval.v4', 'lark_oapi.api.approval.v4.model', 'lark_oapi.api.admin', 'lark_oapi.api.admin.v1', 'lark_oapi.api.admin.v1.model', 'lark_oapi.api.helpdesk', 'lark_oapi.api.helpdesk.v1', 'lark_oapi.api.helpdesk.v1.model', 'lark_oapi.api.docx', 'lark_oapi.api.docx.v1', 'lark_oapi.api.docx.v1.model', 'lark_oapi.api.board', 'lark_oapi.api.board.v1', 'lark_oapi.api.board.v1.model', 'lark_oapi.api.tenant', 'lark_oapi.api.tenant.v2', 'lark_oapi.api.tenant.v2.model', 'lark_oapi.api.docs', 'lark_oapi.api.docs.v1', 'lark_oapi.api.docs.v1.model', 'lark_oapi.api.bitable', 'lark_oapi.api.bitable.v1', 'lark_oapi.api.bitable.v1.model', 'lark_oapi.api.vc', 'lark_oapi.api.vc.v1', 'lark_oapi.api.vc.v1.model', 'lark_oapi.api.task', 'lark_oapi.api.task.v2', 'lark_oapi.api.task.v2.model', 'lark_oapi.api.task.v1', 'lark_oapi.api.task.v1.model', 'lark_oapi.api.report', 'lark_oapi.api.report.v1', 'lark_oapi.api.report.v1.model', 'lark_oapi.api.lingo', 'lark_oapi.api.lingo.v1', 'lark_oapi.api.lingo.v1.model', 'lark_oapi.api.calendar', 'lark_oapi.api.calendar.v4', 'lark_oapi.api.calendar.v4.model', 'lark_oapi.api.performance', 'lark_oapi.api.performance.v2', 'lark_oapi.api.performance.v2.model', 'lark_oapi.api.performance.v1', 'lark_oapi.api.performance.v1.model', 'lark_oapi.api.unified_kms', 'lark_oapi.api.unified_kms.v1', 'lark_oapi.api.unified_kms.v1.model', 'lark_oapi.api.optical_char_recognition', 'lark_oapi.api.optical_char_recognition.v1', 'lark_oapi.api.optical_char_recognition.v1.model', 'lark_oapi.api.corehr', 'lark_oapi.api.corehr.v2', 'lark_oapi.api.corehr.v2.model', 'lark_oapi.api.corehr.v1', 'lark_oapi.api.corehr.v1.model', 'lark_oapi.api.block', 'lark_oapi.api.block.v2', 'lark_oapi.api.block.v2.model', 'lark_oapi.api.personal_settings', 'lark_oapi.api.personal_settings.v1', 'lark_oapi.api.personal_settings.v1.model', 'lark_oapi.api.mdm', 'lark_oapi.api.mdm.v3', 'lark_oapi.api.mdm.v3.model', 'lark_oapi.api.mdm.v1', 'lark_oapi.api.mdm.v1.model', 'lark_oapi.api.hire', 'lark_oapi.api.hire.v2', 'lark_oapi.api.hire.v2.model', 'lark_oapi.api.hire.v1', 'lark_oapi.api.hire.v1.model', 'lark_oapi.api.document_ai', 'lark_oapi.api.document_ai.v1', 'lark_oapi.api.document_ai.v1.model', 'lark_oapi.api.contact', 'lark_oapi.api.contact.v3', 'lark_oapi.api.contact.v3.model', 'lark_oapi.api.authen', 'lark_oapi.api.authen.v1', 'lark_oapi.api.authen.v1.model', 'lark_oapi.api.im.v2', 'lark_oapi.api.im.v2.model', 'lark_oapi.api.im.v1.model', 'lark_oapi', 'lark_oapi.scene.registration', 'lark_oapi.scene', 'lark_oapi.event.callback', 'lark_oapi.event.callback.model', 'lark_oapi.core.http', 'lark_oapi.api.workplace.v1.resource', 'lark_oapi.api.wiki.v2.resource', 'lark_oapi.api.wiki.v1.resource', 'lark_oapi.api.verification.v1.resource', 'lark_oapi.api.vc.v1.resource', 'lark_oapi.api.unified_kms.v1.resource', 'lark_oapi.api.trust_party.v1.resource', 'lark_oapi.api.translation.v1.resource', 'lark_oapi.api.tenant.v2.resource', 'lark_oapi.api.task.v2.resource', 'lark_oapi.api.task.v1.resource', 'lark_oapi.api.speech_to_text.v1.resource', 'lark_oapi.api.spark.v1.resource', 'lark_oapi.api.sheets.v3.resource', 'lark_oapi.api.security_and_compliance.v2.resource', 'lark_oapi.api.security_and_compliance.v1.resource', 'lark_oapi.api.search.v2.resource', 'lark_oapi.api.report.v1.resource', 'lark_oapi.api.personal_settings.v1.resource', 'lark_oapi.api.performance.v2.resource', 'lark_oapi.api.performance.v1.resource', 'lark_oapi.api.payroll.v1.resource', 'lark_oapi.api.passport.v1.resource', 'lark_oapi.api.optical_char_recognition.v1.resource', 'lark_oapi.api.okr.v2.resource', 'lark_oapi.api.okr.v1.resource', 'lark_oapi.api.moments.v1.resource', 'lark_oapi.api.minutes.v1.resource', 'lark_oapi.api.meeting_room.v1.resource', 'lark_oapi.api.mdm.v3.resource', 'lark_oapi.api.mdm.v1.resource', 'lark_oapi.api.mail.v1.resource', 'lark_oapi.api.lingo.v1.resource', 'lark_oapi.api.im.v2.resource', 'lark_oapi.api.im.v1.resource', 'lark_oapi.api.human_authentication.v1.resource', 'lark_oapi.api.hire.v2.resource', 'lark_oapi.api.hire.v1.resource', 'lark_oapi.api.helpdesk.v1.resource', 'lark_oapi.api.event.v1.resource', 'lark_oapi.api.elearning.v2.resource', 'lark_oapi.api.ehr.v1.resource', 'lark_oapi.api.drive.v2.resource', 'lark_oapi.api.drive.v1.resource', 'lark_oapi.api.docx.v1.resource', 'lark_oapi.api.document_ai.v1.resource', 'lark_oapi.api.docs.v1.resource', 'lark_oapi.api.directory.v1.resource', 'lark_oapi.api.corehr.v2.resource', 'lark_oapi.api.corehr.v1.resource', 'lark_oapi.api.contact.v3.resource', 'lark_oapi.api.compensation.v1.resource', 'lark_oapi.api.cardkit.v1.resource', 'lark_oapi.api.calendar.v4.resource', 'lark_oapi.api.bot.v4.resource', 'lark_oapi.api.board.v1.resource', 'lark_oapi.api.block.v2.resource', 'lark_oapi.api.bitable.v1.resource', 'lark_oapi.api.base.v2.resource', 'lark_oapi.api.baike.v1.resource', 'lark_oapi.api.authen.v1.resource', 'lark_oapi.api.auth.v4.resource', 'lark_oapi.api.auth.v3.resource', 'lark_oapi.api.attendance.v1.resource', 'lark_oapi.api.approval.v4.resource', 'lark_oapi.api.application.v7.resource', 'lark_oapi.api.application.v6.resource', 'lark_oapi.api.application.v5.resource', 'lark_oapi.api.apaas.v1.resource', 'lark_oapi.api.aily.v1.resource', 'lark_oapi.api.admin.v1.resource', 'lark_oapi.api.acs.v1.resource', 'lark_oapi.core.access_token', 'lark_oapi.core.token', 'lark_oapi.card', 'lark_oapi.ws', 'lark_oapi.ws.pb.google.protobuf.internal', 'lark_oapi.ws.pb', 'lark_oapi.ws.pb.google.protobuf.pyext', 'lark_oapi.ws.pb.google.protobuf', 'lark_oapi.ws.pb.google', 'dingtalk_stream', 'atlas.channels.adapters._vendor', 'atlas.channels.adapters', 'atlas.channels', 'atlas.capabilities.durable', 'atlas.capabilities.computer', 'atlas.capabilities.coding', 'atlas.capabilities.browser', 'atlas.capabilities', 'atlas.automation', 'atlas.api', 'atlas.agents.backends', 'atlas.agents', 'atlas.agent', 'atlas', 're', 'collections', 'encodings', 'uvicorn', 'asyncio', 'pathlib', 'logging']
+npm error Lifecycle script `package:backend` failed with error:
+npm error code 1
+npm error path D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend
+npm error workspace @atlas/frontend@0.1.1
+npm error location D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c node scripts/build-backend.mjs && node scripts/package-sqlite.mjs
+npm error Lifecycle script `dist:win` failed with error:
+npm error code 1
+npm error path D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend
+npm error workspace @atlas/frontend@0.1.1
+npm error location D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c npm run clean:release && npm run build && npm run package:backend && npm run package:node && node scripts/stage-electron.mjs && electron-builder --win nsis --x64 --publish never && node scripts/write-release-manifest.mjs
+EXIT=1
+2026-11-18T22:21:48Z

@@ -1,0 +1,21 @@
+INFO:     Started server process [61940]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:41138 (Press CTRL+C to quit)
+INFO:     127.0.0.1:41139 - "GET /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37780 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37780 - "GET /bundle.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37780 - "GET /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47430 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47430 - "GET /bundle.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47430 - "GET /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37780 - "GET /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47430 - "GET /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47430 - "PUT /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47430 - "GET /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37780 - "PUT /api/u6/keybindings HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:37780 - "GET /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37780 - "GET /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37780 - "PUT /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37780 - "GET /api/u6/keybindings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47430 - "GET /api/u6/keybindings HTTP/1.1" 200 OK

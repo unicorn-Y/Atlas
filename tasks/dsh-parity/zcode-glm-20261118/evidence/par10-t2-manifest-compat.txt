@@ -1,0 +1,190 @@
+PAR-10-T2 module/compatibility matrix 2026-11-18T21:47:57Z
+module: D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\dist-electron\main\releaseIntegrity.js
+
+=== A: real electron-builder payload (win-unpacked), embedded runtime manifest ===
+$ node verify-harness.mjs <module> 'D:\Atlas\.worktrees\...\windows-release\win-unpacked' '{"appVersion":"0.1.1","electronVersion":"44.7.0","platform":"win32","architecture":"x64"}'
+{
+  "ok": true,
+  "manifestPath": "D:\\Atlas\\.worktrees\\zcode-par10-release-startup\\frontend\\windows-release\\win-unpacked\\resources\\atlas\\release-manifest.json",
+  "manifest_app_version": "0.1.1",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "546b2d33fb72f1fc5c51a7e5699a7590538479d68a1ddbc62725f05944459e1c"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "9a8fb79d6b7e581d127314028dcecf754b8d7fe4aca1247f82c1f33ee8fccc7e"
+    }
+  ],
+  "issues": []
+}
+A_EXIT=0
+
+=== B: same real bytes, current-schema manifest at legacy install-root path ===
+$ node verify-harness.mjs <module> '...\real-tree' '{"appVersion":"0.1.1","electronVersion":"44.7.0","platform":"win32","architecture":"x64"}'
+{
+  "ok": true,
+  "manifestPath": "D:\\Atlas\\.tmp\\par10-t2\\real-tree\\release-manifest.json",
+  "manifest_app_version": "0.1.1",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "546b2d33fb72f1fc5c51a7e5699a7590538479d68a1ddbc62725f05944459e1c"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "9a8fb79d6b7e581d127314028dcecf754b8d7fe4aca1247f82c1f33ee8fccc7e"
+    }
+  ],
+  "issues": []
+}
+B_EXIT=0
+
+=== B2: same real bytes, manifest at resources/release-manifest.json ===
+{
+  "ok": true,
+  "manifestPath": "D:\\Atlas\\.tmp\\par10-t2\\real-tree\\resources\\release-manifest.json",
+  "manifest_app_version": "0.1.1",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "546b2d33fb72f1fc5c51a7e5699a7590538479d68a1ddbc62725f05944459e1c"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "9a8fb79d6b7e581d127314028dcecf754b8d7fe4aca1247f82c1f33ee8fccc7e"
+    }
+  ],
+  "issues": []
+}
+B2_EXIT=0
+
+=== C: real shipped 0.1.0 install tree (old root manifest, pre-sqlite_runtime schema) ===
+source: D:\Atlas\frontend\windows-release\{win-unpacked,release-manifest.json} (built 2026-10-05)
+{
+  "ok": false,
+  "manifest_has_installer": null,
+  "verifiedArtifacts": [],
+  "issues": [
+    {
+      "code": "manifest_missing",
+      "path": "D:\\Atlas\\.tmp\\par10-t2\\old-install"
+    }
+  ]
+}
+C_EXIT=1
+
+=== D: old 0.1.0 bytes + new-schema manifest at embedded path (upgrade-complete shape) ===
+wrote D:\Atlas\.tmp\par10-t2\old-install\resources\atlas\release-manifest.json
+GEN_EXIT=0
+{
+  "ok": true,
+  "manifestPath": "D:\\Atlas\\.tmp\\par10-t2\\old-install\\resources\\atlas\\release-manifest.json",
+  "manifest_app_version": "0.1.0",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "1889da525b0cc822900a2230569c8f0152a036f97c311b224a63cdce3396cd88"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "9a8fb79d6b7e581d127314028dcecf754b8d7fe4aca1247f82c1f33ee8fccc7e"
+    }
+  ],
+  "issues": []
+}
+D_EXIT=0
+
+=== F: stale manifest not replaced during upgrade (app_version 0.0.9 vs 0.1.0 binary) ===
+{
+  "ok": false,
+  "manifestPath": "D:\\Atlas\\.tmp\\par10-t2\\old-install\\resources\\atlas\\release-manifest.json",
+  "manifest_app_version": "0.0.9",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "1889da525b0cc822900a2230569c8f0152a036f97c311b224a63cdce3396cd88"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "9a8fb79d6b7e581d127314028dcecf754b8d7fe4aca1247f82c1f33ee8fccc7e"
+    }
+  ],
+  "issues": [
+    {
+      "code": "version_mismatch",
+      "field": "app_version",
+      "expected": "0.1.0",
+      "actual": "0.0.9"
+    }
+  ]
+}
+F_EXIT=1
+
+=== E: new-schema manifest at legacy root path over old 0.1.0 bytes ===
+{
+  "ok": true,
+  "manifestPath": "D:\\Atlas\\.tmp\\par10-t2\\old-install\\release-manifest.json",
+  "manifest_app_version": "0.1.0",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "1889da525b0cc822900a2230569c8f0152a036f97c311b224a63cdce3396cd88"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "9a8fb79d6b7e581d127314028dcecf754b8d7fe4aca1247f82c1f33ee8fccc7e"
+    }
+  ],
+  "issues": []
+}
+E_EXIT=0

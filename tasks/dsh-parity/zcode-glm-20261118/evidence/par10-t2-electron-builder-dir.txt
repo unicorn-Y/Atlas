@@ -1,0 +1,24 @@
+PAR-10-T2 electron-builder --dir 2026-11-18T21:48:21Z
+$ npx electron-builder --win --x64 --dir --publish never   (cwd frontend)
+npm notice run atlas@0.1.0 npx
+npm notice run electron-builder --win --x64 --dir --publish never
+  • electron-builder  version=26.15.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • packageManager not detected by file, falling back to environment detection  resolvedPackageManager=npm detected=D:\Atlas\.worktrees\zcode-par10-release-startup\frontend
+  • detected workspace root for project using lock file  pm=npm config=undefined resolved=D:\Atlas\.worktrees\zcode-par10-release-startup projectDir=D:\Atlas\.worktrees\zcode-par10-release-startup\frontend
+  • executing @electron/rebuild  electronVersion=44.7.0 arch=x64 buildFromSource=false workspaceRoot=D:\Atlas\.worktrees\zcode-par10-release-startup projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=44.7.0 appOutDir=windows-release\win-unpacked
+  • using custom unpacked Electron distribution  electronDist=electron-runtime
+  • copying unpacked Electron  source=D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\electron-runtime destination=D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\windows-release\win-unpacked
+  • searching for node modules  pm=npm searchDir=D:\Atlas\.worktrees\zcode-par10-release-startup\frontend
+  • no node modules found in collection, trying next search directory  searchDir=D:\Atlas\.worktrees\zcode-par10-release-startup\frontend attempt=0
+  • searching for node modules  pm=npm searchDir=D:\Atlas\.worktrees\zcode-par10-release-startup
+  • duplicate dependency references  dependencies=["string-width@7.2.0","string-width@7.2.0","strip-ansi@7.2.0","strip-ansi@7.2.0"]
+  • cannot find path for dependency  dependencies=["@agentclientprotocol/claude-agent-acp@undefined","@agentclientprotocol/codex-acp@undefined","@ast-grep/cli@undefined","@fontsource-variable/geist-mono@undefined","@fontsource-variable/geist@undefined","@fontsource/noto-serif-sc@undefined","@mariozechner/pi-coding-agent@undefined","@playwright/mcp@undefined","@radix-ui/react-collapsible@undefined","@radix-ui/react-dialog@undefined","@radix-ui/react-dropdown-menu@undefined","@radix-ui/react-popover@undefined","@radix-ui/react-scroll-area@undefined","@radix-ui/react-switch@undefined","@radix-ui/react-tabs@undefined","@radix-ui/react-tooltip@undefined","@streamdown/cjk@undefined","@streamdown/math@undefined","@tailwindcss/vite@undefined","@types/qrcode@undefined","@xterm/addon-fit@undefined","@xterm/xterm@undefined","chrome-devtools-mcp@undefined","class-variance-authority@undefined","clsx@undefined","cmdk@undefined","lucide-react@undefined","mermaid@undefined","motion@undefined","qrcode@undefined","react-dom@undefined","react-markdown@undefined","react-virtuoso@undefined","react@undefined","rehype-highlight@undefined","remark-cjk-friendly-gfm-strikethrough@undefined","remark-gfm@undefined","streamdown@undefined","tailwind-merge@undefined","tailwindcss@undefined","zustand@undefined"]
+  • updating asar integrity executable resource  executablePath=windows-release\win-unpacked\Atlas.exe
+  • embedded Atlas icon into Atlas.exe (7 sizes)
+  • wrote runtime release manifest: D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\windows-release\win-unpacked\resources\atlas\release-manifest.json
+  • executable resource editing and code signing skipped — signAndEditExecutable is false. To skip only code signing while keeping icon and metadata applied, use signExecutable: false instead.  exe=windows-release\win-unpacked\Atlas.exe
+EXIT=0

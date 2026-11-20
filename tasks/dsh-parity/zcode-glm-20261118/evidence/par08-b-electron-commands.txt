@@ -1,0 +1,27 @@
+# PAR-08-B command log
+
+## Backend
+cd D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/core
+python -m pytest tests/test_u6_keybindings.py -q -p no:cacheprovider --basetemp=../.tmp/pytest-par08b
+exit=0; 7 passed, 5 warnings (log: par08-b-pytest.txt)
+
+## Frontend targeted
+cd D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend
+D:/Atlas/node_modules/.bin/vitest run --root . src/renderer/services/keybindings.test.ts src/renderer/services/shortcuts.test.ts src/renderer/pages/ShortcutsPanel.test.tsx
+exit=0; 3 files, 25 tests passed (log: par08-b-vitest-targeted.txt)
+
+## Frontend full
+cd D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/frontend
+D:/Atlas/node_modules/.bin/vitest run --root .
+exit=0; 83 files, 390 tests passed (log: par08-b-vitest-full.txt)
+
+## Renderer tsc
+cd D:/Atlas/.worktrees/zcode-exec06-keybindings-cas
+D:/Atlas/node_modules/.bin/tsc -p frontend/tsconfig.renderer.json --noEmit
+exit=0; no output (log: par08-b-tsc.txt)
+
+## Electron dual-window
+cd D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par08b-harness
+esbuild harness.tsx --bundle --format=iife --jsx=automatic --define:process.env.NODE_ENV='"production"' --outfile=bundle.js
+bash run_electron.sh
+exit=0; window1=0 window2=0; summary result=PASS; backend log shows PUT 200, PUT 409, PUT 200

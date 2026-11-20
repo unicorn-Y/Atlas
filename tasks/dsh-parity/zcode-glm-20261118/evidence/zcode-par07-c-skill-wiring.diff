@@ -1,0 +1,621 @@
+diff --git a/config/atlas.example.toml b/config/atlas.example.toml
+index e70bba07..ffb2b133 100644
+--- a/config/atlas.example.toml
++++ b/config/atlas.example.toml
+@@ -48,6 +48,14 @@ defer_min_tools = 30              # 工具总数超过这个数才折叠
+ auto_load = 3                     # 每轮按用户消息自动展开最相关的几个折叠工具
+ core_tools = []                   # 永远不折叠的工具名
+ 
++# 额外技能根：与项目/用户的 .dsh/skills、.agents/skills 共用同一条优先级阶梯。
++# 只有真实存在的目录才会被扫描；缺省、空值或无效值不会改变默认技能源列表。
++[extensions]
++# custom_skill_dirs = ["D:/shared-skills", "~/team-skills"] # 每目录一个 custom:<名称> 源，优先级 22
++# runtime_skills_dir = "./data/runtime-skills"              # 运行时技能根（目录），优先级 25
++# bundled_skills_dir = ""                                   # 发行包自带技能根（category 布局），优先级 5
++# hermes_skills = ""                                        # 可选 Hermes 技能根，优先级 15
++
+ # API gateway (monkeyapi or direct)
+ [models.gateway]
+ base_url = "https://api.monkeyapi.net"
+diff --git a/core/atlas/cli.py b/core/atlas/cli.py
+index ceec66b8..2041b646 100644
+--- a/core/atlas/cli.py
++++ b/core/atlas/cli.py
+@@ -1813,9 +1813,17 @@ def exec_command(
+                     agent_skills = list(agent_skills)
+             effective_preload = list(dict.fromkeys([*agent_skills, *requested_skills]))
+             if effective_preload:
+-                from atlas.skills import SkillManager, default_skill_sources
++                from atlas.config import get_config
++                from atlas.skills import (
++                    SkillManager,
++                    default_skill_sources,
++                    skill_source_config_overrides,
++                )
+                 skill_manager = SkillManager()
+-                for source in default_skill_sources(workspace=root):
++                for source in default_skill_sources(
++                    workspace=root,
++                    **skill_source_config_overrides(get_config()),
++                ):
+                     skill_manager.register_skill_source(source)
+                 await skill_manager.scan_skills()
+                 unknown = [name for name in effective_preload if skill_manager.get_skill(name) is None]
+diff --git a/core/atlas/server.py b/core/atlas/server.py
+index 1ca18d77..dd4a753d 100644
+--- a/core/atlas/server.py
++++ b/core/atlas/server.py
+@@ -326,12 +326,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+         # E2: feed the one shared skill index from every source. Engine skills are
+         # strictly opt-in via `extensions.hermes_skills` in atlas.toml; plugin skill
+         # dirs join through _refresh_extension_sources once plugin_runtime exists.
++        # DSH-parity roots are production-configurable through the same extension
++        # point: `extensions.custom_skill_dirs` / `runtime_skills_dir` /
++        # `bundled_skills_dir`; absent directories leave the source ladder as-is.
++        from atlas.skills import skill_source_config_overrides
++
+         hermes_skills = cfg.get("extensions.hermes_skills")
+         for source in default_skill_sources(
+             workspace=_default_workspace(),
+             hermes_skills_dir=(
+                 Path(str(hermes_skills).strip()) if isinstance(hermes_skills, str) and hermes_skills.strip() else None
+             ),
++            **skill_source_config_overrides(cfg),
+         ):
+             skill_mgr.register_skill_source(source)
+         # S2.3: skill_mgr.scan_skills() is the deferred ``skills`` component; the
+diff --git a/core/atlas/skills/__init__.py b/core/atlas/skills/__init__.py
+index cb554376..8e3060af 100644
+--- a/core/atlas/skills/__init__.py
++++ b/core/atlas/skills/__init__.py
+@@ -88,6 +88,12 @@ class SkillSource:
+       Hermes bundled skills)
+     - ``"flat"``: ``<root>/<skill>/SKILL.md`` (Claude Code skills dirs)
+     - ``"single"``: ``<root>/SKILL.md`` (one plugin-contributed skill dir)
++
++    A source is always a real directory scanned with ``rglob``; it carries no
++    callable provider. The ``runtime`` source below is therefore a filesystem
++    root, not the seam for a future virtual provider that would synthesise
++    skills without SKILL.md files — that capability would need a source type
++    (or a ``SkillManager`` provider) that does not assume ``root``/``path``.
+     """
+ 
+     name: str
+@@ -705,8 +711,16 @@ class SkillManager:
+ 
+ # Higher priority wins duplicate skill names. The ladder mirrors the custom
+ # command sources (atlas/runtime/commands.py): bundled Atlas lowest, then
+-# opt-in Hermes, user-level Claude, project-level Claude, plugins on top.
+-SKILL_SOURCE_PRIORITY = {"atlas": 10, "library": 11, "atlas-user": 12, "hermes": 15, "claude-user": 20, "claude-project": 30, "plugin": 60}
++# opt-in Hermes, user-level Claude/DSH, project-level Claude/DSH, plugins on
++# top. DSH's own ladder is lower-wins, so its relative order is inverted here:
++# project-dsh > project-agents > runtime > custom > user-dsh > user-agents >
++# bundled.
++SKILL_SOURCE_PRIORITY = {
++    "atlas": 10, "library": 11, "atlas-user": 12, "hermes": 15,
++    "user-agents": 18, "user-dsh": 19, "claude-user": 20,
++    "custom": 22, "runtime": 25, "claude-project": 30,
++    "project-agents": 38, "project-dsh": 40, "plugin": 60, "bundled": 5,
++}
+ 
+ 
+ def plugin_skill_sources(
+@@ -728,12 +742,55 @@ def plugin_skill_sources(
+     return sources
+ 
+ 
++def skill_source_config_overrides(config: Any | None) -> dict[str, Any]:
++    """Translate the ``[extensions]`` skill-root keys into source kwargs.
++
++    Reuses the plain-config convention already used for
++    ``extensions.hermes_skills`` (no separate schema registry): values are read
++    from ``atlas.toml``/the expert overlay through ``AtlasConfig.get``. The
++    keys are:
++
++    - ``extensions.custom_skill_dirs``: one path or a list of paths, each
++      becoming its own ``custom:<name>`` source (priority 22).
++    - ``extensions.runtime_skills_dir``: one directory (priority 25).
++    - ``extensions.bundled_skills_dir``: one directory (priority 5).
++
++    Missing, blank and wrongly-typed values are ignored, so a stale config can
++    never prevent boot. The returned paths are passed through unchanged to
++    :func:`default_skill_sources`, which drops any that are not directories.
++    """
++    if config is None:
++        return {}
++    overrides: dict[str, Any] = {}
++    custom = config.get("extensions.custom_skill_dirs", None)
++    if isinstance(custom, str):
++        custom = [custom]
++    if isinstance(custom, (list, tuple)):
++        directories = [
++            value.strip() for value in custom
++            if isinstance(value, str) and value.strip()
++        ]
++        if directories:
++            overrides["custom_skill_dirs"] = directories
++    for key, kwargs_key in (
++        ("extensions.runtime_skills_dir", "runtime_skills_dir"),
++        ("extensions.bundled_skills_dir", "bundled_skills_dir"),
++    ):
++        value = config.get(key, None)
++        if isinstance(value, str) and value.strip():
++            overrides[kwargs_key] = value.strip()
++    return overrides
++
++
+ def default_skill_sources(
+     workspace: Path | str | None = None,
+     atlas_home: Path | str | None = None,
+     plugin_skills: Mapping[str, Sequence[Path | str]] | None = None,
+     hermes_skills_dir: Path | str | None = None,
+     user_home: Path | str | None = None,
++    custom_skill_dirs: Sequence[Path | str] = (),
++    runtime_skills_dir: Path | str | None = None,
++    bundled_skills_dir: Path | str | None = None,
+ ) -> list[SkillSource]:
+     """Assemble every skill source feeding the single shared Atlas index.
+ 
+@@ -747,10 +804,29 @@ def default_skill_sources(
+       ``extensions.hermes_skills`` config point).
+     - ``claude-user``: ``~/.claude/skills`` (priority 20).
+     - ``claude-project``: ``<workspace>/.claude/skills`` (priority 30).
++    - ``user-dsh`` / ``user-agents``: ``~/.dsh/skills`` / ``~/.agents/skills``
++      (priorities 19/18), added only when the directory exists.
++    - ``project-dsh`` / ``project-agents``: ``<workspace>/.dsh/skills`` /
++      ``<workspace>/.agents/skills`` (priorities 40/38), added only when the
++      directory exists so the source list stays unchanged otherwise.
++    - ``custom:<name>``: caller-provided extra skill directories (priority 22);
++      each root is one source because a source owns exactly one directory.
++    - ``runtime`` / ``bundled``: optional runtime and packaged roots (priorities
++      25/5), added only when the caller passes an existing directory. The
++      ``runtime`` source is a filesystem directory scanned like every other
++      source; it is deliberately not a virtual provider hook — a provider that
++      materialises skills without SKILL.md files would need its own capability,
++      not this source list.
+     - ``plugin:*``: caller-provided plugin skill dirs (priority 60).
+     """
+     atlas_root = Path(atlas_home).expanduser() / "skills" if atlas_home else SKILLS_DIR
+     sources = [SkillSource("atlas", atlas_root, SKILL_SOURCE_PRIORITY["atlas"], layout="category")]
++    if bundled_skills_dir:
++        bundled_root = Path(bundled_skills_dir).expanduser()
++        if bundled_root.is_dir():
++            sources.append(SkillSource(
++                "bundled", bundled_root, SKILL_SOURCE_PRIORITY["bundled"], layout="category",
++            ))
+     # Test/isolation seam: when ATLAS_SKILLS_HOME is set, BUILTIN skills keep
+     # loading from the repository root (read-only) while user-acquired skills
+     # (market installs, X2 recordings, X5 candidates) land in the temp root —
+@@ -777,10 +853,41 @@ def default_skill_sources(
+     sources.append(SkillSource(
+         "claude-user", home / ".claude" / "skills", SKILL_SOURCE_PRIORITY["claude-user"],
+     ))
++    for name, root in (
++        ("user-dsh", home / ".dsh" / "skills"),
++        ("user-agents", home / ".agents" / "skills"),
++    ):
++        if root.is_dir():
++            sources.append(SkillSource(name, root, SKILL_SOURCE_PRIORITY[name]))
+     if workspace:
++        project_root = Path(workspace).expanduser()
+         sources.append(SkillSource(
+-            "claude-project", Path(workspace).expanduser() / ".claude" / "skills",
++            "claude-project", project_root / ".claude" / "skills",
+             SKILL_SOURCE_PRIORITY["claude-project"],
+         ))
++        # DSH-style project roots join only when present: an absent directory
++        # must not change the visible source list or introspection output.
++        for name, root in (
++            ("project-dsh", project_root / ".dsh" / "skills"),
++            ("project-agents", project_root / ".agents" / "skills"),
++        ):
++            if root.is_dir():
++                sources.append(SkillSource(name, root, SKILL_SOURCE_PRIORITY[name]))
++    if runtime_skills_dir:
++        runtime_root = Path(runtime_skills_dir).expanduser()
++        if runtime_root.is_dir():
++            sources.append(SkillSource(
++                "runtime", runtime_root, SKILL_SOURCE_PRIORITY["runtime"],
++            ))
++    seen_custom: set[str] = set()
++    for index, directory in enumerate(custom_skill_dirs):
++        custom_root = Path(directory).expanduser()
++        if not custom_root.is_dir():
++            continue
++        name = f"custom:{custom_root.name or index}"
++        if name in seen_custom:
++            name = f"{name}:{index}"
++        seen_custom.add(name)
++        sources.append(SkillSource(name, custom_root, SKILL_SOURCE_PRIORITY["custom"]))
+     sources.extend(plugin_skill_sources(plugin_skills or {}))
+     return sources
+diff --git a/core/tests/test_skill_sources_dsh.py b/core/tests/test_skill_sources_dsh.py
+new file mode 100644
+index 00000000..ab4ca7fa
+--- /dev/null
++++ b/core/tests/test_skill_sources_dsh.py
+@@ -0,0 +1,384 @@
++"""DSH-style skill source ladder: .dsh/.agents roots, custom/runtime/bundled."""
++
++from pathlib import Path
++
++import pytest
++
++from atlas.config import AtlasConfig
++from atlas.skills import (
++    SKILL_SOURCE_PRIORITY,
++    SkillManager,
++    SkillSource,
++    default_skill_sources,
++    skill_source_config_overrides,
++)
++
++pytestmark = pytest.mark.unit
++
++# (ladder key, registered source name), highest priority first.
++LADDER = (
++    ("project-dsh", "project-dsh"),
++    ("project-agents", "project-agents"),
++    ("runtime", "runtime"),
++    ("custom", "custom:custom-root"),
++    ("user-dsh", "user-dsh"),
++    ("user-agents", "user-agents"),
++    ("bundled", "bundled"),
++)
++
++
++def write_skill(root: Path, name: str, description: str, extra: str = "") -> Path:
++    directory = root / name
++    directory.mkdir(parents=True, exist_ok=True)
++    path = directory / "SKILL.md"
++    path.write_text(
++        f"---\nname: {name}\ndescription: {description}\n{extra}---\nbody of {name}\n",
++        encoding="utf-8",
++    )
++    return path
++
++
++def sources_by_name(**kwargs):
++    return {source.name: source for source in default_skill_sources(**kwargs)}
++
++
++def build_manager(sources: dict[str, SkillSource]) -> SkillManager:
++    manager = SkillManager()
++    for source in sources.values():
++        manager.register_skill_source(source)
++    manager.scan_skills_sync()
++    return manager
++
++
++def ladder_roots(tmp_path: Path) -> dict[str, Path]:
++    workspace = tmp_path / "ws"
++    home = tmp_path / "home"
++    return {
++        "project-dsh": workspace / ".dsh" / "skills",
++        "project-agents": workspace / ".agents" / "skills",
++        "runtime": tmp_path / "runtime-root",
++        "custom": tmp_path / "custom-root",
++        "user-dsh": home / ".dsh" / "skills",
++        "user-agents": home / ".agents" / "skills",
++        "bundled": tmp_path / "bundled-root",
++    }
++
++
++def ladder_sources(tmp_path: Path) -> dict[str, SkillSource]:
++    roots = ladder_roots(tmp_path)
++    return sources_by_name(
++        workspace=tmp_path / "ws",
++        atlas_home=tmp_path / "atlas",
++        user_home=tmp_path / "home",
++        custom_skill_dirs=[roots["custom"]],
++        runtime_skills_dir=roots["runtime"],
++        bundled_skills_dir=roots["bundled"],
++    )
++
++
++def write_ladder_copy(root: Path, source_name: str) -> None:
++    if source_name == "bundled":
++        # Bundled roots use the category layout: <root>/<category>/<skill>/SKILL.md.
++        write_skill(root / "packaged", "ladder", f"copy from {source_name}")
++    else:
++        write_skill(root, "ladder", f"copy from {source_name}")
++
++
++def test_dsh_project_roots_join_only_when_present_and_win_same_name(tmp_path: Path) -> None:
++    workspace = tmp_path / "ws"
++    write_skill(workspace / ".dsh" / "skills", "shared", "dsh copy")
++    write_skill(workspace / ".agents" / "skills", "shared", "agents copy")
++    write_skill(workspace / ".claude" / "skills", "shared", "claude copy")
++
++    sources = sources_by_name(
++        workspace=workspace, atlas_home=tmp_path / "atlas", user_home=tmp_path / "home",
++    )
++    assert sources["project-dsh"].priority > sources["project-agents"].priority
++    assert sources["project-agents"].priority > sources["claude-project"].priority
++
++    manager = build_manager(sources)
++    shared = manager.get_skill("shared")
++    assert shared is not None
++    assert shared.source == "project-dsh"
++    assert shared.description == "dsh copy"
++
++    empty = sources_by_name(
++        workspace=tmp_path / "empty", atlas_home=tmp_path / "atlas", user_home=tmp_path / "home",
++    )
++    assert "project-dsh" not in empty and "project-agents" not in empty
++
++
++def test_dsh_user_roots_follow_dsh_precedence(tmp_path: Path) -> None:
++    home = tmp_path / "home"
++    write_skill(home / ".dsh" / "skills", "user-shared", "user dsh")
++    write_skill(home / ".agents" / "skills", "user-shared", "user agents")
++    hermes = tmp_path / "hermes" / "skills"
++    write_skill(hermes / "cat", "user-shared", "hermes copy")
++
++    sources = sources_by_name(
++        atlas_home=tmp_path / "atlas", user_home=home, hermes_skills_dir=hermes,
++    )
++    assert sources["user-dsh"].priority > sources["user-agents"].priority
++    assert sources["user-agents"].priority > sources["hermes"].priority
++    assert sources["hermes"].priority > sources["atlas"].priority
++
++    manager = build_manager(sources)
++    skill = manager.get_skill("user-shared")
++    assert skill is not None and skill.source == "user-dsh"
++
++
++def test_custom_runtime_and_bundled_roots_follow_the_ladder(tmp_path: Path) -> None:
++    custom_a = tmp_path / "custom-a"
++    custom_b = tmp_path / "custom-b"
++    runtime = tmp_path / "runtime"
++    bundled = tmp_path / "bundled"
++    home = tmp_path / "home"
++    write_skill(custom_a, "portable", "custom a")
++    write_skill(custom_b, "portable", "custom b")
++    write_skill(runtime, "portable", "runtime")
++    # Category layout keeps the packaged source scannable.
++    write_skill(bundled / "packaged", "portable", "bundled")
++    write_skill(home / ".dsh" / "skills", "portable", "user dsh")
++
++    sources = sources_by_name(
++        atlas_home=tmp_path / "atlas",
++        user_home=home,
++        custom_skill_dirs=[custom_a, custom_b, tmp_path / "missing"],
++        runtime_skills_dir=runtime,
++        bundled_skills_dir=bundled,
++    )
++    # This used to be a conditional ("if user-dsh exists else True") that was
++    # never exercised; the user-dsh root now exists, so the assertion is real.
++    assert sources["runtime"].priority > sources["custom:custom-a"].priority
++    assert sources["custom:custom-a"].priority > sources["user-dsh"].priority
++    assert sources["custom:custom-b"].priority == sources["custom:custom-a"].priority
++    assert sources["bundled"].priority < sources["atlas"].priority
++    assert "custom:missing" not in sources
++
++    manager = build_manager(sources)
++    portable = manager.get_skill("portable")
++    assert portable is not None and portable.source == "runtime"
++
++
++def test_invocation_policy_survives_new_sources(tmp_path: Path) -> None:
++    workspace = tmp_path / "ws"
++    write_skill(
++        workspace / ".dsh" / "skills", "manual-only", "human only",
++        "disable-model-invocation: true\nuser-invocable: false\n",
++    )
++    sources = sources_by_name(
++        workspace=workspace, atlas_home=tmp_path / "atlas", user_home=tmp_path / "home",
++    )
++    manager = build_manager(sources)
++    skill = manager.get_skill("manual-only")
++    assert skill is not None
++    assert skill.disable_model_invocation is True
++    assert skill.user_invocable is False
++
++
++def test_absent_dsh_roots_leave_the_source_list_unchanged(tmp_path: Path) -> None:
++    names = [source.name for source in default_skill_sources(
++        workspace=tmp_path / "empty-ws",
++        atlas_home=tmp_path / "atlas",
++        user_home=tmp_path / "empty-home",
++    )]
++    assert names == ["atlas", "library", "claude-user", "claude-project"]
++    no_workspace = [source.name for source in default_skill_sources(
++        atlas_home=tmp_path / "atlas", user_home=tmp_path / "empty-home",
++    )]
++    assert no_workspace == ["atlas", "library", "claude-user"]
++
++
++def test_extension_config_absent_or_invalid_values_change_nothing(tmp_path: Path) -> None:
++    defaults = [source.name for source in default_skill_sources(
++        workspace=tmp_path / "empty-ws",
++        atlas_home=tmp_path / "atlas",
++        user_home=tmp_path / "empty-home",
++    )]
++    assert skill_source_config_overrides(None) == {}
++    assert skill_source_config_overrides(AtlasConfig({})) == {}
++    assert skill_source_config_overrides(
++        AtlasConfig({"extensions": {"custom_skill_dirs": 42, "runtime_skills_dir": []}}),
++    ) == {}
++
++    overrides = skill_source_config_overrides(AtlasConfig({"extensions": {
++        "custom_skill_dirs": [],
++        "runtime_skills_dir": "   ",
++        "bundled_skills_dir": str(tmp_path / "missing-bundled"),
++    }}))
++    assert overrides == {"bundled_skills_dir": str(tmp_path / "missing-bundled")}
++    names = [source.name for source in default_skill_sources(
++        workspace=tmp_path / "empty-ws",
++        atlas_home=tmp_path / "atlas",
++        user_home=tmp_path / "empty-home",
++        **overrides,
++    )]
++    assert names == defaults
++
++
++def test_extension_config_wires_custom_runtime_and_bundled_roots(tmp_path: Path) -> None:
++    custom = tmp_path / "custom-root"
++    runtime = tmp_path / "runtime-root"
++    bundled = tmp_path / "bundled-root"
++    write_skill(custom, "wired", "custom")
++    write_skill(runtime, "wired", "runtime")
++    write_skill(bundled / "packaged", "wired", "bundled")
++
++    cfg = AtlasConfig({"extensions": {
++        "custom_skill_dirs": [str(custom), str(tmp_path / "missing")],
++        "runtime_skills_dir": str(runtime),
++        "bundled_skills_dir": str(bundled),
++    }})
++    overrides = skill_source_config_overrides(cfg)
++    assert overrides == {
++        "custom_skill_dirs": [str(custom), str(tmp_path / "missing")],
++        "runtime_skills_dir": str(runtime),
++        "bundled_skills_dir": str(bundled),
++    }
++    # A single string is accepted like ``extensions.hermes_skills`` is.
++    assert skill_source_config_overrides(
++        AtlasConfig({"extensions": {"custom_skill_dirs": str(custom)}}),
++    ) == {"custom_skill_dirs": [str(custom)]}
++
++    sources = sources_by_name(
++        workspace=tmp_path / "ws",
++        atlas_home=tmp_path / "atlas",
++        user_home=tmp_path / "home",
++        **overrides,
++    )
++    assert "custom:custom-root" in sources
++    assert "runtime" in sources
++    assert "bundled" in sources
++    assert "custom:missing" not in sources
++
++    manager = build_manager(sources)
++    wired = manager.get_skill("wired")
++    assert wired is not None and wired.source == "runtime"
++
++
++def test_project_sources_do_not_escape_the_workspace(tmp_path: Path) -> None:
++    workspace = tmp_path / "ws"
++    sibling = tmp_path / "sibling"
++    write_skill(sibling / ".dsh" / "skills", "sibling-dsh", "sibling dsh")
++    write_skill(sibling / ".agents" / "skills", "sibling-agents", "sibling agents")
++    # Only <workspace>/.dsh/skills is a project root; nested copies are not.
++    write_skill(workspace / "nested" / ".dsh" / "skills", "nested-dsh", "nested dsh")
++    write_skill(workspace / "nested" / ".agents" / "skills", "nested-agents", "nested agents")
++
++    sources = sources_by_name(
++        workspace=workspace, atlas_home=tmp_path / "atlas", user_home=tmp_path / "home",
++    )
++    assert "project-dsh" not in sources and "project-agents" not in sources
++    manager = build_manager(sources)
++    assert manager.get_skill("sibling-dsh") is None
++    assert manager.get_skill("sibling-agents") is None
++    assert manager.get_skill("nested-dsh") is None
++    assert manager.get_skill("nested-agents") is None
++
++    write_skill(workspace / ".dsh" / "skills", "own-dsh", "own dsh")
++    write_skill(workspace / ".agents" / "skills", "own-agents", "own agents")
++    sources = sources_by_name(
++        workspace=workspace, atlas_home=tmp_path / "atlas", user_home=tmp_path / "home",
++    )
++    assert sources["project-dsh"].root == workspace / ".dsh" / "skills"
++    assert sources["project-agents"].root == workspace / ".agents" / "skills"
++    manager = build_manager(sources)
++    assert manager.get_skill("own-dsh").source == "project-dsh"
++    assert manager.get_skill("own-agents").source == "project-agents"
++    assert manager.get_skill("sibling-dsh") is None
++
++
++def test_runtime_root_is_a_filesystem_source_only(tmp_path: Path) -> None:
++    runtime = tmp_path / "runtime-root"
++    missing = tmp_path / "missing-runtime"
++    sources = sources_by_name(
++        workspace=tmp_path / "ws",
++        atlas_home=tmp_path / "atlas",
++        user_home=tmp_path / "home",
++        runtime_skills_dir=missing,
++    )
++    assert "runtime" not in sources
++
++    # A plain file is not a skill root: the source gate is is_dir(), not a
++    # provider call, so nothing can appear without an on-disk directory.
++    runtime.write_text("not a directory", encoding="utf-8")
++    sources = sources_by_name(
++        workspace=tmp_path / "ws",
++        atlas_home=tmp_path / "atlas",
++        user_home=tmp_path / "home",
++        runtime_skills_dir=runtime,
++    )
++    assert "runtime" not in sources
++
++    runtime.unlink()
++    runtime.mkdir()
++    write_skill(runtime, "disk-only", "on disk")
++    sources = sources_by_name(
++        workspace=tmp_path / "ws",
++        atlas_home=tmp_path / "atlas",
++        user_home=tmp_path / "home",
++        runtime_skills_dir=runtime,
++    )
++    assert sources["runtime"].root == runtime
++    manager = build_manager(sources)
++    skill = manager.get_skill("disk-only")
++    assert skill is not None and skill.source == "runtime"
++    assert Path(skill.path) == runtime / "disk-only" / "SKILL.md"
++    runtime_skills = [
++        item.name for item in manager.list_skills() if item.source == "runtime"
++    ]
++    assert runtime_skills == ["disk-only"]
++
++
++def test_same_name_precedence_walks_the_whole_dsh_ladder(tmp_path: Path) -> None:
++    roots = ladder_roots(tmp_path)
++    for key, source_name in LADDER:
++        write_ladder_copy(roots[key], source_name)
++
++    sources = ladder_sources(tmp_path)
++    present = [sources[source_name] for _key, source_name in LADDER]
++    assert [source.priority for source in present] == [
++        SKILL_SOURCE_PRIORITY[key] for key, _source_name in LADDER
++    ]
++    assert all(
++        higher.priority > lower.priority
++        for higher, lower in zip(present, present[1:])
++    )
++
++    manager = build_manager(sources)
++    winner = manager.get_skill("ladder")
++    assert winner is not None
++    assert winner.source == "project-dsh"
++    assert winner.description == "copy from project-dsh"
++    assert Path(winner.path) == roots["project-dsh"] / "ladder" / "SKILL.md"
++
++
++@pytest.mark.parametrize(
++    ("higher", "lower"),
++    list(zip(LADDER, LADDER[1:])),
++    ids=[f"{high[0]}-beats-{low[0]}" for high, low in zip(LADDER, LADDER[1:])],
++)
++def test_adjacent_dual_source_same_name_prefers_higher_priority(
++    tmp_path: Path,
++    higher: tuple[str, str],
++    lower: tuple[str, str],
++) -> None:
++    """Real two-source resolution: the higher ladder rung owns the duplicate."""
++    higher_key, higher_name = higher
++    lower_key, lower_name = lower
++    roots = ladder_roots(tmp_path)
++    write_ladder_copy(roots[higher_key], higher_name)
++    write_ladder_copy(roots[lower_key], lower_name)
++
++    sources = ladder_sources(tmp_path)
++    assert sources[higher_name].priority > sources[lower_name].priority
++    manager = SkillManager()
++    manager.register_skill_source(sources[higher_name])
++    manager.register_skill_source(sources[lower_name])
++    manager.scan_skills_sync()
++
++    winner = manager.get_skill("ladder")
++    assert winner is not None
++    assert winner.source == higher_name
++    assert winner.description == f"copy from {higher_name}"
++    assert Path(winner.path).parent.parent == roots[higher_key]

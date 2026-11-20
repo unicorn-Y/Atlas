@@ -1,0 +1,73 @@
+EXEC-06 · B-F09-SKILL-SOURCES-01 复核与 IMPL-5(.dsh/.agents 技能源阶梯)
+日期: 2026-11-18;DSH rc.4 3f321d32;Atlas wave3@060071ab + 在途
+
+================================================================================
+A. DSH:七源阶梯与优先级
+================================================================================
+- packages/skill/skill/src/index.ts:28,40,55-75
+  - BUNDLED_SKILL_RANK=600(最低优先级,Lower ranks win);
+  - SkillSource = 'project-dsh' | 'project-agents' | 'runtime' | 'user-dsh' |
+    'user-agents' | 'custom' | 'bundled' | (string & {});
+  - SkillSummary{path?,name,description,whenToUse?,invocation{modelInvocable,userInvocable},
+    source,provider,resourceBase?};SkillCandidate 加 rank(低者先赢同名)。
+- packages/skill/skill-filesystem/src/index.ts:35-39,256-268
+  - PROJECT_DSH_RANK=100 `<workspace>/.dsh/skills`;
+  - PROJECT_AGENTS_RANK=200 `<workspace>/.agents/skills`;
+  - CUSTOM_RANK=300(自定义目录);USER_DSH_RANK=400 `~/.dsh/skills`;
+  - USER_AGENTS_RANK=500 `~/.agents/skills`;RUNTIME_RANK=250(runtime provider);
+  - bundled 目录 rank=600(trustedHost)。
+  结论:项目 DSH > 项目 agents > runtime > custom > 用户 DSH > 用户 agents > bundled。
+- Atlas 现有(复核前):`core/atlas/skills/__init__.py:709`
+  atlas 10/library 11/atlas-user 12/hermes 15/claude-user 20/claude-project 30/plugin 60
+  (Höher wins);目录约定 `.claude/skills`(项目/用户)、Hermes、library、plugin;
+  调用策略字段 disable_model_invocation/user_invocable 已有(与 DSH modelInvocable/
+  userInvocable 对齐)。
+
+================================================================================
+B. IMPL-5(隔离 worktree zcode/exec06-skill-sources,基线 060071ab)
+================================================================================
+改动 2 文件 +182/-3:
+- core/atlas/skills/__init__.py:
+  - SKILL_SOURCE_PRIORITY 增加 user-agents 18/user-dsh 19/custom 22/runtime 25/
+    project-agents 38/project-dsh 40/bundled 5(保持既有相对序:
+    atlas 10 < hermes 15 < claude-user 20 < claude-project 30;plugin 60 最高);
+  - default_skill_sources 新增参数 custom_skill_dirs/runtime_skills_dir/bundled_skills_dir;
+  - `<workspace>/.dsh/skills`、`<workspace>/.agents/skills`、`~/.dsh/skills`、
+    `~/.agents/skills` 仅在目录存在时加入(不改变既有 source 列表/introspection);
+  - custom 每目录一个源 `custom:<name>`(重名追加索引);runtime/bundled 仅在传入且存在时加入。
+- core/tests/test_skill_sources_dsh.py:5 用例(项目/用户优先级+同名胜出、
+  custom/runtime/bundled 阶梯、absent 不改变列表、调用策略保留)。
+验证:
+  - 新测试 5 passed EXIT 0(evidence/exec06-skill-sources-runs.txt);
+  - 既有技能回归 7 文件 47 passed / 1 failed,EXIT 1;
+    失败 `test_skills_market.py::test_atlas_hub_state_forced_under_data_dir` 报
+    ModuleNotFoundError: No module named 'tools'——基线 worktree 同样失败(环境路径,
+    非本次改动),已记录。
+diff:evidence/zcode-exec06-skill-sources.diff;不合回不 push。
+
+================================================================================
+C. 剩余差距(未随 IMPL-5 关闭)
+================================================================================
+G1 server 组装仍只传 workspace/atlas_home/hermes/user_home;custom/runtime/bundled
+   参数尚未接入生产入口(需配置点与信任边界)。
+G2 无 DSH 的 virtual runtime provider(provider 身份 + rank + get() 句柄);
+   Atlas 的 runtime 目前只是可选目录源。
+G3 Atlas 优先级为“高者胜”且为兼容既有来源做了映射,不是 DSH 原数值;
+   同名跨源行为的逐组合矩阵仍需固定为测试。
+G4 无 source/provider 两字段分离(Atlas source 即 provider 标识),诊断面不同。
+
+================================================================================
+D. 验收(后续)
+================================================================================
+A-1 server 启动按配置传入 custom/runtime/bundled 根;缺失目录不改变列表。
+A-2 同名技能按 project-dsh > project-agents > runtime > custom > user-dsh >
+    user-agents > bundled > atlas/library/hermes/claude/plugin(Atlas 映射后)胜出,
+    逐组合参数化测试。
+A-3 `/api/skills` 与 introspect 的 source 名稳定;新源存在时才出现。
+A-4 调用策略 disable-model-invocation/user-invocable 对新源生效(已覆盖)。
+A-5 真机:工作区放 `.dsh/skills` 与 `.agents/skills` 同名技能,UI/模型目录取 dsh 版本。
+
+================================================================================
+E. 结论
+Atlas 原为五类来源(Atlas/Hermes/Claude/library/plugin);IMPL-5 后已覆盖 DSH 的项目/用户
+.dsh、.agents 目录与 custom/runtime/bundled 可选根(待生产接线),状态保持部分。

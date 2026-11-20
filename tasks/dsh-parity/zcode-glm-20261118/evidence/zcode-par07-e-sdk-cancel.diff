@@ -1,0 +1,1048 @@
+diff --git a/core/atlas/tools/app_server.py b/core/atlas/tools/app_server.py
+index 5669c392..c32a2a16 100644
+--- a/core/atlas/tools/app_server.py
++++ b/core/atlas/tools/app_server.py
+@@ -21,6 +21,11 @@ async def _wait_with_cancel(future: asyncio.Future[Any], cancel: asyncio.Event)
+         done, _pending = await asyncio.wait(
+             {future, cancel_wait}, return_when=asyncio.FIRST_COMPLETED,
+         )
++        if future in done:
++            # A response that completed at the same time as cancellation wins:
++            # its handler recorded the durable `resolved` state before
++            # delivering the value, so applying it is deterministic.
++            return future.result()
+         if cancel_wait in done and cancel.is_set():
+             if not future.done():
+                 future.cancel()
+@@ -115,6 +120,13 @@ async def serve_stdio(*, workspace: str | None = None,
+         active_tasks: dict[str, asyncio.Task[None]] = {}
+         pending_approvals: dict[str, asyncio.Future[str]] = {}
+         pending_inputs: dict[str, asyncio.Future[str]] = {}
++        # SDK user-question closure: each `input/request` carries a durable
++        # request_id. `pending_input_requests` is the single authority for the
++        # pending -> resolved | invalidated transition, so a cancellation and a
++        # late answer can never both win.
++        app_server_instance_id = str(uuid.uuid4())
++        pending_input_requests: dict[str, dict[str, Any]] = {}
++        pending_input_request_by_call: dict[str, str] = {}
+         pending_client_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
+         pending_acp_permissions: dict[str, asyncio.Future[dict[str, Any]]] = {}
+         # SDK session/settle barrier: `session/wait` registers one future per
+@@ -150,6 +162,182 @@ async def serve_stdio(*, workspace: str | None = None,
+         async def notify(method: str, params: dict[str, Any]) -> None:
+             await outgoing.put({"jsonrpc": "2.0", "method": method, "params": params})
+ 
++        async def append_appserver_request(request_id: str, session_id: str,
++                                           kind: str, state: str,
++                                           instance_id: str,
++                                           conversation_id: str) -> None:
++            """Persist one appserver.request lifecycle row (DSH SDK parity)."""
++            from atlas.engine.session_sync import append_session_event
++
++            await asyncio.to_thread(
++                append_session_event, DATA_ROOT / "engine", conversation_id,
++                "appserver.request", {
++                    "request_id": request_id, "session_id": session_id,
++                    "kind": kind, "state": state, "instance_id": instance_id,
++                },
++            )
++
++        async def record_input_request(request_id: str, session_id: str,
++                                       call_id: str, prompt_text: str,
++                                       options: list[str] | None) -> dict[str, Any]:
++            session = sessions.get(session_id)
++            if session is None:
++                raise ValueError("unknown session")
++            conversation_id = str(session["conversation_id"])
++            meta: dict[str, Any] = {
++                "request_id": request_id, "session_id": session_id,
++                "conversation_id": conversation_id, "kind": "input",
++                "state": "pending", "instance_id": app_server_instance_id,
++                "call_id": call_id, "prompt": prompt_text,
++                "options": list(options or []), "notified": False,
++                "announced": False,
++            }
++            pending_input_requests[request_id] = meta
++            pending_input_request_by_call[call_id] = request_id
++            await append_appserver_request(
++                request_id, session_id, "input", "pending",
++                app_server_instance_id, conversation_id,
++            )
++            return meta
++
++        def input_request_for(request_id: str, call_id: str) -> dict[str, Any] | None:
++            if request_id:
++                # A client that supplies a request id is answered strictly by
++                # that identity: an unknown/cancelled id must never fall back to
++                # a call id that another question might now own.
++                return pending_input_requests.get(request_id)
++            mapped = pending_input_request_by_call.get(call_id)
++            return pending_input_requests.get(mapped) if mapped else None
++
++        async def resolve_input_request(meta: dict[str, Any], value: str) -> bool:
++            if meta.get("state") != "pending":
++                return False
++            meta["state"] = "resolving"
++            try:
++                await append_appserver_request(
++                    meta["request_id"], meta["session_id"], "input", "resolved",
++                    meta["instance_id"], meta["conversation_id"],
++                )
++            except Exception:
++                meta["state"] = "pending"
++                raise
++            meta["state"] = "resolved"
++            pending_input_requests.pop(meta["request_id"], None)
++            pending_input_request_by_call.pop(meta["call_id"], None)
++            future = pending_inputs.get(meta["call_id"])
++            if future is not None and not future.done():
++                future.set_result(value)
++            return True
++
++        async def invalidate_input_request(request_id: str) -> bool:
++            """Cancelled pending question: notify exactly once, then audit it.
++
++            The state claim/removal and the wire notification happen before any
++            await that can yield to the run task, so the client frame precedes
++            the run's terminal response and cannot be duplicated by the
++            ask_user finally block, session cancel, close, or shutdown drain.
++            """
++            meta = pending_input_requests.get(request_id)
++            if meta is None or meta.get("state") != "pending":
++                return False
++            meta["state"] = "invalidating"
++            pending_input_requests.pop(request_id, None)
++            pending_input_request_by_call.pop(meta["call_id"], None)
++            future = pending_inputs.pop(meta["call_id"], None)
++            if future is not None and not future.done():
++                future.cancel()
++            if not meta["notified"]:
++                meta["notified"] = True
++                if meta.get("announced"):
++                    # DSH SDK contract: `user-question.cancelled` with the
++                    # original requestId/sessionId, emitted exactly once.
++                    # `input/request` carries the same request id in Atlas'
++                    # snake_case fields.
++                    await notify("user-question.cancelled", {
++                        "requestId": request_id, "sessionId": meta["session_id"],
++                    })
++            try:
++                await append_appserver_request(
++                    request_id, meta["session_id"], "input", "invalidated",
++                    meta["instance_id"], meta["conversation_id"],
++                )
++            except Exception:  # noqa: BLE001, S110 - audit failure cannot suppress cancellation
++                # The wire notification is authoritative for the client; a
++                # failed durable audit must not suppress the cancellation.
++                pass
++            meta["state"] = "invalidated"
++            return True
++
++        async def invalidate_session_inputs(session_id: str) -> None:
++            for request_id in [
++                request_id for request_id, meta in pending_input_requests.items()
++                if meta.get("session_id") == session_id
++            ]:
++                await invalidate_input_request(request_id)
++
++        async def invalidate_all_inputs() -> None:
++            for request_id in list(pending_input_requests):
++                await invalidate_input_request(request_id)
++
++        async def invalidate_stale_input_requests(conversation_id: str) -> None:
++            """Close pending questions left behind by a previous app-server process.
++
++            App-server pending inputs are process-scoped: a restarted/reconnected
++            process can never answer an old request. Reconnecting to the same
++            conversation therefore ends those durable rows as `invalidated`
++            instead of leaving them permanently `pending`.
++            """
++            from atlas.engine.session_sync import append_session_event, read_session_events
++
++            rows: list[dict[str, Any]] = []
++            cursor = 0
++            complete = False
++            try:
++                for _ in range(50):  # bounded scan: 50k lifecycle rows
++                    page = await asyncio.to_thread(
++                        read_session_events, DATA_ROOT / "engine", conversation_id,
++                        after_seq=cursor, limit=1000,
++                    )
++                    rows.extend(page)
++                    if len(page) < 1000:
++                        complete = True
++                        break
++                    cursor = int(page[-1]["seq"])
++            except Exception:  # noqa: BLE001 - missing/locked audit DB must not block session start
++                return
++            if not complete:
++                # Never guess from a truncated history: leaving rows pending is
++                # safer than invalidating a request that may have resolved later.
++                return
++            latest: dict[str, dict[str, Any]] = {}
++            for row in rows:
++                if row.get("event_type") != "appserver.request":
++                    continue
++                payload = row.get("payload")
++                if not isinstance(payload, dict):
++                    continue
++                request_id = str(payload.get("request_id") or "")
++                if request_id:
++                    latest[request_id] = payload
++            for request_id, payload in latest.items():
++                if payload.get("state") != "pending":
++                    continue
++                if payload.get("instance_id") == app_server_instance_id:
++                    continue
++                try:
++                    await asyncio.to_thread(
++                        append_session_event, DATA_ROOT / "engine", conversation_id,
++                        "appserver.request", {
++                            "request_id": request_id,
++                            "session_id": str(payload.get("session_id") or ""),
++                            "kind": str(payload.get("kind") or "input"),
++                            "state": "invalidated",
++                            "instance_id": str(payload.get("instance_id") or "unknown"),
++                        },
++                    )
++                except Exception:  # noqa: BLE001, S110 - best-effort closure of stale rows
++                    pass
++
+         async def run_prompt(request_id: Any, session_id: str, prompt: str,
+                              session: dict[str, str], cancel: asyncio.Event,
+                              *, acp: bool = False) -> None:
+@@ -200,19 +388,43 @@ async def serve_stdio(*, workspace: str | None = None,
+                                options: list[str] | None = None) -> str:
+                 if acp:
+                     return "This ACP v1 adapter does not support free-text elicitation; use Atlas app-server input/request."
++                if cancel.is_set():
++                    # The run was cancelled before this question reached the
++                    # client: never emit an input request that is already dead.
++                    raise asyncio.CancelledError()
+                 future = asyncio.get_running_loop().create_future()
+                 pending_inputs[call_id] = future
+-                await notify("input/request", {
+-                    "session_id": session_id, "call_id": call_id,
+-                    "prompt": prompt_text, "options": options or [],
+-                })
++                request_id = str(uuid.uuid4())
++                accepted = False
+                 try:
+-                    answer = await _wait_with_cancel(future, cancel)
+-                    if cancel.is_set():
+-                        return ""
+-                    return answer
++                    meta = await record_input_request(
++                        request_id, session_id, call_id, prompt_text, options,
++                    )
++                    await notify("input/request", {
++                        "session_id": session_id, "call_id": call_id,
++                        "request_id": request_id,
++                        "prompt": prompt_text, "options": options or [],
++                    })
++                    meta["announced"] = True
++                    await _wait_with_cancel(future, cancel)
++                    if future.done() and not future.cancelled():
++                        # The answer handler claimed the durable `resolved`
++                        # transition before delivering the value. An accepted
++                        # answer wins even if cancellation raced alongside it.
++                        accepted = True
++                        return future.result()
++                    # Cancellation is not an empty answer: the tool must stop
++                    # with cancellation semantics, never receive "".
++                    await invalidate_input_request(request_id)
++                    raise asyncio.CancelledError()
+                 finally:
++                    if not accepted:
++                        # Defensive: an exception path that did not pass through
++                        # the explicit cancellation branch still invalidates the
++                        # durable request (idempotent; never double-notifies).
++                        await invalidate_input_request(request_id)
+                     pending_inputs.pop(call_id, None)
++                    pending_input_request_by_call.pop(call_id, None)
+ 
+             failure_detail = ""
+             fs_token = None
+@@ -311,6 +523,21 @@ async def serve_stdio(*, workspace: str | None = None,
+                         "session_id": session_id, "text": "".join(text_parts),
+                         "status": "cancelled" if cancel.is_set() else "failed" if failure_detail else "completed",
+                     })
++            except asyncio.CancelledError:
++                if not cancel.is_set():
++                    raise
++                # A user question was cancelled: the run still ends with the
++                # explicit cancelled terminal state (Atlas keeps run/task
++                # terminal frames; cancellation never becomes a silent empty
++                # answer or a hard protocol error).
++                if acp:
++                    await response(request_id, result={"stopReason": "cancelled"})
++                else:
++                    await response(request_id, result={
++                        "session_id": session_id,
++                        "text": "".join(text_parts),
++                        "status": "cancelled",
++                    })
+             except Exception as exc:  # keep the JSON-RPC process alive across run failures
+                 await response(request_id, error={"code": -32010, "message": f"{type(exc).__name__}: {exc}"})
+             finally:
+@@ -444,6 +671,10 @@ async def serve_stdio(*, workspace: str | None = None,
+                         "permission_mode": PERMISSION_PRESETS[permission_preset]["mode"],
+                     }
+                     session_fs[session_id] = dict(session_fs.get("__initialize__", {})) if acp else {}
++                    if not acp:
++                        # Reconnecting to a conversation closes questions a
++                        # previous app-server process left pending.
++                        await invalidate_stale_input_requests(conversation_id)
+                     if acp:
+                         conversation = await memory.get_conversation(conversation_id)
+                         metadata = _conversation_metadata(conversation or {})
+@@ -612,10 +843,14 @@ async def serve_stdio(*, workspace: str | None = None,
+                     session_id = str((params.get("sessionId") if acp else params.get("session_id")) or "")
+                     event = active.get(session_id)
+                     if event is None:
++                        await invalidate_session_inputs(session_id)
+                         if request_id is not None:
+                             await response(request_id, result={"cancelled": False})
+                     else:
+                         event.set()
++                        # Notify and durably close pending questions before the
++                        # cancel acknowledgement is queued.
++                        await invalidate_session_inputs(session_id)
+                         if request_id is not None:
+                             await response(request_id, result={"cancelled": True})
+                 elif method == "approval/response":
+@@ -628,13 +863,33 @@ async def serve_stdio(*, workspace: str | None = None,
+                         future.set_result(choice)
+                         await response(request_id, result={"accepted": True})
+                 elif method == "input/response":
++                    request_id_value = str(params.get("request_id") or "")
+                     call_id = str(params.get("call_id") or "")
+-                    future = pending_inputs.get(call_id)
+-                    if future is None or future.done():
++                    meta = input_request_for(request_id_value, call_id)
++                    if (meta is not None
++                            and params.get("session_id") not in (None, "", meta["session_id"])):
++                        meta = None
++                    if meta is None or meta.get("state") != "pending":
++                        # Late answers after cancellation/resolution are
++                        # rejected by identity and never delivered.
+                         await response(request_id, error={"code": -32602, "message": "input request is no longer pending"})
+                     else:
+-                        future.set_result(str(params.get("value") or ""))
+-                        await response(request_id, result={"accepted": True})
++                        try:
++                            accepted = await resolve_input_request(
++                                meta, str(params.get("value") or ""),
++                            )
++                        except Exception:  # noqa: BLE001 - durable write failure rejects the answer
++                            await response(request_id, error={
++                                "code": -32603,
++                                "message": "input request could not be durably recorded",
++                            })
++                            continue
++                        if not accepted:
++                            await response(request_id, error={
++                                "code": -32602, "message": "input request is no longer pending",
++                            })
++                        else:
++                            await response(request_id, result={"accepted": True})
+                 elif method == "session/wait":
+                     # DSH SDK `session/wait`: settle barrier for one session's
+                     # active run. Returns {} once the root run is no longer
+@@ -691,6 +946,7 @@ async def serve_stdio(*, workspace: str | None = None,
+                     event = active.get(session_id)
+                     if event is not None:
+                         event.set()
++                    await invalidate_session_inputs(session_id)
+                     sessions.pop(session_id, None)
+                     session_fs.pop(session_id, None)
+                     await response(request_id, result={} if acp else {"closed": True})
+@@ -701,12 +957,16 @@ async def serve_stdio(*, workspace: str | None = None,
+ 
+         for event in active.values():
+             event.set()
++        # Cancel semantics run before resolving any waiter so every pending
++        # question emits exactly one `user-question.cancelled` and its durable
++        # row ends `invalidated` during the graceful EOF/shutdown drain.
++        await invalidate_all_inputs()
+         for future in pending_approvals.values():
+             if not future.done():
+                 future.set_result("deny")
+         for future in pending_inputs.values():
+             if not future.done():
+-                future.set_result("")
++                future.cancel()
+         for future in pending_client_requests.values():
+             if not future.done():
+                 future.set_result({"outcome": "cancelled"})
+diff --git a/core/tests/test_app_server_user_question_cancel.py b/core/tests/test_app_server_user_question_cancel.py
+new file mode 100644
+index 00000000..bcea7e7b
+--- /dev/null
++++ b/core/tests/test_app_server_user_question_cancel.py
+@@ -0,0 +1,553 @@
++"""DSH SDK parity: user-question cancellation closure over Atlas' app-server.
++
++The runtime-side contract under test:
++
++* a cancelled pending ``ask_user`` emits exactly one
++  ``user-question.cancelled`` notification with the original ``requestId`` and
++  ``sessionId``;
++* the tool never receives an empty answer as a cancellation substitute;
++* the durable ``appserver.request`` row ends ``invalidated`` (never ``resolved``);
++* late answers are rejected with JSON-RPC -32602 and never delivered;
++* graceful shutdown and reconnect/restart close leftover pending questions.
++
++Server tests drive the real ``serve_stdio`` JSON-RPC loop through the existing
++in-process harness. The final test drives the real Python SDK subprocess path
++against the scripted model stack.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import json
++import os
++import queue
++import sys
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++
++from atlas.tools import app_server
++from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_atlas_home
++
++SDK_ROOT = Path(__file__).resolve().parents[2] / "sdk" / "python"
++if str(SDK_ROOT) not in sys.path:
++    sys.path.insert(0, str(SDK_ROOT))
++
++from atlas_sdk.app_server import AppServer, AppServerError  # noqa: E402
++
++pytestmark = pytest.mark.unit
++
++
++# ---------------------------------------------------------------------------
++# In-process real JSON-RPC harness
++# ---------------------------------------------------------------------------
++
++
++class _Memory:
++    def __init__(self):
++        self.rows = {}
++
++    async def init(self):
++        pass
++
++    async def close(self):
++        pass
++
++    async def save_conversation_metadata(self, conversation_id, *, title_hint=""):
++        self.rows.setdefault(conversation_id, {
++            "id": conversation_id, "title": title_hint, "workspace": None,
++            "metadata": "{}", "updated_at": "2026-11-18T00:00:00Z",
++        })
++
++    async def get_conversation(self, conversation_id):
++        return self.rows.get(conversation_id)
++
++    async def update_conversation(self, conversation_id, **values):
++        row = self.rows[conversation_id]
++        for key, value in values.items():
++            if key == "metadata":
++                value = json.dumps(value)
++            row[key] = value
++        return True
++
++    async def list_conversations(self, limit=50):
++        rows = list(self.rows.values())
++        return rows if limit is None else rows[:limit]
++
++
++class _AskOrchestrator:
++    """The run asks the host one question, then finishes or is cancelled."""
++
++    answers: list[str] = []
++    cancellations: int = 0
++
++    def __init__(self, **_kwargs):
++        pass
++
++    async def run(self, _prompt, _conversation_id, **kwargs):
++        type(self).answers = []
++        try:
++            answer = await kwargs["input_callback"]("call-1", "Proceed?", ["yes", "no"])
++            type(self).answers.append(answer)
++        except asyncio.CancelledError:
++            type(self).cancellations += 1
++            raise
++        yield {"type": "chunk", "content": "finished"}
++
++
++class _ModelManager:
++    pass
++
++
++class _PresetStore:
++    def __init__(self, _path):
++        pass
++
++    def resolve(self, preset_id):
++        return {"preset": preset_id}
++
++
++class _QueueInput:
++    """Blocking stdin replacement: the test pushes frames when it wants them."""
++
++    def __init__(self, lines=()):
++        self.lines: queue.Queue[str] = queue.Queue()
++        for line in lines:
++            self.push(line)
++
++    def push(self, line: str = "") -> None:
++        self.lines.put(line + "\n" if line else "")
++
++    def readline(self):
++        return self.lines.get()
++
++
++class _CollectingOutput:
++    def __init__(self):
++        self.lines: list[str] = []
++
++    def write(self, line):
++        self.lines.append(line)
++        return len(line)
++
++    def flush(self):
++        pass
++
++
++def _frame(**payload) -> str:
++    return json.dumps({"jsonrpc": "2.0", **payload})
++
++
++async def _messages(stdout: _CollectingOutput) -> list[dict]:
++    return [json.loads(line) for line in list(stdout.lines) if line.strip()]
++
++
++async def _wait_for(stdout: _CollectingOutput, predicate, timeout: float = 8.0) -> list[dict]:
++    async def poll():
++        while True:
++            messages = await _messages(stdout)
++            if predicate(messages):
++                return messages
++            await asyncio.sleep(0.02)
++
++    return await asyncio.wait_for(poll(), timeout)
++
++
++def _by_id(messages: list[dict]) -> dict:
++    return {item.get("id"): item for item in messages if "id" in item}
++
++
++async def _migration_ready(*_args):
++    return SimpleNamespace(status="ready", error=None)
++
++
++def _install_harness(monkeypatch, tmp_path, stdin, stdout, orchestrator):
++    memory = _Memory()
++    monkeypatch.setattr(app_server, "_claim_stdio_channel", lambda: (stdin, stdout))
++    monkeypatch.setattr("atlas.memory.MemoryStore", lambda: memory)
++    monkeypatch.setattr("atlas.agent.AgentOrchestrator", orchestrator)
++    monkeypatch.setattr("atlas.models.ModelManager", _ModelManager)
++    monkeypatch.setattr("atlas.task_artifacts.AgentPresetStore", _PresetStore)
++    monkeypatch.setattr(
++        "atlas.config.get_config",
++        lambda: SimpleNamespace(db_path=tmp_path / "atlas.db"),
++    )
++    monkeypatch.setattr(
++        "atlas.engine.session_migration.migrate_legacy_sessions", _migration_ready,
++    )
++    return memory
++
++
++def _audit_rows(conversation_id: str, request_id: str) -> list[dict]:
++    from atlas.config import DATA_ROOT
++    from atlas.engine.session_sync import read_session_events
++
++    rows = read_session_events(DATA_ROOT / "engine", conversation_id)
++    return [
++        row["payload"] for row in rows
++        if row.get("event_type") == "appserver.request"
++        and isinstance(row.get("payload"), dict)
++        and row["payload"].get("request_id") == request_id
++    ]
++
++
++async def _start_session(stdin, stdout, tmp_path) -> tuple[str, str]:
++    stdin.push(_frame(id=1, method="initialize", params={"protocolVersion": 1}))
++    stdin.push(_frame(id=2, method="session/start", params={"workspace": str(tmp_path)}))
++    await _wait_for(stdout, lambda items: any(item.get("id") == 2 for item in items))
++    result = _by_id(await _messages(stdout))[2]["result"]
++    return str(result["session_id"]), str(result["conversation_id"])
++
++
++# ---------------------------------------------------------------------------
++# Server channel tests
++# ---------------------------------------------------------------------------
++
++
++@pytest.mark.asyncio
++async def test_ask_cancel_notifies_once_before_terminal_and_rejects_late_answer(
++    tmp_path, monkeypatch,
++):
++    stdin, stdout = _QueueInput(), _CollectingOutput()
++    _install_harness(monkeypatch, tmp_path, stdin, stdout, _AskOrchestrator)
++    _AskOrchestrator.answers = []
++    _AskOrchestrator.cancellations = 0
++    server = asyncio.create_task(app_server.serve_stdio(protocol="app-server"))
++
++    session_id, conversation_id = await _start_session(stdin, stdout, tmp_path)
++    stdin.push(_frame(id=3, method="session/prompt",
++                      params={"session_id": session_id, "prompt": "need input"}))
++    await _wait_for(stdout, lambda items: any(
++        item.get("method") == "input/request" for item in items
++    ))
++    requested = next(
++        item["params"] for item in await _messages(stdout)
++        if item.get("method") == "input/request"
++    )
++    request_id = str(requested["request_id"])
++    assert request_id
++    assert requested["session_id"] == session_id
++    assert requested["call_id"] == "call-1"
++
++    stdin.push(_frame(id=4, method="session/cancel", params={"session_id": session_id}))
++    messages = await _wait_for(stdout, lambda items: {
++        item.get("id") for item in items
++    } >= {3, 4})
++
++    cancelled = [item for item in messages if item.get("method") == "user-question.cancelled"]
++    assert len(cancelled) == 1, "cancellation must notify the client exactly once"
++    assert cancelled[0]["params"] == {"requestId": request_id, "sessionId": session_id}
++    # The question's cancellation frame precedes the run's terminal frame.
++    frame_index = {id(item): index for index, item in enumerate(messages)}
++    assert frame_index[id(cancelled[0])] < frame_index[id(_by_id(messages)[3])]
++
++    assert _by_id(messages)[3]["result"]["status"] == "cancelled"
++    assert _by_id(messages)[4]["result"] == {"cancelled": True}
++    assert _AskOrchestrator.answers == [], "cancellation must not become an empty answer"
++    assert _AskOrchestrator.cancellations == 1
++
++    # Late answers are rejected by durable identity and by legacy call id.
++    stdin.push(_frame(id=5, method="input/response",
++                      params={"request_id": request_id, "value": "late"}))
++    stdin.push(_frame(id=6, method="input/response",
++                      params={"call_id": "call-1", "value": "late"}))
++    messages = await _wait_for(stdout, lambda items: {
++        item.get("id") for item in items
++    } >= {5, 6})
++    assert _by_id(messages)[5]["error"]["code"] == -32602
++    assert _by_id(messages)[6]["error"]["code"] == -32602
++
++    audit = _audit_rows(conversation_id, request_id)
++    assert [row["state"] for row in audit] == ["pending", "invalidated"]
++    assert all(set(row) == {"request_id", "session_id", "kind", "state", "instance_id"}
++               for row in audit)
++
++    stdin.push("")
++    await asyncio.wait_for(server, 10)
++    final = await _messages(stdout)
++    assert len([item for item in final
++                if item.get("method") == "user-question.cancelled"]) == 1
++
++
++@pytest.mark.asyncio
++async def test_accepted_answer_wins_late_cancel_and_is_not_invalidated(tmp_path, monkeypatch):
++    stdin, stdout = _QueueInput(), _CollectingOutput()
++    _install_harness(monkeypatch, tmp_path, stdin, stdout, _AskOrchestrator)
++    _AskOrchestrator.answers = []
++    _AskOrchestrator.cancellations = 0
++    server = asyncio.create_task(app_server.serve_stdio(protocol="app-server"))
++
++    session_id, conversation_id = await _start_session(stdin, stdout, tmp_path)
++    stdin.push(_frame(id=3, method="session/prompt",
++                      params={"session_id": session_id, "prompt": "need input"}))
++    await _wait_for(stdout, lambda items: any(
++        item.get("method") == "input/request" for item in items
++    ))
++    requested = next(
++        item["params"] for item in await _messages(stdout)
++        if item.get("method") == "input/request"
++    )
++    request_id = str(requested["request_id"])
++
++    stdin.push(_frame(id=4, method="input/response",
++                      params={"request_id": request_id, "call_id": "call-1", "value": "yes"}))
++    await _wait_for(stdout, lambda items: any(item.get("id") == 3 for item in items))
++    # A duplicate/late answer for the same request is rejected, never applied.
++    stdin.push(_frame(id=5, method="input/response",
++                      params={"request_id": request_id, "value": "second"}))
++    await _wait_for(stdout, lambda items: any(item.get("id") == 5 for item in items))
++    # A cancellation arriving after the answer was accepted is a no-op.
++    stdin.push(_frame(id=6, method="session/cancel", params={"session_id": session_id}))
++    messages = await _wait_for(stdout, lambda items: any(item.get("id") == 6 for item in items))
++
++    assert _by_id(messages)[3]["result"]["status"] == "completed"
++    assert _by_id(messages)[4]["result"] == {"accepted": True}
++    assert _by_id(messages)[5]["error"]["code"] == -32602
++    assert _by_id(messages)[6]["result"] == {"cancelled": False}
++    assert _AskOrchestrator.answers == ["yes"]
++    assert not [item for item in messages
++                if item.get("method") == "user-question.cancelled"]
++    audit = _audit_rows(conversation_id, request_id)
++    assert [row["state"] for row in audit] == ["pending", "resolved"]
++
++    stdin.push("")
++    await asyncio.wait_for(server, 10)
++
++
++@pytest.mark.asyncio
++async def test_legacy_call_id_only_answer_still_resolves(tmp_path, monkeypatch):
++    """Pre-request_id clients keep working: call_id alone is still accepted."""
++    stdin, stdout = _QueueInput(), _CollectingOutput()
++    _install_harness(monkeypatch, tmp_path, stdin, stdout, _AskOrchestrator)
++    _AskOrchestrator.answers = []
++    _AskOrchestrator.cancellations = 0
++    server = asyncio.create_task(app_server.serve_stdio(protocol="app-server"))
++
++    session_id, conversation_id = await _start_session(stdin, stdout, tmp_path)
++    stdin.push(_frame(id=3, method="session/prompt",
++                      params={"session_id": session_id, "prompt": "need input"}))
++    await _wait_for(stdout, lambda items: any(
++        item.get("method") == "input/request" for item in items
++    ))
++    requested = next(
++        item["params"] for item in await _messages(stdout)
++        if item.get("method") == "input/request"
++    )
++    request_id = str(requested["request_id"])
++
++    stdin.push(_frame(id=4, method="input/response",
++                      params={"call_id": "call-1", "value": "yes"}))
++    await _wait_for(stdout, lambda items: any(item.get("id") == 3 for item in items))
++    messages = await _messages(stdout)
++
++    assert _by_id(messages)[4]["result"] == {"accepted": True}
++    assert _by_id(messages)[3]["result"]["status"] == "completed"
++    assert _AskOrchestrator.answers == ["yes"]
++    audit = _audit_rows(conversation_id, request_id)
++    assert [row["state"] for row in audit] == ["pending", "resolved"]
++
++    stdin.push("")
++    await asyncio.wait_for(server, 10)
++
++
++@pytest.mark.asyncio
++async def test_shutdown_drain_cancels_pending_question_once(tmp_path, monkeypatch):
++    stdin, stdout = _QueueInput(), _CollectingOutput()
++    _install_harness(monkeypatch, tmp_path, stdin, stdout, _AskOrchestrator)
++    _AskOrchestrator.answers = []
++    _AskOrchestrator.cancellations = 0
++    server = asyncio.create_task(app_server.serve_stdio(protocol="app-server"))
++
++    session_id, conversation_id = await _start_session(stdin, stdout, tmp_path)
++    stdin.push(_frame(id=3, method="session/prompt",
++                      params={"session_id": session_id, "prompt": "need input"}))
++    await _wait_for(stdout, lambda items: any(
++        item.get("method") == "input/request" for item in items
++    ))
++    requested = next(
++        item["params"] for item in await _messages(stdout)
++        if item.get("method") == "input/request"
++    )
++    request_id = str(requested["request_id"])
++
++    stdin.push(_frame(id=4, method="shutdown", params={}))
++    await asyncio.wait_for(server, 10)
++    messages = await _messages(stdout)
++
++    cancelled = [item for item in messages if item.get("method") == "user-question.cancelled"]
++    assert len(cancelled) == 1
++    assert cancelled[0]["params"] == {"requestId": request_id, "sessionId": session_id}
++    assert _by_id(messages)[4]["result"] == {}
++    assert _by_id(messages)[3]["result"]["status"] == "cancelled"
++    assert _AskOrchestrator.answers == []
++    audit = _audit_rows(conversation_id, request_id)
++    assert [row["state"] for row in audit] == ["pending", "invalidated"]
++
++
++@pytest.mark.asyncio
++async def test_reconnect_invalidates_pending_request_from_previous_process(
++    tmp_path, monkeypatch,
++):
++    from atlas.config import DATA_ROOT
++    from atlas.engine.session_sync import append_session_event, read_session_events
++
++    conversation_id = f"conv-restart-cancel-{tmp_path.name}"
++    append_session_event(DATA_ROOT / "engine", conversation_id, "appserver.request", {
++        "request_id": "old-request", "session_id": "old-session",
++        "kind": "input", "state": "pending", "instance_id": "old-instance",
++    })
++
++    wire = [
++        _frame(id=1, method="initialize", params={"protocolVersion": 1}),
++        _frame(id=2, method="session/start",
++               params={"workspace": str(tmp_path), "conversation_id": conversation_id}),
++        _frame(id=3, method="input/response",
++               params={"request_id": "old-request", "value": "late"}),
++        "",
++    ]
++    stdin, stdout = _QueueInput(wire), _CollectingOutput()
++    _install_harness(monkeypatch, tmp_path, stdin, stdout, _AskOrchestrator)
++    await asyncio.wait_for(app_server.serve_stdio(protocol="app-server"), 10)
++
++    messages = await _messages(stdout)
++    assert _by_id(messages)[2]["result"]["conversation_id"] == conversation_id
++    assert _by_id(messages)[3]["error"]["code"] == -32602
++
++    rows = [
++        row["payload"] for row in read_session_events(DATA_ROOT / "engine", conversation_id)
++        if row.get("event_type") == "appserver.request"
++        and row["payload"].get("request_id") == "old-request"
++    ]
++    assert [row["state"] for row in rows] == ["pending", "invalidated"]
++    assert rows[1]["instance_id"] == "old-instance"
++    assert all(set(row) == {"request_id", "session_id", "kind", "state", "instance_id"}
++               for row in rows)
++
++
++# ---------------------------------------------------------------------------
++# Real SDK subprocess channel test
++# ---------------------------------------------------------------------------
++
++
++def _isolated_app_server_env(root: Path, fake: FakeLLMServer) -> dict[str, str]:
++    data = root / "atlas"
++    config = data / "config"
++    config.mkdir(parents=True)
++    (data / "data").mkdir()
++    (data / "data" / "user-settings.json").write_text(
++        json.dumps({"fallback_chain": []}), encoding="utf-8",
++    )
++    (config / "atlas.toml").write_text(
++        '[models]\ndefault="fake-model"\n'
++        f'[models.gateway]\nbase_url="{fake.base_url}"\napi_key="sk-fake-e2e"\n'
++        '[[models.custom]]\nid="fake-model"\nname="Fake fixture"\nprovider="openai"\n'
++        f'base_url="{fake.base_url}"\nlitellm_model="openai/fake-model"\nmax_output_tokens=512\n'
++        '[agent]\nengine="hermes"\nverify_before_stop=false\n'
++        '[tools]\nauto_start=[]\n[tools.servers]\n[scheduler]\nenabled=false\n',
++        encoding="utf-8",
++    )
++    write_atlas_home(data / "engine", fake.base_url, extra_config=(
++        "auxiliary:\n  title_generation:\n    model_upgrade_enabled: false\n"
++        "models:\n  fallback: []\n"
++    ))
++    for name in ("home", "userprofile", "appdata", "localappdata", "temp", "tmp", "tmpdir"):
++        (root / name).mkdir()
++    env = dict(os.environ)
++    for key in tuple(env):
++        upper = key.upper()
++        if (any(marker in upper for marker in
++                ("API_KEY", "ACCESS_KEY", "SECRET", "TOKEN", "PASSWORD", "PASSWD", "CREDENTIAL"))
++                or upper.startswith("HERMES_SESSION_")
++                or upper.endswith("_PROXY")):
++            env.pop(key, None)
++    env.update(
++        ATLAS_DATA_DIR=str(data), HERMES_HOME=str(data / "engine"),
++        ATLAS_SCHEDULER_ENABLED="false", HERMES_TEST_MODE="1",
++        OPENAI_API_BASE=fake.base_url, OPENAI_BASE_URL=fake.base_url,
++        OPENAI_API_KEY="sk-fake-e2e",
++        HOME=str(root / "home"), USERPROFILE=str(root / "userprofile"),
++        APPDATA=str(root / "appdata"), LOCALAPPDATA=str(root / "localappdata"),
++        TEMP=str(root / "temp"), TMP=str(root / "tmp"), TMPDIR=str(root / "tmpdir"),
++        HTTP_PROXY="http://127.0.0.1:1", HTTPS_PROXY="http://127.0.0.1:1",
++        ALL_PROXY="http://127.0.0.1:1", NO_PROXY="127.0.0.1,localhost",
++        http_proxy="http://127.0.0.1:1", https_proxy="http://127.0.0.1:1",
++        all_proxy="http://127.0.0.1:1", no_proxy="127.0.0.1,localhost",
++    )
++    env["PYTHONPATH"] = os.pathsep.join((
++        str(Path(__file__).resolve().parents[1]), str(SDK_ROOT),
++    ))
++    return env
++
++
++def test_real_sdk_subprocess_cancel_notification_and_late_answer(tmp_path):
++    with FakeLLMServer([
++        ToolCall("ask_user", {"question": "Continue?", "options": ["yes", "no"]}),
++        Text("must not run after cancellation"),
++    ]) as fake:
++        env = _isolated_app_server_env(tmp_path, fake)
++        workspace = tmp_path / "workspace"
++        workspace.mkdir()
++        server = AppServer(
++            [sys.executable, "-m", "atlas.cli"], workspace=workspace, env=env,
++        ).start()
++        process = server._process
++        try:
++            session = server.new_session()
++            inputs: list[dict] = []
++            cancellations: list[dict] = []
++
++            def answer(params: dict) -> None:
++                inputs.append(params)
++                server.cancel_session(session.session_id)
++                return None
++
++            result = server.prompt(
++                session.session_id, "ask and cancel",
++                answer=answer, on_input_cancelled=cancellations.append,
++            )
++            assert result.status == "cancelled"
++            assert len(inputs) == 1
++            request_id = str(inputs[0]["request_id"])
++            assert request_id
++            assert cancellations == [{
++                "requestId": request_id, "sessionId": session.session_id,
++            }], "the SDK must receive exactly one cancellation notification"
++
++            with pytest.raises(AppServerError) as raised:
++                server.respond_input(request_id, "late answer")
++            assert raised.value.code == -32602
++        finally:
++            server.close()
++        assert process is not None
++        assert process.wait(timeout=0) == 0
++
++        assert len(fake.main_requests()) == 1, "cancelled question must stop the run"
++
++        from hermes_state import SessionDB
++
++        with SessionDB(db_path=tmp_path / "atlas" / "engine" / "state.db") as db:
++            rows = db.list_session_events(session.conversation_id, after_seq=0, limit=1000)
++        request_rows = [
++            row["payload"] for row in rows if row["event_type"] == "appserver.request"
++        ]
++        assert [row["state"] for row in request_rows] == ["pending", "invalidated"]
++        assert all(set(row) == {"request_id", "session_id", "kind", "state", "instance_id"}
++                   for row in request_rows)
++
++        # Reconnect/restart with the same conversation: the cancelled request
++        # stays closed and a fresh process still rejects the late answer.
++        restarted = AppServer(
++            [sys.executable, "-m", "atlas.cli"], workspace=workspace, env=env,
++        ).start()
++        restarted_process = restarted._process
++        try:
++            resumed = restarted.new_session(conversation_id=session.conversation_id)
++            with pytest.raises(AppServerError) as raised:
++                restarted.respond_input(request_id, "still late")
++            assert raised.value.code == -32602
++            assert resumed.conversation_id == session.conversation_id
++        finally:
++            restarted.close()
++        assert restarted_process is not None
++        assert restarted_process.wait(timeout=0) == 0
+diff --git a/docs/app-server-protocol.md b/docs/app-server-protocol.md
+index 221802f8..4d500d2f 100644
+--- a/docs/app-server-protocol.md
++++ b/docs/app-server-protocol.md
+@@ -17,13 +17,15 @@ The protocol version is the integer `1`. Clients must call `initialize` first wi
+ | `session/cancel` | `{session_id: string}` | `{cancelled: boolean}`; may also be sent as a notification |
+ | `session/close` | `{session_id: string}` | `{closed: true}` |
+ | `approval/response` | `{event_id: string, choice: "allow"|"deny"}` | `{accepted: true}` |
+-| `input/response` | `{call_id: string, value: string}` | `{accepted: true}` |
++| `input/response` | `{request_id: string, value: string}` (preferred) or legacy `{call_id: string, value: string}` | `{accepted: true}` |
+ 
+-`session/prompt` is a request whose completion response arrives after the run. While it is pending, the server may send `session/event`, `approval/request`, and `input/request` notifications. A client must continue reading until the matching prompt response, and answer approval/input requests with the corresponding methods. Approval defaults to deny when a client disconnects. `session/close` cancels an active run before removing the session.
++`session/prompt` is a request whose completion response arrives after the run. While it is pending, the server may send `session/event`, `approval/request`, `input/request`, and `user-question.cancelled` notifications. A client must continue reading until the matching prompt response, and answer approval/input requests with the corresponding methods. Approval defaults to deny when a client disconnects. `session/close` cancels an active run before removing the session.
+ 
+ ## Notifications and event payloads
+ 
+-`session/event` has params `{session_id, event}`. `event` is the same typed event object emitted by Atlas runs (for example `chunk`, `tool_call`, `tool_result`, `plan_updated`, `error`, and terminal events); event-specific keys are extensible. `approval/request` includes `{session_id, event_id, tool_name, arguments}`. `input/request` includes `{session_id, call_id, prompt, options}`. Clients should display the request and answer promptly; stale IDs return `-32602`.
++`session/event` has params `{session_id, event}`. `event` is the same typed event object emitted by Atlas runs (for example `chunk`, `tool_call`, `tool_result`, `plan_updated`, `error`, and terminal events); event-specific keys are extensible. `approval/request` includes `{session_id, event_id, tool_name, arguments}`. `input/request` includes `{session_id, call_id, request_id, prompt, options}`. Clients should display the request and answer promptly; stale IDs return `-32602`.
++
++`user-question.cancelled` has params `{requestId, sessionId}` and is sent exactly once when the runtime stops waiting for a pending `input/request` (session cancel, `session/close`, `shutdown`, or process drain). `requestId` is the same string as the `input/request` `request_id`. The question is not answered: clients must not apply a late `input/response`, and the server rejects one with `-32602` ("input request is no longer pending") because the durable request has already ended. The server also persists lifecycle rows as `appserver.request` session events with `state` `pending` followed by exactly one of `resolved` (an accepted answer) or `invalidated` (cancellation); reconnecting to the same conversation closes rows left `pending` by a previous process. An accepted answer that races a cancellation wins: it is recorded `resolved` before delivery and no `user-question.cancelled` frame is sent for it.
+ 
+ ## Errors
+ 
+@@ -35,4 +37,4 @@ Errors use JSON-RPC's `{code, message, data?}` shape. Standard parse/invalid-req
+ 
+ ## Python SDK
+ 
+-Install `sdk/python` and use `atlas_sdk.AppServer`. `AppServer.start()` negotiates version 1; `new_session()` creates a session; `prompt()` streams event notifications to an optional callback and can answer approvals/inputs; `close_session()` ends the session. See [`sdk/python/examples/app_server.py`](../sdk/python/examples/app_server.py). The SDK uses the same `atlas` executable and local config as the CLI; credentials are never returned in protocol results.
++Install `sdk/python` and use `atlas_sdk.AppServer`. `AppServer.start()` negotiates version 1; `new_session()` creates a session; `prompt()` streams event notifications to an optional callback and can answer approvals/inputs; `close_session()` ends the session. An `answer` callback may return `None` to defer a question, then either `respond_input(request_id, value)` answers it or `on_input_cancelled` reports the runtime's cancellation. `cancel_session(session_id)` sends the cancellation notification. See [`sdk/python/examples/app_server.py`](../sdk/python/examples/app_server.py). The SDK uses the same `atlas` executable and local config as the CLI; credentials are never returned in protocol results.
+diff --git a/sdk/python/atlas_sdk/app_server.py b/sdk/python/atlas_sdk/app_server.py
+index fce4cd16..d8c45851 100644
+--- a/sdk/python/atlas_sdk/app_server.py
++++ b/sdk/python/atlas_sdk/app_server.py
+@@ -114,10 +114,24 @@ class AppServer:
+         self._session_ids.add(session_id)
+         return AppServerSession(session_id, str(result["conversation_id"]), str(result["workspace"]))
+ 
+-    def prompt(self, session_id: str, prompt: str, *,
+-               on_event: Callable[[dict[str, Any]], None] | None = None,
+-               approve: Callable[[dict[str, Any]], bool] | None = None,
+-               answer: Callable[[dict[str, Any]], str] | None = None) -> AppServerResult:
++    def prompt(
++        self, session_id: str, prompt: str, *,
++        on_event: Callable[[dict[str, Any]], None] | None = None,
++        approve: Callable[[dict[str, Any]], bool] | None = None,
++        answer: Callable[[dict[str, Any]], str | None] | None = None,
++        on_input_cancelled: Callable[[dict[str, Any]], None] | None = None,
++    ) -> AppServerResult:
++        """Run one prompt and drive its host requests.
++
++        ``answer`` returns the text to submit. Returning ``None`` defers the
++        answer: the request stays pending (for ``respond_input`` or the
++        runtime's cancellation notification) instead of submitting an empty
++        string.
++
++        ``on_input_cancelled`` receives the exact
++        ``user-question.cancelled`` params (``requestId`` / ``sessionId``) the
++        runtime emits when it stops waiting for a pending question.
++        """
+         if not prompt.strip():
+             raise ValueError("prompt must not be empty")
+         self._next_id += 1
+@@ -134,8 +148,24 @@ class AppServer:
+                     self._send_request("approval/response", {"event_id": params.get("event_id"),
+                                                                "choice": "allow" if approve and approve(params) else "deny"})
+                 elif method == "input/request":
+-                    self._send_request("input/response", {"call_id": params.get("call_id"),
+-                                                            "value": answer(params) if answer else ""})
++                    request_key = str(params.get("request_id") or "")
++                    value = answer(params) if answer else ""
++                    if value is None:
++                        continue
++                    payload: dict[str, Any] = {
++                        "call_id": params.get("call_id"), "value": str(value),
++                    }
++                    if request_key:
++                        # Correlate by the durable request identity; the legacy
++                        # call_id stays present for older app-server builds.
++                        payload["request_id"] = request_key
++                    self._send_request("input/response", payload)
++                elif method == "user-question.cancelled":
++                    # The runtime stopped waiting for the pending question.
++                    # A deferred answer is never delivered; a late
++                    # respond_input(requestId, ...) is rejected by the server.
++                    if on_input_cancelled:
++                        on_input_cancelled(params)
+                 elif method == "session/event":
+                     item = params.get("event")
+                     if isinstance(item, dict):
+@@ -154,6 +184,22 @@ class AppServer:
+                 raise RuntimeError(f"Atlas app-server returned an unknown prompt status: {status}")
+             return AppServerResult(session_id, str(result.get("text", "")), status)  # type: ignore[arg-type]
+ 
++    def cancel_session(self, session_id: str) -> None:
++        """Ask the runtime to cancel a session's active run (notification frame)."""
++        self._notify("session/cancel", {"session_id": str(session_id)})
++
++    def respond_input(self, request_id: str, value: str) -> None:
++        """Submit a deferred answer by durable request id.
++
++        After ``user-question.cancelled`` (or any settlement) the server rejects
++        this with JSON-RPC -32602 "input request is no longer pending"; callers
++        should treat that as the authoritative "answer not applied" signal.
++        """
++        key = str(request_id or "").strip()
++        if not key:
++            raise ValueError("request_id must not be empty")
++        self._request("input/response", {"request_id": key, "value": str(value)})
++
+     def close_session(self, session_id: str) -> None:
+         self._request("session/close", {"session_id": session_id})
+         self._session_ids.discard(session_id)

@@ -1,0 +1,271 @@
+{
+  "stage": "12-overlay-blocks-settings-key",
+  "overlay": true,
+  "variant": "standalone",
+  "overlayInsideSettings": false,
+  "overlayIsTopDialog": true,
+  "settingsOpen": false,
+  "blockedReason": "modal",
+  "blockedText": "已有其它对话框打开，快捷键参考被阻止（modal）。请先关闭它，或从设置 → 快捷键打开。",
+  "activeLabel": "搜索快捷键",
+  "status": "快捷键已保存到 keybindings.json",
+  "appGlobalCount": 0,
+  "keyLog": [
+    {
+      "key": "/",
+      "code": "Slash",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": true,
+      "target": "BODY"
+    },
+    {
+      "key": "k",
+      "code": "KeyK",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "INPUT"
+    },
+    {
+      "key": "/",
+      "code": "Slash",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "INPUT"
+    },
+    {
+      "key": "u",
+      "code": "KeyU",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": true,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "BUTTON"
+    },
+    {
+      "key": "Escape",
+      "code": "Escape",
+      "ctrlKey": false,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "INPUT"
+    },
+    {
+      "key": "/",
+      "code": "Slash",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "BUTTON"
+    },
+    {
+      "key": "/",
+      "code": "Slash",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "BODY"
+    },
+    {
+      "key": "/",
+      "code": "Slash",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "BODY"
+    },
+    {
+      "key": ",",
+      "code": "Comma",
+      "ctrlKey": true,
+      "metaKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "trusted": false,
+      "target": "INPUT"
+    }
+  ],
+  "dialogs": [
+    {
+      "role": "dialog",
+      "modal": "true",
+      "label": null,
+      "hasClose": false,
+      "text": "快捷键参考\n\n搜索或直接点按键录入；Esc 取消录入，再按一次关闭。\n\nCtrl+/ 开关\n对话\n搜索与命令\nCtrl\n"
+    }
+  ],
+  "localCache": "{\"palette\":[\"Ctrl+Alt+U\"]}",
+  "rowCount": 36,
+  "visibleRows": [
+    "palette",
+    "newTask",
+    "temporaryChat",
+    "settings",
+    "focusComposer",
+    "stopRun",
+    "sendNow",
+    "stashInput",
+    "nextTab",
+    "prevTab",
+    "closeTab",
+    "closeWindow",
+    "tab1",
+    "tab2",
+    "tab3",
+    "tab4",
+    "tab5",
+    "tab6",
+    "tab7",
+    "tab8",
+    "tab9",
+    "toggleSidebar",
+    "toggleInspector",
+    "toggleFocus",
+    "focusNextPane",
+    "focusPreviousPane",
+    "openSideChat",
+    "sidebarSearch",
+    "sidebarProjectPicker",
+    "sidebarNextGroup",
+    "sidebarPreviousGroup",
+    "openDiff",
+    "diffPreviousHunk",
+    "diffNextHunk",
+    "diffCollapseHunks",
+    "diffExpandHunks"
+  ],
+  "recordingActive": false,
+  "domText": "已有其它对话框打开，快捷键参考被阻止（modal）。请先关闭它，或从设置 → 快捷键打开。\nAtlas 快捷键参考探针\n\n真实 ShortcutReferenceHost + 真实 Dialog(设置) + 真实 ShortcutsPanel\n\n打开设置\n切换其它模态\nready\n快捷键参考\n\n搜索或直接点按键录入；Esc 取消录入，再按一次关闭。\n\nCtrl+/ 开关\n对话\n搜索与命令\nCtrl\nAlt\nU\n新任务\nCtrl\nN\n空白临时聊天\nCtrl\nShift\nY\n打开设置\nCtrl\n,\n跳到输入框\nCtrl\nL\n停止当前任务只在任务运行时有效\nCtrl\nShift\nBackspace\n中断并立即发送运行中中断当前任务并发送输入；空闲时正常发送\nCtrl\nEnter\n暂存当前输入\nCtrl\nShift\nS\n窗口\n下一个标签页\nCtrl\nTab\n上一个标签页\nCtrl\nShift\nTab\n关闭当前标签页草稿保留，可用 Ctrl+Shift+T 恢复；运行会继续\nCtrl\nW\n关闭当前窗口Atlas 最小化到托盘，运行会继续\nCtrl\nShift\nW\n切换到第 1 个标签页标签不足时无操作；输入框聚焦时仍生效\nCtrl\n1\n切换到第 2 个标签页标签不足时无操作；输入框聚焦时仍生效\nCtrl\n2\n切换到第 3 个标签页标签不足时无操作；输入框聚焦时仍生效\nCtrl\n3\n切换到第 4 个标签页标签不足时无操作；输入框聚焦时仍生效\nCtrl\n4\n切换到第 5 个标签页标签不足时无操作；输入框聚焦时仍生效\nCtrl\n5\n切换到第 6 个标签页标签不足时无操作；输入框聚焦时仍生效\nCtrl\n6\n切换到第 7 个标签页标签不足时无操作；输入框聚焦时仍生效\nCtrl\n7\n切换到第 8 个标签页标签不足时无操作；输入框聚焦时仍生效\nCtrl\n8\n切换到第 9 个标签页标签不足时无操作；输入框聚焦时仍生效\nCtrl\n9\n收起/展开侧边栏\nCtrl\nB\n打开/关闭任务面板\nCtrl\n.\n切换对话专注视图隐藏侧栏和任务面板，只保留当前对话\nCtrl\nShift\nO\n聚焦下一个分屏\nCtrl\nAlt\nArrowRight\n聚焦上一个分屏\nCtrl\nAlt\nArrowLeft\n打开独立旁聊窗口\nCtrl\n;\n侧栏\n侧栏搜索会话\nCtrl\nShift\nF\n侧栏项目选择器\nCtrl\nAlt\nP\n切换到下一个会话组\nCtrl\nAlt\nJ\n切换到上一个会话组\nCtrl\nAlt\nK\n差异\n打开全屏差异查看器\nCtrl\nAlt\nD\n上一个差异块\nCtrl\nAlt\nArrowUp\n下一个差异块\nCtrl\nAlt\nArrowDown\n折叠全部差异块\nCtrl\nAlt\n[\n展开全部差异块\nCtrl\nAlt\n]\n快捷键已保存到 keybindings.json\n全部恢复默认",
+  "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-12-overlay-blocks-settings-key.png",
+  "server": {
+    "bindings": {
+      "palette": [
+        "Ctrl+Alt+U"
+      ],
+      "newTask": [
+        "Ctrl+N"
+      ],
+      "temporaryChat": [
+        "Ctrl+Shift+Y"
+      ],
+      "settings": [
+        "Ctrl+,"
+      ],
+      "nextTab": [
+        "Ctrl+Tab"
+      ],
+      "prevTab": [
+        "Ctrl+Shift+Tab"
+      ],
+      "closeTab": [
+        "Ctrl+W"
+      ],
+      "closeWindow": [
+        "Ctrl+Shift+W"
+      ],
+      "tab1": [
+        "Ctrl+1"
+      ],
+      "tab2": [
+        "Ctrl+2"
+      ],
+      "tab3": [
+        "Ctrl+3"
+      ],
+      "tab4": [
+        "Ctrl+4"
+      ],
+      "tab5": [
+        "Ctrl+5"
+      ],
+      "tab6": [
+        "Ctrl+6"
+      ],
+      "tab7": [
+        "Ctrl+7"
+      ],
+      "tab8": [
+        "Ctrl+8"
+      ],
+      "tab9": [
+        "Ctrl+9"
+      ],
+      "toggleSidebar": [
+        "Ctrl+B"
+      ],
+      "toggleInspector": [
+        "Ctrl+."
+      ],
+      "focusComposer": [
+        "Ctrl+L"
+      ],
+      "toggleFocus": [
+        "Ctrl+Shift+O"
+      ],
+      "stopRun": [
+        "Ctrl+Shift+Backspace"
+      ],
+      "sendNow": [
+        "Ctrl+Enter"
+      ],
+      "stashInput": [
+        "Ctrl+Shift+S"
+      ],
+      "sidebarSearch": [
+        "Ctrl+Shift+F"
+      ],
+      "sidebarProjectPicker": [
+        "Ctrl+Alt+P"
+      ],
+      "sidebarNextGroup": [
+        "Ctrl+Alt+J"
+      ],
+      "sidebarPreviousGroup": [
+        "Ctrl+Alt+K"
+      ],
+      "focusNextPane": [
+        "Ctrl+Alt+ArrowRight"
+      ],
+      "focusPreviousPane": [
+        "Ctrl+Alt+ArrowLeft"
+      ],
+      "openSideChat": [
+        "Ctrl+;"
+      ],
+      "openDiff": [
+        "Ctrl+Alt+D"
+      ],
+      "diffPreviousHunk": [
+        "Ctrl+Alt+ArrowUp"
+      ],
+      "diffNextHunk": [
+        "Ctrl+Alt+ArrowDown"
+      ],
+      "diffCollapseHunks": [
+        "Ctrl+Alt+["
+      ],
+      "diffExpandHunks": [
+        "Ctrl+Alt+]"
+      ]
+    },
+    "updated_at": 1795047414406009900,
+    "revision": "b0124b826c92ace623ae221c125f6abbd3d332078c1a9a8cf497a44b8e9b3feb"
+  }
+}

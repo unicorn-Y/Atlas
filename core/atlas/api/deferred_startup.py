@@ -15,6 +15,7 @@ plugin index refresh follows the initial skill scan).
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -23,6 +24,33 @@ import structlog
 from atlas.api.startup_components import StartupComponents
 
 log = structlog.get_logger()
+
+
+async def _run_shutdown_actions(registry: Any, actions: dict[str, Callable[[], Any]]) -> None:
+    """Run actual resource closers in registry dependency order.
+
+    The registry's owner removal only forgets registrations; this function is
+    the lifecycle seam that orders and awaits the resource shutdown itself.
+    """
+    order = registry.teardown_order(actions) if registry is not None else []
+    # Unknown names are real lifecycle actions too (for example the runtime
+    # manager and delayed scheduler). A dependency graph may constrain the
+    # registered subset, but it cannot suppress actions outside that subset.
+    seen = set(order)
+    order.extend(name for name in actions if name not in seen)
+    errors: list[Exception] = []
+    for name in order:
+        action = actions.get(name)
+        if action is None:
+            continue
+        try:
+            result = action()
+            if inspect.isawaitable(result):
+                await result
+        except Exception as exc:
+            errors.append(exc)
+    if errors:
+        raise ExceptionGroup(f"{len(errors)} lifespan shutdown action(s) failed", errors)
 
 
 def restore_lifespan_routes(app: Any, route_count: int) -> None:
@@ -39,62 +67,126 @@ async def shutdown_lifespan_components(app: Any, state: dict[str, Any], route_co
     from atlas.tools.x2 import browser as x2browser
     from atlas.tools.x2 import computer as x2computer
 
-    await _stop_background_startup_tasks(app)
+    errors: list[Exception] = []
+    try:
+        await _stop_background_startup_tasks(app)
+    except Exception as exc:
+        errors.append(exc)
 
     def resource(name: str) -> Any:
-        return state[name] if name in state else getattr(server_module, name, None)
+        value = state.get(name)
+        return value if value is not None else getattr(server_module, name, None)
 
-    for name in ("telegram_service", "scheduler"):
+    async def invoke(name: str, method: str) -> None:
         service = resource(name)
-        if service:
+        if service is not None:
+            result = getattr(service, method)()
+            if inspect.isawaitable(result):
+                await result
+
+    async def invoke_value(service: Any, method: str) -> None:
+        if service is not None:
+            result = getattr(service, method)()
+            if inspect.isawaitable(result):
+                await result
+
+    async def close_gateway_bridge() -> None:
+        bridge = resource("gateway_bridge")
+        if bridge is not None:
+            await invoke_value(bridge.sessions, "close")
+
+    async def close_channel_manager() -> None:
+        service = resource("channel_manager")
+        if service is not None:
+            service.close()
+
+    async def close_group_routes() -> None:
+        group_router.set_group_orchestrator(None)
+        group_router.set_group_service(None)
+
+    async def close_mcp() -> None:
+        service = resource("mcp_client")
+        if isinstance(service, _DeferredMCPClient):
+            service = server_module.mcp_client
+        if service is not None and not isinstance(service, _DeferredMCPClient):
             await service.stop()
-    channel_manager = resource("channel_manager")
-    if channel_manager is not None:
-        await channel_manager.stop()
-        channel_manager.close()
-    gateway_bridge = resource("gateway_bridge")
-    if gateway_bridge is not None:
-        gateway_bridge.sessions.close()
+
+    async def close_browser_sessions() -> None:
+        service = resource("browser_use")
+        if service is not None:
+            for session_id in list(service._sessions):
+                await service.close(session_id)
+
     automation_engine = get_automation_engine()
-    if automation_engine is not None:
-        automation_engine.shutdown()
-    heartbeat_service = resource("heartbeat_service")
-    if heartbeat_service is not None:
-        await heartbeat_service.aclose()
-    group_router.set_group_orchestrator(None)
-    group_router.set_group_service(None)
-    mcp_client = resource("mcp_client")
-    if isinstance(mcp_client, _DeferredMCPClient):
-        mcp_client = server_module.mcp_client
-    if mcp_client is not None and not isinstance(mcp_client, _DeferredMCPClient):
-        await mcp_client.stop()
-    for name in ("local_execution", "computer_use"):
-        service = resource(name)
-        if service:
-            await service.shutdown()
-    await x2computer.shutdown()
-    await x2browser.shutdown()
-    cua_backend = resource("cua_backend")
-    if cua_backend:
-        await cua_backend.close()
-    browser_use = resource("browser_use")
-    if browser_use:
-        for session_id in list(browser_use._sessions):
-            await browser_use.close(session_id)
-    ssh_workspaces = resource("ssh_workspaces")
-    if ssh_workspaces is not None:
-        await ssh_workspaces.close()
-    agent_backend_host = resource("agent_backend_host")
-    if agent_backend_host:
-        await agent_backend_host.shutdown()
-    durable = resource("durable")
-    if durable:
-        durable.stop()
-    for name in ("projects", "usage_ledger", "memory", "manager"):
-        service = resource(name)
-        if service:
-            await service.close()
-    restore_lifespan_routes(app, route_count)
+    services = state.get("services")
+    registry = getattr(services, "service_registry", None)
+
+    # Quiesce every producer before disposing its resources. In particular,
+    # ChannelManager.stop drains accepted dispatches; GatewayBridge sessions
+    # must remain open until that drain has finished.
+    quiesce_actions: dict[str, Callable[[], Any]] = {
+        "telegram_service": lambda: invoke("telegram_service", "stop"),
+        "scheduler": lambda: invoke("scheduler", "stop"),
+        "channel_manager": lambda: invoke("channel_manager", "stop"),
+        "automation_engine": lambda: invoke_value(automation_engine, "shutdown"),
+        "plugin_install_operations": lambda: invoke("plugin_runtime", "close_install_operations"),
+    }
+    try:
+        await _run_shutdown_actions(registry, quiesce_actions)
+    except ExceptionGroup as exc:
+        errors.extend(exc.exceptions)
+
+    # Registered resource disposers and plugin dependents are released through
+    # the same dependency closure. Async plugin flushes therefore finish before
+    # a core dependency (for example MemoryStore) is closed.
+    removed_names: set[str] = set()
+    if registry is not None:
+        before = registry.snapshot()
+        try:
+            await registry.unregister_owner_async("core:lifespan")
+        except ExceptionGroup as exc:
+            errors.extend(exc.exceptions)
+        finally:
+            removed_names = set(before) - set(registry.snapshot())
+
+    # Services not registered yet (startup failed before the composition root),
+    # constructed after registration (scheduler), or owned outside AppServices
+    # still need their concrete close call. Fallback order keeps bridge before
+    # channel-manager disposal when no graph exists.
+    actions: dict[str, Callable[[], Any]] = {
+        "gateway_bridge": close_gateway_bridge,
+        "channel_manager": close_channel_manager,
+        "heartbeat_service": lambda: invoke("heartbeat_service", "aclose"),
+        "group_router": close_group_routes,
+        "mcp_client": close_mcp,
+        "local_execution": lambda: invoke("local_execution", "shutdown"),
+        "computer_use": lambda: invoke("computer_use", "shutdown"),
+        "x2computer": x2computer.shutdown,
+        "x2browser": x2browser.shutdown,
+        "cua_backend": lambda: invoke("cua_backend", "close"),
+        "browser_use": close_browser_sessions,
+        "ssh_workspaces": lambda: invoke("ssh_workspaces", "close"),
+        "agent_backend_host": lambda: invoke("agent_backend_host", "shutdown"),
+        "durable": lambda: invoke("durable", "stop"),
+        "projects": lambda: invoke("projects", "close"),
+        "usage_ledger": lambda: invoke("usage_ledger", "close"),
+        "memory": lambda: invoke("memory", "close"),
+        "manager": lambda: invoke("manager", "close"),
+    }
+    fallback_actions = {
+        name: action for name, action in actions.items() if name not in removed_names
+    }
+    try:
+        await _run_shutdown_actions(None, fallback_actions)
+    except ExceptionGroup as exc:
+        errors.extend(exc.exceptions)
+    finally:
+        try:
+            restore_lifespan_routes(app, route_count)
+        except Exception as exc:
+            errors.append(exc)
+    if errors:
+        raise ExceptionGroup(f"{len(errors)} lifespan cleanup operation(s) failed", errors)
 
 
 def start_lifespan_components(

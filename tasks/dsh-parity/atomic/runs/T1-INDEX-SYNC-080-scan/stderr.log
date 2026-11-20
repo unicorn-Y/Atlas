@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "D:\Atlas\core\scripts\dsh_capability_audit.py", line 1717, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "D:\Atlas\core\scripts\dsh_capability_audit.py", line 1694, in main
+    index = scan_to_ledger(args.source, args.ledger, typescript_module=args.typescript_module)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\scripts\dsh_capability_audit.py", line 1620, in scan_to_ledger
+    index = build_source_index(source, typescript_module=typescript_module)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\scripts\dsh_capability_audit.py", line 1273, in build_source_index
+    typescript_contracts = _typescript_function_contracts(root, contents, typescript_module)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\scripts\dsh_capability_audit.py", line 591, in _typescript_function_contracts
+    raise RuntimeError(
+RuntimeError: TypeScript AST extraction failed closed (node exit 134; stderr sha256 abf4314fa3a3151336ca01d401c58a6ebcb7df9389e52533d120d2e37ef5f79b; diagnostic '<--- Last few GCs --->\n\n[42808:0000022C8C51B000]    90927 ms: Mark-Compact 4090.0 (4099.9) -> 4085.1 (4099.9) MB, pooled: 0 MB, 722.23 / 0.01 ms  (average mu = 0.134, current mu = 0.007) allocation failure; scavenge might not succeed\n\nFATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory\n----- Native stack trace -----\n\n 1: 00007FF7376848DF node::OnFatalError+1343\n 2: 00007FF7362CDCB7 v8::Function::NewInstance+423\n 3: 00007FF7360CE4F7 uv_udp_get').

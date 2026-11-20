@@ -4,8 +4,9 @@ import { backend, useAtlasStore } from '../store/useAtlasStore';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import ConversationMessage from './ConversationMessage';
+import { reduceAttemptText } from '../services/runtimeEvents';
 
-interface Turn { question: string; answer: string; state: 'running' | 'done' | 'failed' }
+interface Turn { question: string; answer: string; state: 'running' | 'done' | 'failed'; attemptChunks?: Record<string, string> }
 
 /**
  * Ask something about the conversation without steering it: the backend runs these read-only and
@@ -35,8 +36,14 @@ export default function SideChat({ open, onClose, conversationId, model, initial
     void backend.startRun({ type: 'run.start', run_id: runId, content: runContent,
       conversation_id: conversationId || crypto.randomUUID(), model, ephemeral: true, ephemeral_blank: true,
       ...(conversationSnapshot ? { ephemeral_context: conversationSnapshot } : {}) }, (envelope) => {
-      if (envelope.event === 'message.delta') update((turn) => ({ answer: turn.answer + String(envelope.data?.content ?? '') }));
-      else if (envelope.event === 'message.completed' && envelope.data?.content) update({ answer: String(envelope.data.content) });
+      if (envelope.event === 'message.delta' || envelope.event === 'message.rollback' || envelope.event === 'message.completed') {
+        update((turn) => {
+          const next = reduceAttemptText(
+            { text: turn.answer, attemptChunks: turn.attemptChunks }, envelope.event, envelope.data ?? {},
+          );
+          return { answer: next.text, attemptChunks: next.attemptChunks };
+        });
+      }
       else if (envelope.event === 'run.completed') update({ state: 'done' });
       else if (envelope.event === 'run.failed') update((turn) => ({ state: 'failed', answer: turn.answer || String(envelope.data?.detail ?? '没能回答') }));
       else if (envelope.event === 'run.cancelled') update({ state: 'done' });

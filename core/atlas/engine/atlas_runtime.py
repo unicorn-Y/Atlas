@@ -876,6 +876,50 @@ class AtlasRuntime:
             notification_handle = None
             notification_task: asyncio.Task[Any] | None = None
             request_system_message = system_message or ""
+            context_workspace = getattr(atlas_context, "workspace", None)
+            same_trusted_workspace = False
+            if workspace and context_workspace:
+                try:
+                    same_trusted_workspace = (
+                        Path(workspace).expanduser().resolve()
+                        == Path(str(context_workspace)).expanduser().resolve()
+                    )
+                except (OSError, RuntimeError, ValueError):
+                    same_trusted_workspace = False
+            if (same_trusted_workspace and workspace
+                    and not workspace.strip().casefold().startswith("ssh://")
+                    and getattr(atlas_context, "workspace_trusted", False)
+                    and not getattr(atlas_context, "project_instruction_root", None)
+                    and not getattr(atlas_context, "ignore_workspace_rules", False)):
+                try:
+                    from atlas.agent.project_instructions import (
+                        load_project_instructions, project_instruction_root,
+                        snapshot_project_instructions,
+                    )
+
+                    instruction_root = project_instruction_root(workspace)
+                    workspace_rules = load_project_instructions(
+                        workspace, trusted=True, project_root=instruction_root,
+                    )
+                    atlas_context.project_instruction_root = str(instruction_root)
+                    atlas_context.project_instruction_snapshot = snapshot_project_instructions(
+                        workspace_rules,
+                    )
+                    initial_instruction_messages = []
+                    for rule in workspace_rules:
+                        header = f"Workspace instructions from {rule['path']} ({rule['bytes']} bytes):"
+                        if header in request_system_message:
+                            continue
+                        initial_instruction_messages.append(
+                            f"{header}\n{rule['content']}"
+                            + ("\n[truncated at 64 KB]" if rule.get("truncated") else "")
+                        )
+                    if initial_instruction_messages:
+                        request_system_message = "\n\n".join(filter(None, (
+                            request_system_message, *initial_instruction_messages,
+                        )))
+                except (AttributeError, OSError, RuntimeError, ValueError):
+                    logger.debug("Atlas kernel workspace instruction bootstrap failed", exc_info=True)
             initial_notices: list[dict[str, Any]] = []
             try:
                 if ephemeral:

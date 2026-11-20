@@ -3,7 +3,7 @@ export type AgentRunPhase = 'planning' | 'reasoning' | 'execution' | 'verificati
 
 export type AgentEventType =
   | 'run.started' | 'run.status' | 'run.phase' | 'run.background'
-  | 'message.delta' | 'message.completed'
+  | 'message.delta' | 'message.rollback' | 'message.completed'
   | 'tool.preparing' | 'tool.started' | 'tool.output' | 'tool.completed' | 'approval.required' | 'approval.responded'
   | 'artifact.updated' | 'run.paused' | 'run.resumed'
   | 'run.plan.updated'

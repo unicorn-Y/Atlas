@@ -1,0 +1,46 @@
+2026-11-19 03:37:41 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-q5lfszyf\atlas\config\atlas.toml
+......F..                                                                [100%]
+================================== FAILURES ===================================
+______ test_retry_clears_orphaned_directory_after_git_lost_registration _______
+tests\test_conversation_worktree_create.py:360: in test_retry_clears_orphaned_directory_after_git_lost_registration
+    assert retried.status_code == 200, retried.text
+E   AssertionError: {"detail":{"status":"recovery_required","message":"A previous worktree create failed to roll back; its leftover worktree must be cleaned up before creating another.","conversation_id":"72923624-b0ad-4797-82e3-f9b2b2b33a26","recovery":{"conversation_id":"72923624-b0ad-4797-82e3-f9b2b2b33a26","workspace":"D:\\Atlas\\.worktrees\\zcode-par07-worktree-api-fix\\.tmp\\par08-impl3\\test_retry_clears_orphaned_dir0\\repo","worktree_path":"D:\\Atlas\\.worktrees\\zcode-par07-worktree-api-fix\\.tmp\\par08-impl3\\test_retry_clears_orphaned_dir0\\.atlas-worktrees\\repo\\72923624","worktree_branch":"atlas/72923624-orphan","base_branch":"main","reason":"record failed: update_conversation returned False; rollback failed: remove: RuntimeError: simulated lock: worktree remove denied; worktree still registered: D:\\Atlas\\.worktrees\\zcode-par07-worktree-api-fix\\.tmp\\par08-impl3\\test_retry_clears_orphaned_dir0\\.atlas-worktrees\\repo\\72923624; worktree directory still exists: D:\\Atlas\\.worktrees\\zcode-par07-worktree-api-fix\\.tmp\\par08-impl3\\test_retry_clears_orphaned_dir0\\.atlas-worktrees\\repo\\72923624; branch still exists: atlas/72923624-orphan","created_at":"2026-11-18 19:37:59"},"cleanup_error":"remove: RuntimeError: simulated lock: worktree remove denied","instructions":["git -C \"D:\\Atlas\\.worktrees\\zcode-par07-worktree-api-fix\\.tmp\\par08-impl3\\test_retry_clears_orphaned_dir0\\repo\" worktree remove --force \"D:\\Atlas\\.worktrees\\zcode-par07-worktree-api-fix\\.tmp\\par08-impl3\\test_retry_clears_orphaned_dir0\\.atlas-worktrees\\repo\\72923624\"","git -C \"D:\\Atlas\\.worktrees\\zcode-par07-worktree-api-fix\\.tmp\\par08-impl3\\test_retry_clears_orphaned_dir0\\repo\" branch -D \"atlas/72923624-orphan\"","retry POST /api/conversations/72923624-b0ad-4797-82e3-f9b2b2b33a26/worktree","or POST /api/conversations/72923624-b0ad-4797-82e3-f9b2b2b33a26/worktree/recovery"]}}
+E   assert 409 == 200
+E    +  where 409 = <Response [409 Conflict]>.status_code
+---------------------------- Captured stdout setup ----------------------------
+2026-11-19 03:37:57 [info     ] memory.init                    db=D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\.tmp\par08-impl3\test_retry_clears_orphaned_dir0\memory.sqlite3
+============================== warnings summary ===============================
+tests/test_conversation_worktree_create.py::test_create_status_merge_delete_over_http
+  D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_conversation_worktree_create.py::test_create_status_merge_delete_over_http
+  D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_conversation_worktree_create.py::test_create_status_merge_delete_over_http
+  D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_conversation_worktree_create.py::test_create_status_merge_delete_over_http
+  D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_conversation_worktree_create.py::test_create_status_merge_delete_over_http
+  D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_conversation_worktree_create.py::test_retry_clears_orphaned_directory_after_git_lost_registration
+1 failed, 8 passed, 5 warnings in 34.99s

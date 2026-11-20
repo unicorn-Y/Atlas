@@ -1,0 +1,10 @@
+{
+  "duration_seconds": 269.8280000000086,
+  "leftover_processes": [],
+  "returncode": 0,
+  "signals": [],
+  "status": "PASS",
+  "stderr_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-SESSION-HISTORY-TRANSPORT-093-scan\\stderr.log",
+  "stdout_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-SESSION-HISTORY-TRANSPORT-093-scan\\stdout.log",
+  "timed_out": false
+}

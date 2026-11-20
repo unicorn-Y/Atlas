@@ -160,6 +160,7 @@ class WebSearchService:
         limit = max(200, min(int(char_limit or s.extract_char_limit), 500_000))
         urls = [str(u).strip() for u in urls if str(u).strip()]
         results: dict[str, dict[str, Any]] = {}
+        policy_errors: dict[str, dict[str, Any]] = {}
         pending: list[str] = []
         for url in urls:
             if s.cache_enabled and (hit := cache.extract_cache_get(url, s.cache_ttl_minutes * 60)):
@@ -184,11 +185,20 @@ class WebSearchService:
                     if s.cache_enabled:
                         cache.extract_cache_put(url, page)
                 else:
-                    failures[url].append(f"{name}: {str((page or {}).get('error') or 'no content')[:200]}")
-                    still.append(url)
+                    if page and page.get("error_category") == "policy":
+                        policy_errors[url] = page
+                    else:
+                        failures[url].append(f"{name}: {str((page or {}).get('error') or 'no content')[:200]}")
+                        still.append(url)
             pending = still
         out = []
         for url in urls:
+            if url in policy_errors:
+                page = policy_errors[url]
+                out.append({"url": url, "title": "", "content": "",
+                            "error": str(page.get("error") or "web request rejected by policy"),
+                            "error_category": "policy"})
+                continue
             page = results.get(url)
             if page is None:
                 reason = " | ".join(failures.get(url) or ["no web extract provider is available"])
@@ -201,7 +211,8 @@ class WebSearchService:
             logger.info("web_fetch ok via %s: %s (%d chars%s)", meta.get("served_by"), url, len(text),
                         ", truncated" if truncated else "")
             out.append({"url": str(page.get("url") or url), "title": str(page.get("title") or ""), "content": text,
-                        "truncated": truncated, "metadata": meta})
+                        "truncated": truncated or bool(meta.get("truncated")), "metadata": meta,
+                        **({"status_code": meta["status_code"]} if isinstance(meta.get("status_code"), int) else {})})
         return out
 
 

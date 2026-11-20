@@ -1,0 +1,66 @@
+EXEC-06 · B-F01-CORE-PKG-VERIFY-01 复核:核心包完整性与更新校验
+日期: 2026-11-18;DSH rc.4 3f321d32;Atlas wave3@060071ab + 在途
+
+================================================================================
+A. DSH(桌面核心包集合,启动前 fail-closed)
+================================================================================
+- apps/desktop/src/core-package-set.ts
+  - :10-31 常量/类型:desktop-packages.json、desktop-packages/、dsh 与
+    @deepseek-ai/dsh-desktop-host、必需 runtime 文件 lib/index.js/lib/cli.js;
+    DesktopCorePackageRecord{name,version,file,bytes,integrity(sha512-...)}。
+  - :55-118 parseDesktopCorePackageSet:
+    schemaVersion=1;name/version/file/integrity 正则;bytes 非负安全整数;
+    名称与文件名不得重复;必须按 name 排序;必须含 dsh 与 desktop-host 且版本=发行版本。
+  - :131-160 verifyDesktopCorePackageSet:逐 tarball 读 body、sha512(base64) 与
+    integrity 比对、bytes 比对。
+  - :166-181 verifyDesktopCoreLockfile:lockfile 里核心包若解析到 registry 版本 → 抛错。
+- 接线:apps/desktop/src/project-manager.ts:135 启动/初始化 profile 前 verify;
+  runtime-tree.ts:214 verifyDesktopRuntime(运行时树完整性)。
+- 测试:apps/desktop/tests/core-package-set.spec.ts。
+- 语义:整包替换(每个 profile 自带不可变 tgz);解析全部走 file: overrides,绝不回 registry;
+  校验失败即不 boot(无“带病启动”)。
+
+================================================================================
+B. Atlas 实际实现
+================================================================================
+- 构建期清单:frontend/scripts/write-release-manifest.mjs
+  - 要求 installer/win-unpacked/Atlas.exe/backend/atlas_backend.exe 存在;
+  - 校验 Electron 实际版本==package.json devDependencies.electron;
+  - 记录 app_version/git_commit/electron_version/sqlite_runtime.archive_sha3_256+dll_sha256/
+    backend_build.executable_sha256/bundled_node.canonical_archive_sha256/
+    installer.sha256/unpacked_executable_sha256。
+- 产物:frontend/windows-release/release-manifest.json(当前 app 0.1.0)。
+- 更新期校验:frontend/src/main/releaseUpdate.ts:70-140
+  - semver + Minimum-Atlas-Version;安装包 sha256 来自 .sha256 sidecar /
+    release-manifest.json / Release body;无哈希→拒绝安装;
+  - 下载后重算 sha256 比对;Windows 有 Authenticode 时验证 Status=='Valid'。
+- **缺口**:启动期没有读取 release-manifest.json 复核 backend exe / 内置 node /
+  sqlite dll 的哈希(grep executable_sha256/canonical_archive_sha256 于运行代码=0);
+  清单位于 windows-release,不随运行时树一起校验;Atlas 无 npm 核心包集合(后端为
+  PyInstaller exe),因此没有 lockfile 注册表解析面,但有等价“整包替换+清单”需求。
+
+================================================================================
+C. 差距
+================================================================================
+G1 更新包校验存在,但“已安装树”启动前不复核 → 安装后磁盘篡改/半替换不会被发现。
+G2 清单只覆盖后端 exe/node archive/sqlite dll/安装包;不覆盖前端 dist 文件、
+   内置 runtime 的其他二进制。
+G3 无 versions/整包替换后的版本一致性复核(D1 只有后端握手)。
+G4 无 DSH 式逐文件 package set(形态不同,不强行对齐;以清单+哈希实现等价目标)。
+
+================================================================================
+D. 验收标准(二值)
+================================================================================
+A-1 启动前:读取 release-manifest.json,计算 backend exe、node 可执行、sqlite dll 的
+    sha256/sha3 并与清单比对;任一不符→拒绝启动并给出明确错误(不得静默继续)。
+A-2 清单缺失/字段缺失→fail-closed(打包产物必须有清单;开发模式可显式豁免)。
+A-3 更新安装后:新树清单与二进制一致;版本三处(app/backend/node)一致。
+A-4 复验:临时目录构造正确/篡改/缺清单三组 fixture 的单测(失败不得启动);
+    打包端实测一次(安装→启动→篡改 backend→启动被拒)。
+实施依赖:frontend/src/main/electron.ts 在途(原协作者),启动钩子 blocked-on-author;
+可先做独立 releaseIntegrity 模块+单测,接线一行待解除。
+
+================================================================================
+E. 结论
+Atlas=部分:更新期安装包校验强(哈希+可选签名),但已安装树启动期不复核;
+DSH=启动前逐包 sha512 fail-closed。状态保持部分。

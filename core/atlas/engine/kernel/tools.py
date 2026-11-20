@@ -546,6 +546,16 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
                 "parameters": copy.deepcopy(WORKFLOW_TOOL_SPEC["parameters"]),
             },
         })
+    schemas.append(_function_schema(
+        "read_file",
+        "Read a complete file or a line page from the active local workspace. Use tool_search if this schema is deferred.",
+        {
+            "path": {"type": "string", "minLength": 1},
+            "offset": {"type": "integer", "minimum": 0},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
+        },
+        ["path"],
+    ))
     question_tool = next((item for item in schemas
                           if item.get("function", {}).get("name") == "request_user_input"), None)
     if question_tool is not None:

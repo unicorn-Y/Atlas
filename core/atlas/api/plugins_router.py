@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 import asyncio
 import subprocess
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
@@ -140,19 +141,72 @@ async def install_plugin(
     plugin_runtime = _service("plugin_runtime", services)
     if plugin_runtime is None:
         raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    source = str(req.get("source", "")).strip()
+    if not source:
+        raise HTTPException(status_code=422, detail="source is required")
     try:
-        validation = await asyncio.to_thread(
-            plugin_runtime.validate_source, str(req.get("source", "")), ref=req.get("ref"),
-        )
-        if not validation["valid"]:
-            raise HTTPException(status_code=422, detail={"message": "插件清单校验未通过", "validation": validation})
-        result = await asyncio.to_thread(
-            plugin_runtime.install, str(req.get("source", "")),
-            name=req.get("name"), ref=req.get("ref"),
+        source_type = str(req.get("sourceType") or plugin_runtime._infer_install_source_type(source))
+        if source_type not in {"local", "git", "npm"}:
+            raise HTTPException(status_code=422, detail="unsupported sourceType")
+        # Local manifests are cheap and immutable enough to preflight here.
+        # Remote sources are resolved inside the cancellable request task.
+        if source_type == "local" and Path(source).expanduser().exists():
+            validation = await asyncio.to_thread(plugin_runtime.validate, source)
+            if not validation["valid"]:
+                raise HTTPException(status_code=422, detail={"message": "插件清单校验未通过", "validation": validation})
+        return await plugin_runtime.start_install_operation(
+            source, ref=req.get("ref"), registry=req.get("registry"), request_id=req.get("requestId"),
+            on_complete=_server()._reload_extensions, source_type=source_type,
         )
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {**result, "report": await _server()._reload_extensions()}
+
+
+@router.get("/api/plugins/install/{request_id}")
+async def wait_plugin_install(
+    request_id: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+    wait_ms: int = 1000,
+) -> dict[str, Any]:
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    if wait_ms < 0 or wait_ms > 30_000:
+        raise HTTPException(status_code=422, detail="wait_ms must be between 0 and 30000")
+    return await plugin_runtime.wait_install_operation(request_id, wait_seconds=wait_ms / 1000)
+
+
+@router.post("/api/plugins/install/{request_id}/cancel")
+async def cancel_plugin_install(
+    request_id: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    return await plugin_runtime.cancel_install_operation(request_id)
+
+
+@router.post("/api/plugins/script-approvals")
+async def grant_plugin_script_approval(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    req: dict[str, Any],
+) -> dict[str, Any]:
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    package_name = str(req.get("packageName") or "")
+    days = req.get("days", 30)
+    if not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 365:
+        raise HTTPException(status_code=422, detail="days must be between 1 and 365")
+    request_id = str(req.get("requestId") or "")
+    if not request_id:
+        raise HTTPException(status_code=422, detail="requestId is required")
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    try:
+        return plugin_runtime.grant_script_approval(package_name, expires_at=expires_at, request_id=request_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/api/plugins/{name}/update")
@@ -209,6 +263,10 @@ async def reload_plugin(
     except (ValueError, OSError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not result.get("ok"):
+        # A compatibility failure may have disposed the old plugin generation.
+        # Withdraw its derived skill sources/index before returning the error so
+        # the shared providers match the runtime's actual loaded state.
+        _server()._refresh_extension_sources()
         # 404 only when the plugin genuinely is not there; a malformed edit is a
         # 400, because "not found" would send the user looking in the wrong place.
         status = 404 if "not found" in str(result.get("error", "")) else 400
@@ -379,17 +437,19 @@ async def install_marketplace_plugin(
     if plugin_runtime is None:
         raise HTTPException(status_code=503, detail="插件服务尚未就绪")
     try:
-        validation = await asyncio.to_thread(plugin_runtime.validate_marketplace_plugin, name, str(req.get("plugin", "")))
-        if not validation["valid"]:
-            raise HTTPException(status_code=422, detail={"message": "插件清单校验未通过", "validation": validation})
-        result = await asyncio.to_thread(
-            plugin_runtime.install_marketplace_plugin, name, str(req.get("plugin", "")),
+        plugin_name = str(req.get("plugin", ""))
+        if not plugin_name:
+            raise HTTPException(status_code=422, detail="plugin is required")
+        result = await plugin_runtime.start_install_operation(
+            f"marketplace:{name}/{plugin_name}", request_id=req.get("requestId"),
+            source_type="marketplace", marketplace=name, plugin_name=plugin_name,
+            registry=req.get("registry"), on_complete=_server()._reload_extensions,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc.args[0] if exc.args else exc)) from exc
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {**result, "report": await _server()._reload_extensions()}
+    return result
 
 
 @router.post("/api/plugins/{name}/enabled")
@@ -421,6 +481,47 @@ async def set_plugin_enabled(
         "name": name, "enabled": enabled, "applied": applied,
         "restart_required": False, "report": report,
     }
+
+
+@router.post("/api/plugins/{name}/compatibility-exemption")
+async def grant_plugin_compatibility_exemption(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str, req: dict[str, Any],
+) -> dict[str, Any]:
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="Plugin runtime unavailable")
+    if req.get("acceptRisk") is not True:
+        raise HTTPException(status_code=422, detail="acceptRisk=true is required")
+    try:
+        issue = await asyncio.to_thread(
+            plugin_runtime.grant_compatibility_exemption,
+            name, str(req.get("pluginVersion") or ""), str(req.get("runtimeVersion") or ""),
+            accept_risk=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"name": name, "compatibility": issue,
+            "report": await _server()._reload_extensions()}
+
+
+@router.delete("/api/plugins/{name}/compatibility-exemption")
+async def revoke_plugin_compatibility_exemption(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str, req: dict[str, Any],
+) -> dict[str, Any]:
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="Plugin runtime unavailable")
+    try:
+        issue = await asyncio.to_thread(
+            plugin_runtime.revoke_compatibility_exemption,
+            name, str(req.get("pluginVersion") or ""), str(req.get("runtimeVersion") or ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"name": name, "compatibility": issue,
+            "report": await _server()._reload_extensions()}
 
 
 _EXTERNAL_IMPORT_SOURCES = {"claude", "codex"}

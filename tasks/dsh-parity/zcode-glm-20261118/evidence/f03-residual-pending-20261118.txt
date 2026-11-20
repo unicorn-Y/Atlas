@@ -1,0 +1,15 @@
+全表待核 59 行,按前缀分组:
+B-F04-PYSDK: 35
+B-F03-SETTINGS: 7
+B-F03-RENDER: 3
+B-F04-SERVER: 3
+B-F02-INPUT: 3
+B-F02-BROWSER: 2
+B-F03-WEB: 1
+B-F04-SDK: 1
+B-F04-SDKPROT: 1
+B-F02-IPC: 1
+B-F02-PERM: 1
+B-F10-REMOTE: 1
+
+其中 F03 残余(BOOT/RENDER-07/08/RENDER-02 等)=架构级候选(slot/boot/种子面),已在 gap 列标注;其余前缀为行级对照待批次项。

@@ -1,0 +1,10 @@
+2026-11-19 03:33:41 [warning  ] config.not_found               path=D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\.tmp\live-app-data\config\atlas.toml
+C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Lib\site-packages\fastapi\openapi\utils.py:254: UserWarning: Duplicate Operation ID update_custom_model_api_models_custom__model_id__put for function update_custom_model at D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\models_settings_router.py
+  warnings.warn(message, stacklevel=1)
+C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Lib\site-packages\fastapi\openapi\utils.py:254: UserWarning: Duplicate Operation ID delete_custom_model_api_models_custom__model_id__delete for function delete_custom_model at D:\Atlas\.worktrees\zcode-par07-worktree-api-fix\core\atlas\api\models_settings_router.py
+  warnings.warn(message, stacklevel=1)
+/api/conversations/{conversation_id}/worktree ['delete', 'get', 'post']
+/api/conversations/{conversation_id}/worktree/merge ['post']
+/api/conversations/{conversation_id}/worktree/recovery ['get', 'post']
+/api/conversations/{conversation_id}/worktree/sync ['post']
+/api/conversations/{conversation_id}/worktree/sync/{action} ['post']

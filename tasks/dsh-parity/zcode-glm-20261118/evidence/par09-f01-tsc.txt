@@ -1,0 +1,8 @@
+# PAR-09-F01 electron typecheck
+cwd: /d/Atlas/.worktrees/zcode-par09-release-integrity/frontend
+command: npx tsc -p tsconfig.electron.json --noEmit
+--- output ---
+npm notice run atlas@0.1.0 npx
+npm notice run tsc -p tsconfig.electron.json --noEmit
+--- end output ---
+EXIT=0

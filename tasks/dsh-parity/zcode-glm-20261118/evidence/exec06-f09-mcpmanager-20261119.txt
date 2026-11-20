@@ -1,0 +1,39 @@
+EXEC-06 · B-F09-MCP-MANAGER-01 复核:Atlas 已有受管 MCP 管理面
+日期: 2026-11-19;DSH rc.4 3f321d32;Atlas wave3@060071ab + 在途
+
+================================================================================
+A. DSH
+================================================================================
+- packages/mcp/mcp-manager/src/index.ts:193 McpServerManager extends TypertRemoteService;
+  :43 Entry / :71 Config / :83 Registration;McpManagedServerStatus/View;
+  Typert Remote 命名空间的注册/启停/状态视图。
+
+================================================================================
+B. Atlas 实际实现(旧“无对应”错误)
+================================================================================
+- core/atlas/api/tools_router.py
+  - :380 GET /api/mcp/servers(服务器列表/状态);
+  - :480 POST /api/mcp/servers(注册/新增配置);
+  - :539 DELETE /api/mcp/servers/{name}(移除);
+  - :633-652 POST /api/mcp/servers/{name}/restart → `mcp_client.restart_server(name)`,
+    失败记录 mcp.server_restart_failed;
+  - :663-689 POST /api/mcp/servers/reconnect-failed(批量重启失败服务器)。
+- core/atlas/tools/mcp_client.py
+  - :251 MCPServerHandle / :274 MCPServerConfig / :441 MCPClient(状态、liveness、
+    restart_server:1409-1427 清退避并立即重试)/ :1435 ScopedMCPClient(作用域)。
+- integrations_router.py:435 也复用 restart_server。
+- 形态:HTTP REST + MCPClient,不是 Typert Remote 服务;无独立 per-server enable/disable
+  开关(增删即启停);状态字段集与 DSH McpManagedServerStatus 不同。
+
+================================================================================
+C. 结论
+核心能力(注册/启停/重启/状态)在 Atlas 已存在且可路由调用,旧 gap“McpServerManager
+无对应/管理 UI 候选”不成立。差异是传输/命名空间形态与 enable/disable 粒度。
+状态:部分→对齐已验;gap 保留形态差异描述。
+
+验收(后续可选对齐):
+A-1 列出已配置服务器及状态(connected/starting/failed/disabled);
+A-2 新增/删除/重启单服务器,失败返回结构化原因且不中断其他服务器;
+A-3 批量重连失败服务器幂等;
+A-4 若引入 per-server disable,与删除语义区分(保留配置但不启动)。
+复验:tools_router 路由测试 + mcp_client 生命周期测试 + 受控 stdio MCP fixture。

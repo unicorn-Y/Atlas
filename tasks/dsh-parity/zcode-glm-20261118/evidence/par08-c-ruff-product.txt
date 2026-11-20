@@ -1,0 +1,9 @@
+atlas\server.py:924:101: E501 Line too long (105 > 100)
+atlas\skills\__init__.py:14:1: UP035 [*] Import from `collections.abc` instead: `Mapping`, `Sequence`
+atlas\skills\__init__.py:125:12: BLE001 Do not catch blind exception: `Exception`
+atlas\skills\__init__.py:136:12: BLE001 Do not catch blind exception: `Exception`
+atlas\skills\__init__.py:339:48: UP037 [*] Remove quotes from type annotation
+atlas\skills\__init__.py:386:10: UP037 [*] Remove quotes from type annotation
+Found 144 errors.
+[*] 8 fixable with the `--fix` option.
+RUFF_PRODUCT_TAIL_EXIT=0

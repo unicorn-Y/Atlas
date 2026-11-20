@@ -1,0 +1,65 @@
+EXEC-06 · B-F07-SESSION-FORMAT-01 复核:会话格式版本链与“读到更新版本拒绝”
+日期: 2026-11-18;DSH rc.4 3f321d32;Atlas wave3@060071ab + 在途
+
+================================================================================
+A. DSH:四段冻结迁移链 + 新版本拒绝
+================================================================================
+- packages/session/session-format-v0-to-v1/src/{index,migration,codec,dispositions,relationships,payload-validation}.ts
+  v0→v1:codec + 事件 disposition/关系/payload 校验,迁移为纯函数。
+- v1-to-v2/src/index.ts:migration + 冻结 released-v1 codec + v2 header/artifact 校验。
+- v2-to-v3/src/{migration,payload,references,validation}.ts。
+- v3-to-v4/src/{migration,content,developer,extension-identities,facts,fork-result,
+  message-sources,references,relationships,retired-syntax,sources,system-message,
+  tool-role,validation}.ts。
+- packages/session/session-format/src/chain.ts:83
+  `stored Session uses newer format v${from}; this build writes v${this.currentVersion}`;
+  catalog.ts:42/54-99:codec v 非法→SessionFormatError;storedVersion 更新→
+  status:'unsupported' + reason(不尝试降级);current.ts 校验 header.version 必须等于
+  SESSION_FORMAT_VERSION。
+语义:旧版本逐段前移;新版本只读拒绝并给出可读原因;每段迁移有独立 codec/校验/关系处理。
+
+================================================================================
+B. Atlas:SQLite state schema 前向迁移链 + SchemaTooNew 拒绝
+================================================================================
+- core/atlas/engine/state/atlas_state_common.py:284 `SCHEMA_VERSION = 32`。
+- core/atlas/engine/state/atlas_state_schema.py:993-1012
+  schema_version 行缺失→写当前版本;`row[0] > SCHEMA_VERSION`→
+  raise `SchemaTooNewError`(“refusing to open it. Upgrade Atlas…”);否则
+  `_run_data_migrations(cursor, row[0], fts5_available)`。
+- `_run_data_migrations:1022-1126`:按 current_version 逐版本条件执行
+  v16 delegate 标记、v18 gateway 元数据、v20 usage 种子、v22 usage 迁移、v23 FTS
+  存储升级旗标、v25 系统提示去重、v29/v30 trigram 排除重建;最后推进
+  schema_version(需 FTS5 可用,否则不谎报当前)。
+- core/atlas/engine/state/atlas_state_errors.py:186 `SchemaTooNewError`:
+  旧构建不得降级新库,否则会写坏仍被新 Atlas 拥有的 store。
+- 另有 core/atlas/session_migration_gate.py + session_sync.py:1122-1267
+  `migrate_legacy_sessions`:Atlas MemoryStore → SessionDB 的一次性 transcript 迁移
+  (备份/暂存/校验/发布),与格式版本链是不同层。
+等价关系:
+- 两者共同不变量:旧库/旧格式前向迁移;读到更新版本拒绝并给原因;迁移失败保持原库。
+- Atlas 链更长(1→32)但迁移逻辑集中在 `_run_data_migrations` 一个函数内,按版本条件
+  内联;DSH 每段是独立冻结包(codec/dispositions/relationships/payload 校验),可逐段
+  单测/审计,事件日志为纯格式而非 SQLite 表。
+- Atlas 没有“纯事件日志格式 v0→v4”的逐版本 codec;DSH 没有 SQLite schema 侧链;
+  两者不是同构,是同一不变量在两种存储形态上的实现。
+
+================================================================================
+C. 差距与验收
+================================================================================
+G1 Atlas 迁移不可按版本单独引用/审计:无 vN→vN+1 独立模块与 disposition 清单;
+   新增迁移只能改大函数,回归面靠整库测试。
+G2 无 DSH 式 `status:'unsupported'` 的只读目录投影;Atlas 是 open 直接抛错
+   (都拒绝,但诊断面不同)。
+G3 旧格式内容的逐字段 disposition(丢弃/保留/改名)未与 DSH 对照。
+验收:
+A-1 新版本 store:open 失败、原文件字节不变、错误含 stored/supported 版本。
+A-2 旧版本 store:逐级迁移到当前版本,数据行语义抽查(至少 v16/v20/v22/v25)。
+A-3 迁移中断:FTS5 不可用/异常时不推进版本,重开可继续。
+A-4 若做格式链对齐:抽独立版本迁移模块+每段 fixture(不要求复制 DSH 代码)。
+复验:现有 state schema/portability 测试 + 新版本 fixture(可用 SQLite 手工写
+schema_version=SCHEMA_VERSION+1)。
+
+================================================================================
+D. 结论
+B-F07-SESSION-FORMAT-01 状态保持对齐已验:核心不变量一致,Atlas 迁移链更宽;
+差距是审计粒度/诊断面/事件日志同构性,不是功能缺失。验收 A-1..A-4 待后续。

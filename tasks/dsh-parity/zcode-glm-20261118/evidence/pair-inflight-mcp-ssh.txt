@@ -1,0 +1,723 @@
+2026-11-18 08:31:43 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-42zbf9jb\atlas\config\atlas.toml
+.F..FF.................FF........F...................F....               [100%]
+================================== FAILURES ===================================
+_________ test_node_release_manifest_pins_official_binary_and_sha256 __________
+tests\test_mcp_client.py:44: in test_node_release_manifest_pins_official_binary_and_sha256
+    assert manifest["version"] == NODE_VERSION.removeprefix("v")
+E   AssertionError: assert '24.21.0' == '22.23.3'
+E     
+E     - 22.23.3
+E     + 24.21.0
+________ test_start_records_runtime_config_discovery_and_restart_state ________
+tests\test_mcp_client.py:100: in test_start_records_runtime_config_discovery_and_restart_state
+    assert state["servers"][0]["connected"] is True
+E   assert False is True
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 08:31:45 [info     ] mcp.starting                   count=1 names=['filesystem']
+-------------------------- Captured stdout teardown ---------------------------
+2026-11-18 08:31:45 [warning  ] mcp.owner_cancelled            server=filesystem
+_ test_failed_configured_server_blocks_mcp_runtime_without_echoing_arguments __
+tests\test_mcp_client.py:121: in test_failed_configured_server_blocks_mcp_runtime_without_echoing_arguments
+    assert status["available"] is False
+E   assert True is False
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 08:31:45 [info     ] mcp.starting                   count=1 names=['broken']
+-------------------------- Captured stdout teardown ---------------------------
+2026-11-18 08:31:45 [warning  ] mcp.background_start_failed    reason='MCP server failed during launch or initialization (RuntimeError)'
+______ test_ssh_cancel_intent_applies_to_late_process_handle[operation] _______
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\tasks.py:500: in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\locks.py:213: in wait
+    await fut
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+tests\test_ssh_execution_world.py:373: in test_ssh_cancel_intent_applies_to_late_process_handle
+    await asyncio.wait_for(client.create_entered.wait(), timeout=1.0)
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\tasks.py:502: in wait_for
+    raise exceptions.TimeoutError() from exc
+E   TimeoutError
+______ test_ssh_cancel_intent_applies_to_late_process_handle[start_task] ______
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\tasks.py:500: in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\locks.py:213: in wait
+    await fut
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+tests\test_ssh_execution_world.py:373: in test_ssh_cancel_intent_applies_to_late_process_handle
+    await asyncio.wait_for(client.create_entered.wait(), timeout=1.0)
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\tasks.py:502: in wait_for
+    raise exceptions.TimeoutError() from exc
+E   TimeoutError
+___ test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry ____
+tests\test_ssh_execution_world.py:984: in test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry
+    assert client.create_calls == 1
+E   assert 0 == 1
+E    +  where 0 = <tests.test_ssh_execution_world.test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry.<locals>.DroppedTransport object at 0x00000265910E6450>.create_calls
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 08:32:11 [debug    ] agent.tool_call_failed         error="test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry.<locals>.process_command() got an unexpected keyword argument 'expected_authority_id'" tool=local_process
+┌───────────────────── Traceback (most recent call last) ─────────────────────┐
+│ D:\Atlas\core\atlas\agent\tool_node.py:1856 in execute_tools_node           │
+│                                                                             │
+│   1853 │   │   │   │   │   │   # A delegated run inherits the parent's call │
+│   1854 │   │   │   │   │   │   # its remote process ownership and cancellat │
+│   1855 │   │   │   │   │   │   # child run currently executing this tool.   │
+│ > 1856 │   │   │   │   │   │   result = await ssh_tool_callback(fn_name, fn │
+│   1857 │   │   │   │   │   else:                                            │
+│   1858 │   │   │   │   │   │   result = await ssh_tool_callback(fn_name, fn │
+│   1859 │   │   │   │   elif (getattr(ctx, "acp_filesystem", None) is not No │
+│                                                                             │
+│ ┌──────────────────────────────── locals ─────────────────────────────────┐ │
+│ │                          agent = <atlas.agent.AgentOrchestrator object  │ │
+│ │                                  at 0x00000265910E6D50>                 │ │
+│ │                  allowed_paths = []                                     │ │
+│ │                  allowed_tools = None                                   │ │
+│ │                  atlas_options = {                                      │ │
+│ │                                  │   'model': 'test-model',             │ │
+│ │                                  │   'permission_mode': 'full_access',  │ │
+│ │                                  │   'allowed_paths': [],               │ │
+│ │                                  │   'tool_allow': None,                │ │
+│ │                                  │   'available_tools': [],             │ │
+│ │                                  │   'tool_deny': [],                   │ │
+│ │                                  │   'cancel_event': None,              │ │
+│ │                                  │   'approval_callback': <function     │ │
+│ │                                  execute_tools_node.<locals>.child_app… │ │
+│ │                                  at 0x00000265903C8400>,                │ │
+│ │                                  │   'user_hook_callback': None,        │ │
+│ │                                  │   'ssh_tool_callback': <function     │ │
+│ │                                  test_kernel_exec_manager_ssh_start_di… │ │
+│ │                                  at 0x00000265918CBEC0>,                │ │
+│ │                                  │   ... +13                            │ │
+│ │                                  }                                      │ │
+│ │                available_tools = []                                     │ │
+│ │                call_started_at = '2026-11-18T00:32:11.014+00:00'        │ │
+│ │              call_started_mono = 127122.281                             │ │
+│ │                            ctx = AgentRunContext(                       │ │
+│ │                                  │   tool_mode='native',                │ │
+│ │                                  │   cancel_event=None,                 │ │
+│ │                                  │   pause_event=None,                  │ │
+│ │                                  │   approval_callback=None,            │ │
+│ │                                  │   event_queue=<Queue at              │ │
+│ │                                  0x265910bee10 maxsize=0>,              │ │
+│ │                                  │   run_id='kernel-ssh-disconnect',    │ │
+│ │                                  │   goal=None,                         │ │
+│ │                                  │                                      │ │
+│ │                                  conversation_id='kernel-ssh-disconnec… │ │
+│ │                                  │   stable_system_prefix=None,         │ │
+│ │                                  │   memory_scope_id='',                │ │
+│ │                                  │   project_id=None,                   │ │
+│ │                                  │                                      │ │
+│ │                                  reminders=<atlas.agent.enrichment.Sys… │ │
+│ │                                  object at 0x000002659029AD10>,         │ │
+│ │                                  │   maintenance_snapshot=None,         │ │
+│ │                                  │   maintenance_context={              │ │
+│ │                                  │   │   'active_tool_refs': [          │ │
+│ │                                  │   │   │   {                          │ │
+│ │                                  │   │   │   │   'name':                │ │
+│ │                                  'local_process',                       │ │
+│ │                                  │   │   │   │   'tool_call_id':        │ │
+│ │                                  'kernel-ssh-disconnect-call'           │ │
+│ │                                  │   │   │   },                         │ │
+│ │                                  │   │   │   {                          │ │
+│ │                                  │   │   │   │   'name':                │ │
+│ │                                  'local_process',                       │ │
+│ │                                  │   │   │   │   'tool_call_id':        │ │
+│ │                                  'kernel:c347db0cd4144b0c8ea69b3c5ccfe… │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   ]                              │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   steer_queue=None,                  │ │
+│ │                                  │   inbox=None,                        │ │
+│ │                                  │   input_callback=None,               │ │
+│ │                                  │                                      │ │
+│ │                                  workspace='ssh://leased/C:/remote-wor… │ │
+│ │                                  │   working_directory=None,            │ │
+│ │                                  │   working_directory_callback=None,   │ │
+│ │                                  │   workspace_trusted=False,           │ │
+│ │                                  │   project_instruction_root=None,     │ │
+│ │                                  │   project_instruction_snapshot={},   │ │
+│ │                                  │   agent_role='general',              │ │
+│ │                                  │   agent_depth=0,                     │ │
+│ │                                  │   agent_type='general',              │ │
+│ │                                  │   agent_preset_id='default',         │ │
+│ │                                  │   agent_preset_capabilities=None,    │ │
+│ │                                  │   permission_preset='ask',           │ │
+│ │                                  │                                      │ │
+│ │                                  todo_store=<atlas.agent.todo_state.To… │ │
+│ │                                  object at 0x00000265910F2BD0>,         │ │
+│ │                                  │   moa_enabled=False,                 │ │
+│ │                                  │   mode='act',                        │ │
+│ │                                  │   mode_explicit=False,               │ │
+│ │                                  │   tool_allow=None,                   │ │
+│ │                                  │   tool_deny=[],                      │ │
+│ │                                  │   mcp_server_allow=None,             │ │
+│ │                                  │   read_only=False,                   │ │
+│ │                                  │   permission_mode='full_access',     │ │
+│ │                                  │   allowed_paths=[],                  │ │
+│ │                                  │   session_env={},                    │ │
+│ │                                  │   atlas_preapproved_writes=set(),    │ │
+│ │                                  │   process_notifications=<Queue at    │ │
+│ │                                  0x265910e4dd0 maxsize=0>,              │ │
+│ │                                  │                                      │ │
+│ │                                  parent_process_event_callback=None,    │ │
+│ │                                  │   user_hook_callback=None,           │ │
+│ │                                  │   ssh_tool_callback=<function        │ │
+│ │                                  test_kernel_exec_manager_ssh_start_di… │ │
+│ │                                  at 0x00000265918CBEC0>,                │ │
+│ │                                  │   ssh_checkpoint_callback=None,      │ │
+│ │                                  │   sandbox_tool_callback=None,        │ │
+│ │                                  │   sandbox_enabled=False,             │ │
+│ │                                  │   reasoning_effort=None,             │ │
+│ │                                  │   model=None,                        │ │
+│ │                                  │   truncated_tool_retries=0,          │ │
+│ │                                  │   fallback_models=[],                │ │
+│ │                                  │   sticky_fallback_model=None,        │ │
+│ │                                  │   failed_models=set(),               │ │
+│ │                                  │   recovery_retries=0,                │ │
+│ │                                  │                                      │ │
+│ │                                  context_compression_attempted=False,   │ │
+│ │                                  │   file_edit_counts={},               │ │
+│ │                                  │   new_context_window_callback=None,  │ │
+│ │                                  │   changed_paths=set(),               │ │
+│ │                                  │   verification_passed=False,         │ │
+│ │                                  │   verify_nudge_sent=False,           │ │
+│ │                                  │   subtask_started=None,              │ │
+│ │                                  │   subtask_progress=None,             │ │
+│ │                                  │   subtask_completed=None,            │ │
+│ │                                  │   subtask_group_completed=None,      │ │
+│ │                                  │   maintenance_callback=None          │ │
+│ │                                  )                                      │ │
+│ │                         denied = False                                  │ │
+│ │                   denied_tools = []                                     │ │
+│ │                   edit_targets = []                                     │ │
+│ │                edit_tool_names = {'edit', 'write', 'apply_patch'}       │ │
+│ │                         events = []                                     │ │
+│ │                            exc = TypeError("test_kernel_exec_manager_s… │ │
+│ │                                  got an unexpected keyword argument     │ │
+│ │                                  'expected_authority_id'")              │ │
+│ │                        fn_args = {                                      │ │
+│ │                                  │   'action': 'start',                 │ │
+│ │                                  │   'executable': 'python',            │ │
+│ │                                  │   'args': ['-c', 'side_effect()'],   │ │
+│ │                                  │   'cwd':                             │ │
+│ │                                  'ssh://leased/C:/remote-work',         │ │
+│ │                                  │   'yield_time_ms': 250,              │ │
+│ │                                  │   'detached': True,                  │ │
+│ │                                  │   'keep_stdin': True                 │ │
+│ │                                  }                                      │ │
+│ │                        fn_name = 'local_process'                        │ │
+│ │                   hook_context = ''                                     │ │
+│ │                   is_mcp_write = False                                  │ │
+│ │                       is_write = True                                   │ │
+│ │                           last = AIMessage(                             │ │
+│ │                                  │   content='',                        │ │
+│ │                                  │   additional_kwargs={},              │ │
+│ │                                  │   response_metadata={},              │ │
+│ │                                  │   tool_calls=[                       │ │
+│ │                                  │   │   {                              │ │
+│ │                                  │   │   │   'name': 'local_process',   │ │
+│ │                                  │   │   │   'args': {                  │ │
+│ │                                  │   │   │   │   'action': 'start',     │ │
+│ │                                  │   │   │   │   'executable':          │ │
+│ │                                  'python',                              │ │
+│ │                                  │   │   │   │   'args': [              │ │
+│ │                                  │   │   │   │   │   '-c',              │ │
+│ │                                  │   │   │   │   │   'side_effect()'    │ │
+│ │                                  │   │   │   │   ],                     │ │
+│ │                                  │   │   │   │   'cwd':                 │ │
+│ │                                  'ssh://leased/C:/remote-work',         │ │
+│ │                                  │   │   │   │   'yield_time_ms': 250,  │ │
+│ │                                  │   │   │   │   'detached': True,      │ │
+│ │                                  │   │   │   │   'keep_stdin': True     │ │
+│ │                                  │   │   │   },                         │ │
+│ │                                  │   │   │   'id':                      │ │
+│ │                                  'kernel:c347db0cd4144b0c8ea69b3c5ccfe… │ │
+│ │                                  │   │   │   'type': 'tool_call'        │ │
+│ │                                  │   │   }                              │ │
+│ │                                  │   ],                                 │ │
+│ │                                  │   invalid_tool_calls=[]              │ │
+│ │                                  )                                      │ │
+│ │          local_edit_tool_names = {'local_edit', 'local_edit_batch'}     │ │
+│ │                       mcp_info = <MagicMock name='mock.get_tool()'      │ │
+│ │                                  id='2635248592080'>                    │ │
+│ │                       messages = [                                      │ │
+│ │                                  │   AIMessage(                         │ │
+│ │                                  │   │   content='',                    │ │
+│ │                                  │   │   additional_kwargs={},          │ │
+│ │                                  │   │   response_metadata={},          │ │
+│ │                                  │   │   tool_calls=[                   │ │
+│ │                                  │   │   │   {                          │ │
+│ │                                  │   │   │   │   'name':                │ │
+│ │                                  'local_process',                       │ │
+│ │                                  │   │   │   │   'args': {              │ │
+│ │                                  │   │   │   │   │   'action': 'start', │ │
+│ │                                  │   │   │   │   │   'executable':      │ │
+│ │                                  'python',                              │ │
+│ │                                  │   │   │   │   │   'args': [          │ │
+│ │                                  │   │   │   │   │   │   '-c',          │ │
+│ │                                  │   │   │   │   │   │                  │ │
+│ │                                  'side_effect()'                        │ │
+│ │                                  │   │   │   │   │   ],                 │ │
+│ │                                  │   │   │   │   │   'cwd':             │ │
+│ │                                  'ssh://leased/C:/remote-work',         │ │
+│ │                                  │   │   │   │   │   'yield_time_ms':   │ │
+│ │                                  250,                                   │ │
+│ │                                  │   │   │   │   │   'detached': True,  │ │
+│ │                                  │   │   │   │   │   'keep_stdin': True │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   'id':                  │ │
+│ │                                  'kernel:c347db0cd4144b0c8ea69b3c5ccfe… │ │
+│ │                                  │   │   │   │   'type': 'tool_call'    │ │
+│ │                                  │   │   │   }                          │ │
+│ │                                  │   │   ],                             │ │
+│ │                                  │   │   invalid_tool_calls=[]          │ │
+│ │                                  │   )                                  │ │
+│ │                                  ]                                      │ │
+│ │                permission_mode = 'full_access'                          │ │
+│ │               policy_tool_name = 'local_process'                        │ │
+│ │                      read_only = False                                  │ │
+│ │                      reference = {                                      │ │
+│ │                                  │   'name': 'local_process',           │ │
+│ │                                  │   'tool_call_id':                    │ │
+│ │                                  'kernel:c347db0cd4144b0c8ea69b3c5ccfe… │ │
+│ │                                  }                                      │ │
+│ │                           refs = [                                      │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'name': 'local_process',       │ │
+│ │                                  │   │   'tool_call_id':                │ │
+│ │                                  'kernel-ssh-disconnect-call'           │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   {                                  │ │
+│ │                                  │   │   'name': 'local_process',       │ │
+│ │                                  │   │   'tool_call_id':                │ │
+│ │                                  'kernel:c347db0cd4144b0c8ea69b3c5ccfe… │ │
+│ │                                  │   }                                  │ │
+│ │                                  ]                                      │ │
+│ │ review_tool_explicitly_allowed = False                                  │ │
+│ │                screenshot_urls = []                                     │ │
+│ │        ssh_checkpoint_callback = None                                   │ │
+│ │                          state = {                                      │ │
+│ │                                  │   'messages': [                      │ │
+│ │                                  │   │   AIMessage(                     │ │
+│ │                                  │   │   │   content='',                │ │
+│ │                                  │   │   │   additional_kwargs={},      │ │
+│ │                                  │   │   │   response_metadata={},      │ │
+│ │                                  │   │   │   tool_calls=[               │ │
+│ │                                  │   │   │   │   {                      │ │
+│ │                                  │   │   │   │   │   'name':            │ │
+│ │                                  'local_process',                       │ │
+│ │                                  │   │   │   │   │   'args': {          │ │
+│ │                                  │   │   │   │   │   │   'action':      │ │
+│ │                                  'start',                               │ │
+│ │                                  │   │   │   │   │   │   'executable':  │ │
+│ │                                  'python',                              │ │
+│ │                                  │   │   │   │   │   │   'args': [      │ │
+│ │                                  │   │   │   │   │   │   │   '-c',      │ │
+│ │                                  │   │   │   │   │   │   │              │ │
+│ │                                  'side_effect()'                        │ │
+│ │                                  │   │   │   │   │   │   ],             │ │
+│ │                                  │   │   │   │   │   │   'cwd':         │ │
+│ │                                  'ssh://leased/C:/remote-work',         │ │
+│ │                                  │   │   │   │   │   │                  │ │
+│ │                                  'yield_time_ms': 250,                  │ │
+│ │                                  │   │   │   │   │   │   'detached':    │ │
+│ │                                  True,                                  │ │
+│ │                                  │   │   │   │   │   │   'keep_stdin':  │ │
+│ │                                  True                                   │ │
+│ │                                  │   │   │   │   │   },                 │ │
+│ │                                  │   │   │   │   │   'id':              │ │
+│ │                                  'kernel:c347db0cd4144b0c8ea69b3c5ccfe… │ │
+│ │                                  │   │   │   │   │   'type':            │ │
+│ │                                  'tool_call'                            │ │
+│ │                                  │   │   │   │   }                      │ │
+│ │                                  │   │   │   ],                         │ │
+│ │                                  │   │   │   invalid_tool_calls=[]      │ │
+│ │                                  │   │   )                              │ │
+│ │                                  │   ],                                 │ │
+│ │                                  │   'pending_events': [],              │ │
+│ │                                  │   'runtime': AgentRunContext(        │ │
+│ │                                  │   │   tool_mode='native',            │ │
+│ │                                  │   │   cancel_event=None,             │ │
+│ │                                  │   │   pause_event=None,              │ │
+│ │                                  │   │   approval_callback=None,        │ │
+│ │                                  │   │   event_queue=<Queue at          │ │
+│ │                                  0x265910bee10 maxsize=0>,              │ │
+│ │                                  │   │                                  │ │
+│ │                                  run_id='kernel-ssh-disconnect',        │ │
+│ │                                  │   │   goal=None,                     │ │
+│ │                                  │   │                                  │ │
+│ │                                  conversation_id='kernel-ssh-disconnec… │ │
+│ │                                  │   │   stable_system_prefix=None,     │ │
+│ │                                  │   │   memory_scope_id='',            │ │
+│ │                                  │   │   project_id=None,               │ │
+│ │                                  │   │                                  │ │
+│ │                                  reminders=<atlas.agent.enrichment.Sys… │ │
+│ │                                  object at 0x000002659029AD10>,         │ │
+│ │                                  │   │   maintenance_snapshot=None,     │ │
+│ │                                  │   │   maintenance_context={          │ │
+│ │                                  │   │   │   'active_tool_refs': [      │ │
+│ │                                  │   │   │   │   {                      │ │
+│ │                                  │   │   │   │   │   'name':            │ │
+│ │                                  'local_process',                       │ │
+│ │                                  │   │   │   │   │   'tool_call_id':    │ │
+│ │                                  'kernel-ssh-disconnect-call'           │ │
+│ │                                  │   │   │   │   },                     │ │
+│ │                                  │   │   │   │   {                      │ │
+│ │                                  │   │   │   │   │   'name':            │ │
+│ │                                  'local_process',                       │ │
+│ │                                  │   │   │   │   │   'tool_call_id':    │ │
+│ │                                  'kernel:c347db0cd4144b0c8ea69b3c5ccfe… │ │
+│ │                                  │   │   │   │   }                      │ │
+│ │                                  │   │   │   ]                          │ │
+│ │                                  │   │   },                             │ │
+│ │                                  │   │   steer_queue=None,              │ │
+│ │                                  │   │   inbox=None,                    │ │
+│ │                                  │   │   input_callback=None,           │ │
+│ │                                  │   │                                  │ │
+│ │                                  workspace='ssh://leased/C:/remote-wor… │ │
+│ │                                  │   │   working_directory=None,        │ │
+│ │                                  │   │                                  │ │
+│ │                                  working_directory_callback=None,       │ │
+│ │                                  │   │   workspace_trusted=False,       │ │
+│ │                                  │   │   project_instruction_root=None, │ │
+│ │                                  │   │                                  │ │
+│ │                                  project_instruction_snapshot={},       │ │
+│ │                                  │   │   agent_role='general',          │ │
+│ │                                  │   │   agent_depth=0,                 │ │
+│ │                                  │   │   agent_type='general',          │ │
+│ │                                  │   │   agent_preset_id='default',     │ │
+│ │                                  │   │                                  │ │
+│ │                                  agent_preset_capabilities=None,        │ │
+│ │                                  │   │   permission_preset='ask',       │ │
+│ │                                  │   │                                  │ │
+│ │                                  todo_store=<atlas.agent.todo_state.To… │ │
+│ │                                  object at 0x00000265910F2BD0>,         │ │
+│ │                                  │   │   moa_enabled=False,             │ │
+│ │                                  │   │   mode='act',                    │ │
+│ │                                  │   │   mode_explicit=False,           │ │
+│ │                                  │   │   tool_allow=None,               │ │
+│ │                                  │   │   tool_deny=[],                  │ │
+│ │                                  │   │   mcp_server_allow=None,         │ │
+│ │                                  │   │   read_only=False,               │ │
+│ │                                  │   │   permission_mode='full_access', │ │
+│ │                                  │   │   allowed_paths=[],              │ │
+│ │                                  │   │   session_env={},                │ │
+│ │                                  │   │                                  │ │
+│ │                                  atlas_preapproved_writes=set(),        │ │
+│ │                                  │   │   process_notifications=<Queue   │ │
+│ │                                  at 0x265910e4dd0 maxsize=0>,           │ │
+│ │                                  │   │                                  │ │
+│ │                                  parent_process_event_callback=None,    │ │
+│ │                                  │   │   user_hook_callback=None,       │ │
+│ │                                  │   │   ssh_tool_callback=<function    │ │
+│ │                                  test_kernel_exec_manager_ssh_start_di… │ │
+│ │                                  at 0x00000265918CBEC0>,                │ │
+│ │                                  │   │   ssh_checkpoint_callback=None,  │ │
+│ │                                  │   │   sandbox_tool_callback=None,    │ │
+│ │                                  │   │   sandbox_enabled=False,         │ │
+│ │                                  │   │   reasoning_effort=None,         │ │
+│ │                                  │   │   model=None,                    │ │
+│ │                                  │   │   truncated_tool_retries=0,      │ │
+│ │                                  │   │   fallback_models=[],            │ │
+│ │                                  │   │   sticky_fallback_model=None,    │ │
+│ │                                  │   │   failed_models=set(),           │ │
+│ │                                  │   │   recovery_retries=0,            │ │
+│ │                                  │   │                                  │ │
+│ │                                  context_compression_attempted=False,   │ │
+│ │                                  │   │   file_edit_counts={},           │ │
+│ │                                  │   │                                  │ │
+│ │                                  new_context_window_callback=None,      │ │
+│ │                                  │   │   changed_paths=set(),           │ │
+│ │                                  │   │   verification_passed=False,     │ │
+│ │                                  │   │   verify_nudge_sent=False,       │ │
+│ │                                  │   │   subtask_started=None,          │ │
+│ │                                  │   │   subtask_progress=None,         │ │
+│ │                                  │   │   subtask_completed=None,        │ │
+│ │                                  │   │   subtask_group_completed=None,  │ │
+│ │                                  │   │   maintenance_callback=None      │ │
+│ │                                  │   )                                  │ │
+│ │                                  }                                      │ │
+│ │                             tc = {                                      │ │
+│ │                                  │   'name': 'local_process',           │ │
+│ │                                  │   'args': {                          │ │
+│ │                                  │   │   'action': 'start',             │ │
+│ │                                  │   │   'executable': 'python',        │ │
+│ │                                  │   │   'args': [                      │ │
+│ │                                  │   │   │   '-c',                      │ │
+│ │                                  │   │   │   'side_effect()'            │ │
+│ │                                  │   │   ],                             │ │
+│ │                                  │   │   'cwd':                         │ │
+│ │                                  'ssh://leased/C:/remote-work',         │ │
+│ │                                  │   │   'yield_time_ms': 250,          │ │
+│ │                                  │   │   'detached': True,              │ │
+│ │                                  │   │   'keep_stdin': True             │ │
+│ │                                  │   },                                 │ │
+│ │                                  │   'id':                              │ │
+│ │                                  'kernel:c347db0cd4144b0c8ea69b3c5ccfe… │ │
+│ │                                  │   'type': 'tool_call'                │ │
+│ │                                  }                                      │ │
+│ │                          tc_id = 'kernel:c347db0cd4144b0c8ea69b3c5ccfe… │ │
+│ │                  tool_messages = []                                     │ │
+│ │             user_hook_callback = None                                   │ │
+│ │                      workspace = 'ssh://leased/C:/remote-work'          │ │
+│ │                workspace_bound = True                                   │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│ D:\Atlas\core\tests\test_ssh_execution_world.py:965 in ssh_tool             │
+│                                                                             │
+│    962 │                                                                    │
+│    963 │   async def ssh_tool(name, arguments, owner_run_id=None):          │
+│    964 │   │   assert name == "local_process"                               │
+│ >  965 │   │   return await remote.call_process(arguments, runtime.workspac │
+│        run_id=owner_run_id)                                                 │
+│    966 │                                                                    │
+│    967 │   runtime.ssh_tool_callback = ssh_tool                             │
+│    968                                                                      │
+│                                                                             │
+│ ┌──────────────────────────────── locals ─────────────────────────────────┐ │
+│ │  @py_assert1 = None                                                     │ │
+│ │  @py_assert2 = None                                                     │ │
+│ │    arguments = {                                                        │ │
+│ │                │   'action': 'start',                                   │ │
+│ │                │   'executable': 'python',                              │ │
+│ │                │   'args': ['-c', 'side_effect()'],                     │ │
+│ │                │   'cwd': 'ssh://leased/C:/remote-work',                │ │
+│ │                │   'yield_time_ms': 250,                                │ │
+│ │                │   'detached': True,                                    │ │
+│ │                │   'keep_stdin': True                                   │ │
+│ │                }                                                        │ │
+│ │         name = 'local_process'                                          │ │
+│ │ owner_run_id = 'kernel-ssh-disconnect'                                  │ │
+│ │       remote = <atlas.ssh.SSHWorkspaceManager object at                 │ │
+│ │                0x00000265910E6DD0>                                      │ │
+│ │      runtime = AgentRunContext(                                         │ │
+│ │                │   tool_mode='native',                                  │ │
+│ │                │   cancel_event=None,                                   │ │
+│ │                │   pause_event=None,                                    │ │
+│ │                │   approval_callback=None,                              │ │
+│ │                │   event_queue=<Queue at 0x265910e7b10 maxsize=0>,      │ │
+│ │                │   run_id='kernel-ssh-disconnect',                      │ │
+│ │                │   goal=None,                                           │ │
+│ │                │   conversation_id='kernel-ssh-disconnect',             │ │
+│ │                │   stable_system_prefix=None,                           │ │
+│ │                │   memory_scope_id='',                                  │ │
+│ │                │   project_id=None,                                     │ │
+│ │                │   reminders=<atlas.agent.enrichment.SystemReminders    │ │
+│ │                object at 0x000002659029AD10>,                           │ │
+│ │                │   maintenance_snapshot=None,                           │ │
+│ │                │   maintenance_context={                                │ │
+│ │                │   │   'active_tool_refs': [                            │ │
+│ │                │   │   │   {                                            │ │
+│ │                │   │   │   │   'name': 'local_process',                 │ │
+│ │                │   │   │   │   'tool_call_id':                          │ │
+│ │                'kernel-ssh-disconnect-call'                             │ │
+│ │                │   │   │   },                                           │ │
+│ │                │   │   │   {                                            │ │
+│ │                │   │   │   │   'name': 'local_process',                 │ │
+│ │                │   │   │   │   'tool_call_id':                          │ │
+│ │                'kernel:c347db0cd4144b0c8ea69b3c5ccfed89'                │ │
+│ │                │   │   │   }                                            │ │
+│ │                │   │   ]                                                │ │
+│ │                │   },                                                   │ │
+│ │                │   steer_queue=None,                                    │ │
+│ │                │   inbox=None,                                          │ │
+│ │                │   input_callback=None,                                 │ │
+│ │                │   workspace='ssh://leased/C:/remote-work',             │ │
+│ │                │   working_directory=None,                              │ │
+│ │                │   working_directory_callback=None,                     │ │
+│ │                │   workspace_trusted=False,                             │ │
+│ │                │   project_instruction_root=None,                       │ │
+│ │                │   project_instruction_snapshot={},                     │ │
+│ │                │   agent_role='general',                                │ │
+│ │                │   agent_depth=0,                                       │ │
+│ │                │   agent_type='general',                                │ │
+│ │                │   agent_preset_id='default',                           │ │
+│ │                │   agent_preset_capabilities=None,                      │ │
+│ │                │   permission_preset='ask',                             │ │
+│ │                │   todo_store=<atlas.agent.todo_state.TodoStore object  │ │
+│ │                at 0x00000265910F2BD0>,                                  │ │
+│ │                │   moa_enabled=False,                                   │ │
+│ │                │   mode='act',                                          │ │
+│ │                │   mode_explicit=False,                                 │ │
+│ │                │   tool_allow=None,                                     │ │
+│ │                │   tool_deny=[],                                        │ │
+│ │                │   mcp_server_allow=None,                               │ │
+│ │                │   read_only=False,                                     │ │
+│ │                │   permission_mode='full_access',                       │ │
+│ │                │   allowed_paths=[],                                    │ │
+│ │                │   session_env={},                                      │ │
+│ │                │   atlas_preapproved_writes=set(),                      │ │
+│ │                │   process_notifications=<Queue at 0x265910e4dd0        │ │
+│ │                maxsize=0>,                                              │ │
+│ │                │   parent_process_event_callback=None,                  │ │
+│ │                │   user_hook_callback=None,                             │ │
+│ │                │   ssh_tool_callback=<function                          │ │
+│ │                test_kernel_exec_manager_ssh_start_disconnect_is_unknow… │ │
+│ │                at 0x00000265918CBEC0>,                                  │ │
+│ │                │   ssh_checkpoint_callback=None,                        │ │
+│ │                │   sandbox_tool_callback=None,                          │ │
+│ │                │   sandbox_enabled=False,                               │ │
+│ │                │   reasoning_effort=None,                               │ │
+│ │                │   model=None,                                          │ │
+│ │                │   truncated_tool_retries=0,                            │ │
+│ │                │   fallback_models=[],                                  │ │
+│ │                │   sticky_fallback_model=None,                          │ │
+│ │                │   failed_models=set(),                                 │ │
+│ │                │   recovery_retries=0,                                  │ │
+│ │                │   context_compression_attempted=False,                 │ │
+│ │                │   file_edit_counts={},                                 │ │
+│ │                │   new_context_window_callback=None,                    │ │
+│ │                │   changed_paths=set(),                                 │ │
+│ │                │   verification_passed=False,                           │ │
+│ │                │   verify_nudge_sent=False,                             │ │
+│ │                │   subtask_started=None,                                │ │
+│ │                │   subtask_progress=None,                               │ │
+│ │                │   subtask_completed=None,                              │ │
+│ │                │   subtask_group_completed=None,                        │ │
+│ │                │   maintenance_callback=None                            │ │
+│ │                )                                                        │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│ D:\Atlas\core\atlas\ssh.py:2036 in call_process                             │
+│                                                                             │
+│   2033 │   ) -> dict[str, Any]:                                             │
+│   2034 │   │   action = str(arguments.get("action") or "start")             │
+│   2035 │   │   if action == "start":                                        │
+│ > 2036 │   │   │   return await self._start_process(                        │
+│   2037 │   │   │   │   arguments, workspace, run_id,                        │
+│        expected_authority_id=expected_authority_id,                         │
+│   2038 │   │   │   )                                                        │
+│   2039 │   │   host, _ = self.parse_workspace(workspace)                    │
+│                                                                             │
+│ ┌──────────────────────────────── locals ─────────────────────────────────┐ │
+│ │                action = 'start'                                         │ │
+│ │             arguments = {                                               │ │
+│ │                         │   'action': 'start',                          │ │
+│ │                         │   'executable': 'python',                     │ │
+│ │                         │   'args': ['-c', 'side_effect()'],            │ │
+│ │                         │   'cwd': 'ssh://leased/C:/remote-work',       │ │
+│ │                         │   'yield_time_ms': 250,                       │ │
+│ │                         │   'detached': True,                           │ │
+│ │                         │   'keep_stdin': True                          │ │
+│ │                         }                                               │ │
+│ │ expected_authority_id = None                                            │ │
+│ │                run_id = 'kernel-ssh-disconnect'                         │ │
+│ │                  self = <atlas.ssh.SSHWorkspaceManager object at        │ │
+│ │                         0x00000265910E6DD0>                             │ │
+│ │             workspace = 'ssh://leased/C:/remote-work'                   │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│ D:\Atlas\core\atlas\ssh.py:1880 in _start_process                           │
+│                                                                             │
+│   1877 │   │   *, expected_authority_id: str | None = None,                 │
+│   1878 │   ) -> dict[str, Any]:                                             │
+│   1879 │   │   host, cwd = self._process_cwd(workspace, arguments.get("cwd" │
+│ > 1880 │   │   command = await self._process_command(                       │
+│   1881 │   │   │   host, cwd, arguments, expected_authority_id=expected_aut │
+│   1882 │   │   )                                                            │
+│   1883 │   │   environment = arguments.get("env") or {}                     │
+│                                                                             │
+│ ┌──────────────────────────────── locals ─────────────────────────────────┐ │
+│ │             arguments = {                                               │ │
+│ │                         │   'action': 'start',                          │ │
+│ │                         │   'executable': 'python',                     │ │
+│ │                         │   'args': ['-c', 'side_effect()'],            │ │
+│ │                         │   'cwd': 'ssh://leased/C:/remote-work',       │ │
+│ │                         │   'yield_time_ms': 250,                       │ │
+│ │                         │   'detached': True,                           │ │
+│ │                         │   'keep_stdin': True                          │ │
+│ │                         }                                               │ │
+│ │                   cwd = '/C:/remote-work'                               │ │
+│ │ expected_authority_id = None                                            │ │
+│ │                  host = 'leased'                                        │ │
+│ │                run_id = 'kernel-ssh-disconnect'                         │ │
+│ │                  self = <atlas.ssh.SSHWorkspaceManager object at        │ │
+│ │                         0x00000265910E6DD0>                             │ │
+│ │             workspace = 'ssh://leased/C:/remote-work'                   │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+TypeError: 
+test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry.<locals>
+.process_command() got an unexpected keyword argument 'expected_authority_id'
+
+------------------------------ Captured log call ------------------------------
+ERROR    asyncio:base_events.py:1785 Task exception was never retrieved
+future: <Task finished name='Task-81' coro=<SSHWorkspaceManager.call_process() done, defined at D:\Atlas\core\atlas\ssh.py:2030> exception=TypeError("test_ssh_cancel_intent_applies_to_late_process_handle.<locals>._connect() got an unexpected keyword argument 'expected_authority_id'")>
+Traceback (most recent call last):
+  File "D:\Atlas\core\atlas\ssh.py", line 2036, in call_process
+    return await self._start_process(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\atlas\ssh.py", line 1880, in _start_process
+    command = await self._process_command(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\atlas\ssh.py", line 1569, in _process_command
+    if await self.remote_os(host, expected_authority_id=expected_authority_id) == "windows":
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\atlas\ssh.py", line 1274, in remote_os
+    conn = await self._connect(host, expected_authority_id=expected_authority_id)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: test_ssh_cancel_intent_applies_to_late_process_handle.<locals>._connect() got an unexpected keyword argument 'expected_authority_id'
+ERROR    asyncio:base_events.py:1785 Task exception was never retrieved
+future: <Task finished name='Task-86' coro=<SSHWorkspaceManager.call_process() done, defined at D:\Atlas\core\atlas\ssh.py:2030> exception=TypeError("test_ssh_cancel_intent_applies_to_late_process_handle.<locals>._connect() got an unexpected keyword argument 'expected_authority_id'")>
+Traceback (most recent call last):
+  File "D:\Atlas\core\atlas\ssh.py", line 2036, in call_process
+    return await self._start_process(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\atlas\ssh.py", line 1880, in _start_process
+    command = await self._process_command(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\atlas\ssh.py", line 1569, in _process_command
+    if await self.remote_os(host, expected_authority_id=expected_authority_id) == "windows":
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Atlas\core\atlas\ssh.py", line 1274, in remote_os
+    conn = await self._connect(host, expected_authority_id=expected_authority_id)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: test_ssh_cancel_intent_applies_to_late_process_handle.<locals>._connect() got an unexpected keyword argument 'expected_authority_id'
+____ test_kernel_lsp_tool_and_read_file_diagnostics_forward_ssh_workspace _____
+tests\test_lsp_ssh_world.py:285: in test_kernel_lsp_tool_and_read_file_diagnostics_forward_ssh_workspace
+    assert "remote file contents" in read_result["content"]
+E   AssertionError: assert 'remote file contents' in 'SSH alias config is unavailable'
+============================== warnings summary ===============================
+tests/test_mcp_client.py::test_bundled_node_resolves_from_installed_application_directory
+  D:\Atlas\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_mcp_client.py::test_bundled_node_resolves_from_installed_application_directory
+  D:\Atlas\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_mcp_client.py::test_bundled_node_resolves_from_installed_application_directory
+  D:\Atlas\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_mcp_client.py::test_bundled_node_resolves_from_installed_application_directory
+  D:\Atlas\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_mcp_client.py::test_bundled_node_resolves_from_installed_application_directory
+  D:\Atlas\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_mcp_client.py::test_node_release_manifest_pins_official_binary_and_sha256
+FAILED tests/test_mcp_client.py::test_start_records_runtime_config_discovery_and_restart_state
+FAILED tests/test_mcp_client.py::test_failed_configured_server_blocks_mcp_runtime_without_echoing_arguments
+FAILED tests/test_ssh_execution_world.py::test_ssh_cancel_intent_applies_to_late_process_handle[operation]
+FAILED tests/test_ssh_execution_world.py::test_ssh_cancel_intent_applies_to_late_process_handle[start_task]
+FAILED tests/test_ssh_execution_world.py::test_kernel_exec_manager_ssh_start_disconnect_is_unknown_without_retry
+FAILED tests/test_lsp_ssh_world.py::test_kernel_lsp_tool_and_read_file_diagnostics_forward_ssh_workspace
+7 failed, 51 passed, 5 warnings in 57.71s

@@ -1,0 +1,29 @@
+SCENARIO exhaustion
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 05:52:12 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-par10-mcp-recovery\.tmp\par10-final2\data\exhaustion\config\atlas.toml
+2026-11-19 05:52:12 [info     ] mcp.starting                   count=1 names=['crashy']
+2026-11-19 05:52:15 [info     ] mcp.server_initialized         protocol=2025-11-25 server=crashy server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:52:15 [info     ] mcp.server_ready               server=crashy tools=['echo']
+2026-11-19 05:52:15 [warning  ] mcp.connection_lost            reason='MCP server failed during launch or initialization (ConnectionError)' server=crashy
+2026-11-19 05:52:18 [info     ] mcp.server_initialized         protocol=2025-11-25 server=crashy server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:52:18 [info     ] mcp.server_ready               server=crashy tools=['echo']
+2026-11-19 05:52:18 [info     ] mcp.server_reconnected         attempts=1 server=crashy
+2026-11-19 05:52:19 [warning  ] mcp.connection_lost            reason='MCP server failed during launch or initialization (ConnectionError)' server=crashy
+2026-11-19 05:52:21 [info     ] mcp.server_initialized         protocol=2025-11-25 server=crashy server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:52:21 [info     ] mcp.server_ready               server=crashy tools=['echo']
+2026-11-19 05:52:21 [info     ] mcp.server_reconnected         attempts=2 server=crashy
+2026-11-19 05:52:22 [warning  ] mcp.connection_lost            reason='MCP server failed during launch or initialization (ConnectionError)' server=crashy
+2026-11-19 05:52:25 [info     ] mcp.server_initialized         protocol=2025-11-25 server=crashy server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 05:52:25 [info     ] mcp.server_ready               server=crashy tools=['echo']
+2026-11-19 05:52:25 [info     ] mcp.server_reconnected         attempts=3 server=crashy
+2026-11-19 05:52:25 [warning  ] mcp.connection_lost            reason='MCP server failed during launch or initialization (ConnectionError)' server=crashy
+2026-11-19 05:52:25 [warning  ] mcp.reconnect_exhausted        attempts=3 server=crashy
+OBSERVATION exhaustion {"row": {"name": "crashy", "configured": true, "enabled": true, "transport": "stdio", "connected": false, "state": "unreachable", "tool_discovery": "failed", "tool_count": 0, "blocking_reason": "reconnect gave up after 3 attempts; retry explicitly to reconnect"}, "starts": [62716, 63948, 58668, 61808], "tools": [], "progress_tail": [{"server": "crashy", "state": "initializing", "message": "连接已建立，正在初始化协议", "transport": "stdio", "timestamp": "2026-11-18T21:52:21.871940+00:00"}, {"server": "crashy", "state": "discovering_tools", "message": "正在读取工具目录", "transport": "stdio", "timestamp": "2026-11-18T21:52:21.873903+00:00"}, {"server": "crashy", "state": "ready", "message": "已就绪 · 1 个工具", "transport": "stdio", "timestamp": "2026-11-18T21:52:21.873903+00:00"}, {"server": "crashy", "state": "reconnecting", "message": "连接已断开，正在重连", "transport": "stdio", "timestamp": "2026-11-18T21:52:22.176182+00:00"}, {"server": "crashy", "state": "reconnecting", "message": "正在重新连接 MCP 服务", "transport": "stdio", "timestamp": "2026-11-18T21:52:22.520300+00:00"}, {"server": "crashy", "state": "initializing", "message": "连接已建立，正在初始化协议", "transport": "stdio", "timestamp": "2026-11-18T21:52:25.011957+00:00"}, {"server": "crashy", "state": "discovering_tools", "message": "正在读取工具目录", "transport": "stdio", "timestamp": "2026-11-18T21:52:25.013662+00:00"}, {"server": "crashy", "state": "ready", "message": "已就绪 · 1 个工具", "transport": "stdio", "timestamp": "2026-11-18T21:52:25.013662+00:00"}, {"server": "crashy", "state": "reconnecting", "message": "连接已断开，正在重连", "transport": "stdio", "timestamp": "2026-11-18T21:52:25.373972+00:00"}, {"server": "crashy", "state": "failed", "message": "reconnect gave up after 3 attempts; retry explicitly to reconnect", "transport": "stdio", "timestamp": "2026-11-18T21:52:25.373972+00:00"}]}
+CHECK PASS exhaustion: bounded reconnect reaches unreachable :: {'name': 'crashy', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'unreachable', 'tool_discovery': 'failed', 'tool_count': 0, 'blocking_reason': 'reconnect gave up after 3 attempts; retry explicitly to reconnect'}
+CHECK PASS exhaustion: tools stay invalidated :: {'name': 'crashy', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'unreachable', 'tool_discovery': 'failed', 'tool_count': 0, 'blocking_reason': 'reconnect gave up after 3 attempts; retry explicitly to reconnect'}
+CHECK PASS exhaustion: tool index empty :: []
+CHECK PASS exhaustion: terminal reason explains retry :: reconnect gave up after 3 attempts; retry explicitly to reconnect
+CHECK PASS exhaustion: initial child + exactly 3 bounded attempts :: [62716, 63948, 58668, 61808]
+CHECK PASS exhaustion: runtime fail-closed on terminal server :: False
+CHECK PASS exhaustion: stop leaves no children :: []
+RESULT exhaustion checks=7 failed=0

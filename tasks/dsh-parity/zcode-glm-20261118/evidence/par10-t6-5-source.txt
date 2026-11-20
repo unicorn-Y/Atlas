@@ -1,0 +1,51 @@
+PAR-10-T6-5 source import and baseline
+2026-11-18T22:10:50Z
+
+== worktree ==
+060071ab2ecf86d41cab90e98160183ce126bc69
+zcode/par10-win-release-repro
+
+== T2 writer check ==
+(empty above = no writer process)
+
+== source file mtimes (T2 tree) ==
+-rw-r--r-- 1 25011 197609   6033 2026-11-19 05:26:55.831044000 +0800 frontend/package.json
+-rw-r--r-- 1 25011 197609   6364 2026-11-19 05:26:49.166341400 +0800 frontend/scripts/after-pack-release-manifest.cjs
+-rw-r--r-- 1 25011 197609    440 2026-11-19 05:26:49.178980400 +0800 frontend/scripts/after-pack.cjs
+-rw-r--r-- 1 25011 197609   4549 2026-11-19 05:27:22.450469400 +0800 frontend/scripts/write-release-manifest.mjs
+-rw-r--r-- 1 25011 197609 100648 2026-11-19 05:27:30.000075200 +0800 frontend/src/main/electron.ts
+-rw-r--r-- 1 25011 197609  23858 2026-11-19 05:29:17.874472700 +0800 frontend/src/main/releaseIntegrity.test.ts
+-rw-r--r-- 1 25011 197609  27222 2026-11-19 05:26:18.565938400 +0800 frontend/src/main/releaseIntegrity.ts
+
+== source sha256 ==
+02e79e3df135988f2031960e3b8d9ea50af22a1a4413d1ad01b88df0a7d4c261 *frontend/src/main/releaseIntegrity.ts
+5f526e1da2af767454b46dcb39e74365569845c383675c294fe06be4a908fadf *frontend/src/main/releaseIntegrity.test.ts
+401561e16ced169c1d0c291f7d1e83623b30c0c37a6c998c936d64a020a2c92f *frontend/scripts/after-pack-release-manifest.cjs
+406e23ab2c55cb9393c6558189433e34ff57a0fea6af7bd70066b2f73345cf14 *frontend/scripts/after-pack.cjs
+3f74d00b9ca654e0cbed7dadf17f152832926fc6b28f3147085b3f4d996a24ac *frontend/scripts/write-release-manifest.mjs
+0414ef0434caaad8e8f10bb17de2bff1642b0d7bf38222098e65453d011577c8 *frontend/package.json
+d5e1a06592445f4ada9ed8121bbc9db9f00fbc4204963129245cce39a08704d9 *frontend/src/main/electron.ts
+
+== destination sha256 (candidate tree) ==
+02e79e3df135988f2031960e3b8d9ea50af22a1a4413d1ad01b88df0a7d4c261 *frontend/src/main/releaseIntegrity.ts
+5f526e1da2af767454b46dcb39e74365569845c383675c294fe06be4a908fadf *frontend/src/main/releaseIntegrity.test.ts
+401561e16ced169c1d0c291f7d1e83623b30c0c37a6c998c936d64a020a2c92f *frontend/scripts/after-pack-release-manifest.cjs
+406e23ab2c55cb9393c6558189433e34ff57a0fea6af7bd70066b2f73345cf14 *frontend/scripts/after-pack.cjs
+3f74d00b9ca654e0cbed7dadf17f152832926fc6b28f3147085b3f4d996a24ac *frontend/scripts/write-release-manifest.mjs
+0414ef0434caaad8e8f10bb17de2bff1642b0d7bf38222098e65453d011577c8 *frontend/package.json
+d5e1a06592445f4ada9ed8121bbc9db9f00fbc4204963129245cce39a08704d9 *frontend/src/main/electron.ts
+
+== git status candidate ==
+ M frontend/package.json
+ M frontend/scripts/write-release-manifest.mjs
+ M frontend/src/main/electron.ts
+?? frontend/scripts/after-pack-release-manifest.cjs
+?? frontend/scripts/after-pack.cjs
+?? frontend/src/main/releaseIntegrity.test.ts
+?? frontend/src/main/releaseIntegrity.ts
+
+== diff stat vs baseline HEAD ==
+ frontend/package.json                       |  2 +-
+ frontend/scripts/write-release-manifest.mjs | 22 ++++++++++++++++++++++
+ frontend/src/main/electron.ts               | 13 +++++++++++++
+ 3 files changed, 36 insertions(+), 1 deletion(-)

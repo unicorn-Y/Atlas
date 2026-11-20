@@ -8,6 +8,7 @@ to work.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -40,6 +41,128 @@ def _nearest_project_root(cwd: Path) -> Path:
         except OSError:
             continue
     return cwd
+
+
+def project_instruction_root(workspace: str | Path) -> Path:
+    """Resolve the same repository boundary used by initial instruction loading."""
+    cwd = Path(workspace).resolve()
+    return _nearest_project_root(cwd)
+
+
+def _source_key(path: str | Path) -> str:
+    try:
+        return str(Path(path).expanduser().resolve(strict=False)).casefold()
+    except (OSError, RuntimeError, ValueError):
+        return str(path).replace("\\", "/").casefold()
+
+
+def snapshot_project_instructions(rules: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    snapshot: dict[str, dict[str, Any]] = {}
+    for rule in rules:
+        path = str(rule.get("path") or "").strip()
+        if not path:
+            continue
+        content = str(rule.get("content") or "")
+        snapshot[_source_key(path)] = {
+            **rule,
+            "path": path,
+            "content": content,
+            "revision": hashlib.sha256(content.encode("utf-8")).hexdigest()[:16],
+        }
+    return snapshot
+
+
+def refresh_project_instructions(
+    workspace: str | Path,
+    touched_paths: Iterable[str | Path],
+    *,
+    project_root: str | Path,
+    previous: dict[str, dict[str, Any]],
+    max_bytes: int = DEFAULT_MAX_BYTES,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Reconcile trusted instruction sources after a successful local file tool.
+
+    Existing sources are compared only when they govern a touched directory.
+    Missing files are reported as removed only for ``FileNotFoundError``;
+    permission/read errors leave the last known source intact.
+    """
+    if str(workspace).strip().casefold().startswith("ssh://"):
+        return [], previous
+    root = Path(project_root).resolve()
+    next_snapshot = dict(previous)
+    updates: dict[tuple[str, str], dict[str, Any]] = {}
+    seen_scopes: set[Path] = set()
+
+    for raw in touched_paths:
+        try:
+            candidate = Path(raw).expanduser()
+            if not candidate.is_absolute():
+                candidate = Path(workspace) / candidate
+            resolved = candidate.resolve(strict=False)
+            if not _inside(resolved, root):
+                continue
+            scope = resolved if resolved.is_dir() else resolved.parent
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if scope in seen_scopes:
+            continue
+        seen_scopes.add(scope)
+
+        current_rules = load_project_instructions(
+            scope, trusted=True, project_root=root, max_bytes=max_bytes,
+        )
+        current = snapshot_project_instructions(current_rules)
+        previous_scope = {
+            key: item for key, item in next_snapshot.items()
+            if _inside(scope, Path(str(item.get("path") or "")).parent.resolve(strict=False))
+        }
+
+        for key, item in current.items():
+            old = next_snapshot.get(key)
+            if old is None or old.get("revision") != item.get("revision"):
+                state = "added" if old is None else "changed"
+                change_id = hashlib.sha256(
+                    f"{key}\0{state}\0{item.get('revision', '')}".encode("utf-8"),
+                ).hexdigest()[:16]
+                update = {**item, "state": state, "change_id": change_id}
+                updates[(key, state)] = update
+            next_snapshot[key] = item
+
+        for key, old in previous_scope.items():
+            if key in current:
+                continue
+            old_path = Path(str(old.get("path") or ""))
+            try:
+                old_path.stat()
+            except FileNotFoundError:
+                state = "removed"
+            except OSError:
+                # An inaccessible source is not proof of deletion.
+                continue
+            else:
+                try:
+                    resolved_old = old_path.resolve(strict=True)
+                except (OSError, RuntimeError, ValueError):
+                    continue
+                if not _inside(resolved_old, root):
+                    state = "deactivated"
+                elif old_path.name == "AGENTS.md" and (old_path.parent / "AGENTS.override.md").is_file():
+                    state = "overridden"
+                else:
+                    # The file still exists but was not loaded (for example a
+                    # read/size-budget failure); preserve its last known state.
+                    continue
+            updates[(key, state)] = {
+                "path": str(old.get("path") or old_path),
+                "state": state,
+                "revision": old.get("revision", ""),
+                "change_id": hashlib.sha256(
+                    f"{key}\0{state}\0{old.get('revision', '')}".encode("utf-8"),
+                ).hexdigest()[:16],
+            }
+            next_snapshot.pop(key, None)
+
+    return list(updates.values()), next_snapshot
 
 
 def _directories(root: Path, cwd: Path) -> Iterable[Path]:

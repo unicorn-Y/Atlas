@@ -1,0 +1,262 @@
+diff --git a/frontend/src/renderer/shell/panels/csvPreview.test.tsx b/frontend/src/renderer/shell/panels/csvPreview.test.tsx
+new file mode 100644
+index 00000000..0681ca7c
+--- /dev/null
++++ b/frontend/src/renderer/shell/panels/csvPreview.test.tsx
+@@ -0,0 +1,75 @@
++import { renderToStaticMarkup } from 'react-dom/server';
++import { describe, expect, it } from 'vitest';
++import type { WorkspaceFile } from '@atlas/backend-adapter';
++import { CsvFilePreview, parseDelimited } from './csvPreview';
++import { canPreviewDocument, documentPreviewRenderer } from './documentPreviewRegistry';
++
++const file = (path: string, content: string, extra: Partial<WorkspaceFile> = {}): WorkspaceFile => ({
++  path, content, binary: false, truncated: false, sha256: '', size: content.length, ...extra,
++} as WorkspaceFile);
++
++const render = (path: string, content: string, extra: Partial<WorkspaceFile> = {}) => renderToStaticMarkup(
++  <CsvFilePreview file={file(path, content, extra)} workspace="C:/ws" fallback={<p>fallback</p>} />,
++);
++
++describe('csv/tsv table preview', () => {
++  it('registers both extensions and renders a header plus body cells', () => {
++    expect(documentPreviewRenderer('data.CSV')?.id).toBe('csv');
++    expect(documentPreviewRenderer('data.tsv')?.id).toBe('csv');
++    expect(canPreviewDocument('data.csv')).toBe(true);
++    const html = render('data.csv', 'name,value\nalpha,42\nbeta,7');
++    expect(html).toContain('<table');
++    expect(html).toContain('<th');
++    expect(html).toContain('name');
++    expect(html).toContain('alpha');
++    expect(html).toContain('42');
++    expect(html).toContain('beta');
++    expect(html).toContain('3 行');
++  });
++
++  it('parses quoted separators, embedded newlines and escaped quotes as one cell', () => {
++    const table = parseDelimited('name,note\r\n"Doe, Jane","line1\nline2 ""quoted"""\r\n', 'notes.csv');
++    expect(table.delimiter).toBe(',');
++    expect(table.rows).toEqual([
++      ['name', 'note'],
++      ['Doe, Jane', 'line1\nline2 "quoted"'],
++    ]);
++    const html = render('notes.csv', 'name,note\n"Doe, Jane","line1\nline2 ""quoted"""');
++    expect(html).toContain('Doe, Jane');
++    expect(html).toContain('line1');
++    expect(html).toContain('&quot;quoted&quot;');
++  });
++
++  it('honors .tsv and detects semicolon delimiters outside quotes', () => {
++    expect(parseDelimited('a\tb\n1\t2', 'data.tsv').delimiter).toBe('\t');
++    const semicolon = parseDelimited('name;value\n"x;y";1', 'data.csv');
++    expect(semicolon.delimiter).toBe(';');
++    expect(semicolon.rows[1]).toEqual(['x;y', '1']);
++    expect(render('data.tsv', 'a\tb\n1\t2')).toContain('制表符');
++  });
++
++  it('caps rows and states truncation instead of rendering an unbounded table', () => {
++    const rows = ['id,value', ...Array.from({ length: 510 }, (_, index) => `${index},${index * 2}`)];
++    const table = parseDelimited(rows.join('\n'), 'big.csv');
++    expect(table.rows).toHaveLength(500);
++    expect(table.totalRows).toBe(511);
++    expect(table.truncated).toBe(true);
++    const html = render('big.csv', rows.join('\n'));
++    expect(html).toContain('仅显示前 500 行');
++    expect(html).toContain('511 行');
++  });
++
++  it('keeps ragged rows and caps columns without inventing cells', () => {
++    const table = parseDelimited('a,b,c\n1\n2,3', 'ragged.csv');
++    expect(table.rows).toEqual([['a', 'b', 'c'], ['1'], ['2', '3']]);
++    const wide = parseDelimited(`h,${Array.from({ length: 80 }, (_, index) => `c${index}`).join(',')}`, 'wide.csv');
++    expect(wide.rows[0]).toHaveLength(64);
++  });
++
++  it('states binary, empty and truncated-source conditions explicitly', () => {
++    expect(render('data.csv', '', { binary: true })).toContain('二进制文件');
++    expect(render('data.csv', '')).toContain('空文件');
++    const html = render('data.csv', 'a,b\n1,2', { truncated: true });
++    expect(html).toContain('文件已截断');
++  });
++});
+\ No newline at end of file
+diff --git a/frontend/src/renderer/shell/panels/csvPreview.tsx b/frontend/src/renderer/shell/panels/csvPreview.tsx
+new file mode 100644
+index 00000000..c1dd0fda
+--- /dev/null
++++ b/frontend/src/renderer/shell/panels/csvPreview.tsx
+@@ -0,0 +1,154 @@
++import type { DocumentPreviewProps } from './documentPreviewRegistry';
++
++/** Built-in table preview for delimiter-separated text (CSV/TSV). */
++export const CSV_PREVIEW_EXTENSIONS = ['csv', 'tsv'] as const;
++
++const MAX_ROWS = 500;
++const MAX_COLUMNS = 64;
++const MAX_CELL_CHARS = 2000;
++
++type ParsedTable = {
++  rows: string[][];
++  delimiter: string;
++  totalRows: number;
++  truncated: boolean;
++};
++
++/**
++ * Pick the delimiter from the first line, honoring the file extension for TSV.
++ * Counts only separators outside double quotes so quoted text cannot win.
++ */
++function detectDelimiter(source: string, path: string): string {
++  if (/\.tsv$/i.test(path)) return '\t';
++  const firstLine = source.split(/\r?\n/, 1)[0] ?? '';
++  const candidates = [',', '\t', ';', '|'];
++  let best = ',';
++  let bestCount = 0;
++  for (const candidate of candidates) {
++    let count = 0;
++    let quoted = false;
++    for (let index = 0; index < firstLine.length; index += 1) {
++      const char = firstLine[index];
++      if (char === '"') {
++        if (quoted && firstLine[index + 1] === '"') index += 1;
++        else quoted = !quoted;
++      } else if (!quoted && char === candidate) {
++        count += 1;
++      }
++    }
++    if (count > bestCount) { best = candidate; bestCount = count; }
++  }
++  return best;
++}
++
++/**
++ * Parse RFC-4180-style rows without inventing content.
++ * Malformed quoting stays literal instead of dropping data; every row keeps its arity.
++ */
++export function parseDelimited(source: string, path: string): ParsedTable {
++  const delimiter = detectDelimiter(source, path);
++  const rows: string[][] = [];
++  let row: string[] = [];
++  let cell = '';
++  let quoted = false;
++  let totalRows = 0;
++
++  const endCell = () => {
++    row.push(cell.length > MAX_CELL_CHARS ? `${cell.slice(0, MAX_CELL_CHARS)}…` : cell);
++    cell = '';
++  };
++  const endRow = () => {
++    endCell();
++    totalRows += 1;
++    if (rows.length < MAX_ROWS) rows.push(row.slice(0, MAX_COLUMNS));
++    row = [];
++  };
++
++  for (let index = 0; index < source.length; index += 1) {
++    const char = source[index];
++    if (quoted) {
++      if (char === '"') {
++        if (source[index + 1] === '"') { cell += '"'; index += 1; }
++        else quoted = false;
++      } else {
++        cell += char;
++      }
++    } else if (char === '"' && cell.length === 0) {
++      quoted = true;
++    } else if (char === delimiter) {
++      endCell();
++    } else if (char === '\n' || char === '\r') {
++      if (char === '\r' && source[index + 1] === '\n') index += 1;
++      endRow();
++    } else {
++      cell += char;
++    }
++  }
++  // A file ending in a newline has no extra row; a final unterminated cell does.
++  if (cell.length > 0 || row.length > 0 || quoted) endRow();
++
++  return { rows, delimiter, totalRows, truncated: totalRows > rows.length };
++}
++
++function delimiterLabel(delimiter: string): string {
++  if (delimiter === '\t') return '制表符';
++  if (delimiter === ';') return '分号';
++  if (delimiter === '|') return '竖线';
++  return '逗号';
++}
++
++/**
++ * Render a delimiter-separated file as a real table.
++ * Binary files, empty files and truncation are stated instead of faked.
++ */
++export function CsvFilePreview({ file }: DocumentPreviewProps) {
++  if (file.binary) {
++    return (
++      <div className="rounded border border-line p-3 text-xs text-fg-3" role="note" data-csv-preview="binary">
++        二进制文件不以表格预览呈现。
++      </div>
++    );
++  }
++  const table = parseDelimited(file.content, file.path);
++  if (table.rows.length === 0 || (table.rows.length === 1 && table.rows[0].every((cell) => cell === ''))) {
++    return (
++      <div className="rounded border border-line p-3 text-xs text-fg-3" role="note" data-csv-preview="empty">
++        空文件，没有可显示的表格行。
++      </div>
++    );
++  }
++  const [header, ...body] = table.rows;
++  return (
++    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-3" data-csv-preview={file.path}>
++      <div className="flex flex-wrap items-center gap-2 text-[11px] text-fg-3" role="note">
++        <span>{table.totalRows} 行 · {delimiterLabel(table.delimiter)}分隔</span>
++        {file.truncated && <span className="text-amber-600">文件已截断，仅解析已加载部分。</span>}
++        {table.truncated && <span className="text-amber-600">仅显示前 {MAX_ROWS} 行。</span>}
++      </div>
++      <div className="min-h-0 flex-1 overflow-auto rounded border border-line">
++        <table className="w-full border-collapse text-left text-[12px]" aria-label={`表格预览 ${file.path}`}>
++          <thead className="sticky top-0 bg-sunken">
++            <tr>
++              {header.map((cell, index) => (
++                <th key={index} scope="col" className="border-b border-line px-2 py-1.5 font-semibold text-fg">
++                  {cell || '\u00a0'}
++                </th>
++              ))}
++            </tr>
++          </thead>
++          <tbody>
++            {body.map((row, rowIndex) => (
++              <tr key={rowIndex} className="odd:bg-surface even:bg-sunken/40">
++                {row.map((cell, cellIndex) => (
++                  <td key={cellIndex} className="max-w-[42ch] truncate border-b border-line/60 px-2 py-1 text-fg-2" title={cell}>
++                    {cell || '\u00a0'}
++                  </td>
++                ))}
++              </tr>
++            ))}
++          </tbody>
++        </table>
++      </div>
++    </div>
++  );
++}
+\ No newline at end of file
+diff --git a/frontend/src/renderer/shell/panels/documentPreviewRegistry.tsx b/frontend/src/renderer/shell/panels/documentPreviewRegistry.tsx
+index 57eaadef..7981f18e 100644
+--- a/frontend/src/renderer/shell/panels/documentPreviewRegistry.tsx
++++ b/frontend/src/renderer/shell/panels/documentPreviewRegistry.tsx
+@@ -1,5 +1,6 @@
+ import { useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
+ import type { WorkspaceFile } from '@atlas/backend-adapter';
++import { CSV_PREVIEW_EXTENSIONS, CsvFilePreview } from './csvPreview';
+ 
+ export interface DocumentPreviewProps {
+   file: WorkspaceFile;
+@@ -31,6 +32,7 @@ for (const [id, extensions] of Object.entries({
+   markdown: ['md', 'markdown'], image: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'],
+   pdf: ['pdf'], html: ['html', 'htm'], office: ['docx', 'xlsx', 'pptx'],
+ })) renderers.set(id, { id, extensions, renderer: BuiltinPreview });
++renderers.set('csv', { id: 'csv', extensions: CSV_PREVIEW_EXTENSIONS, renderer: CsvFilePreview });
+ 
+ /** Later registrations take precedence over built-in file formats until disposed. */
+ export function registerDocumentPreview(definition: DocumentPreviewDefinition): () => void {

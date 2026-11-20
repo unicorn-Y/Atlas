@@ -8,7 +8,10 @@ from types import SimpleNamespace
 
 import pytest
 
+# Import before the tests monkeypatch atlas.config.get_config so the lazily used
+# LocalExecutionRuntime cannot retain a per-test config lambda across cases.
 from atlas.tools import app_server
+import atlas.tools.local_execution as _local_execution
 
 
 pytestmark = pytest.mark.unit
@@ -78,8 +81,26 @@ class _GatedOrchestrator:
         yield {"type": "chunk", "content": "settled"}
 
 
+class _AttemptRollbackOrchestrator:
+    def __init__(self, **_kwargs):
+        pass
+
+    async def run(self, _prompt, _conversation_id, **_kwargs):
+        yield {"type": "chunk", "content": "OLD", "attempt": 1, "attempt_id": "attempt-old"}
+        yield {"type": "message.rollback", "attempt": 1, "attempt_id": "attempt-old"}
+        yield {"type": "chunk", "content": "NEW", "attempt": 2, "attempt_id": "attempt-new"}
+        yield {"type": "model_attempt_committed", "attempt": 2, "attempt_id": "attempt-new"}
+
+
 class _ModelManager:
     pass
+
+
+class _FixedUuid:
+    hex = "sid"
+
+    def __str__(self):
+        return "sid"
 
 
 class _PresetStore:
@@ -122,15 +143,17 @@ async def _migration_ready(*_args):
 
 def _install_harness(monkeypatch, tmp_path, stdin, stdout, orchestrator):
     memory = _Memory()
+    config = SimpleNamespace(
+        db_path=tmp_path / "atlas.db",
+        local_execution_permission_mode="full_access",
+    )
     monkeypatch.setattr(app_server, "_claim_stdio_channel", lambda: (stdin, stdout))
     monkeypatch.setattr("atlas.memory.MemoryStore", lambda: memory)
     monkeypatch.setattr("atlas.agent.AgentOrchestrator", orchestrator)
     monkeypatch.setattr("atlas.models.ModelManager", _ModelManager)
     monkeypatch.setattr("atlas.task_artifacts.AgentPresetStore", _PresetStore)
-    monkeypatch.setattr(
-        "atlas.config.get_config",
-        lambda: SimpleNamespace(db_path=tmp_path / "atlas.db"),
-    )
+    config_provider = lambda: config
+    monkeypatch.setattr("atlas.config.get_config", config_provider)
     monkeypatch.setattr(
         "atlas.engine.session_migration.migrate_legacy_sessions", _migration_ready,
     )
@@ -170,6 +193,33 @@ async def test_session_wait_unknown_session_is_rejected(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event(
+    tmp_path, monkeypatch,
+):
+    cwd = str(tmp_path.resolve())
+    wire = [
+        _rpc(id=1, method="initialize", params={"protocolVersion": 1}),
+        _rpc(id=2, method="session/start", params={"workspace": cwd}),
+        _rpc(id=3, method="session/prompt", params={"session_id": "sid", "prompt": "retry"}),
+    ]
+    stdin, stdout = _BlockingInput(wire), _CollectingOutput()
+    _install_harness(monkeypatch, tmp_path, stdin, stdout, _AttemptRollbackOrchestrator)
+    monkeypatch.setattr(app_server.uuid, "uuid4", _FixedUuid)
+    server = asyncio.create_task(app_server.serve_stdio(protocol="app-server"))
+    messages = await _collect_until(stdout, lambda items: any(item.get("id") == 3 for item in items))
+    stdin.lines.put("")
+    await asyncio.wait_for(server, 10)
+
+    result = next(item["result"] for item in messages if item.get("id") == 3)
+    events = [item["params"]["event"] for item in messages if item.get("method") == "session/event"]
+    rollback = next(index for index, item in enumerate(events) if item.get("type") == "message.rollback")
+    successful_chunk = next(index for index, item in enumerate(events)
+                            if item.get("type") == "chunk" and item.get("attempt_id") == "attempt-new")
+    assert result["text"] == "NEW"
+    assert rollback < successful_chunk
+
+
+@pytest.mark.asyncio
 async def test_session_wait_on_idle_session_returns_immediately(tmp_path, monkeypatch):
     cwd = str(tmp_path.resolve())
     wire = [
@@ -180,7 +230,7 @@ async def test_session_wait_on_idle_session_returns_immediately(tmp_path, monkey
     ]
     stdin, stdout = _BlockingInput(wire), _CollectingOutput()
     _install_harness(monkeypatch, tmp_path, stdin, stdout, _GatedOrchestrator)
-    monkeypatch.setattr(app_server.uuid, "uuid4", lambda: "sid")
+    monkeypatch.setattr(app_server.uuid, "uuid4", _FixedUuid)
     await asyncio.wait_for(app_server.serve_stdio(protocol="app-server"), 10)
 
     messages = [json.loads(line) for line in stdout.lines if line.strip()]
@@ -205,7 +255,7 @@ async def test_session_wait_blocks_until_run_settles_with_status_notifications(
     stdin, stdout = _BlockingInput(wire), _CollectingOutput()
     _install_harness(monkeypatch, tmp_path, stdin, stdout, _GatedOrchestrator)
     _GatedOrchestrator.gate = asyncio.Event()
-    monkeypatch.setattr(app_server.uuid, "uuid4", lambda: "sid")
+    monkeypatch.setattr(app_server.uuid, "uuid4", _FixedUuid)
 
     server = asyncio.create_task(app_server.serve_stdio(protocol="app-server"))
     # The reader consumed prompt + wait and both are pending on the gate.
@@ -242,7 +292,7 @@ async def test_shutdown_acknowledges_and_drains_active_run(tmp_path, monkeypatch
     stdin, stdout = _BlockingInput(wire), _CollectingOutput()
     _install_harness(monkeypatch, tmp_path, stdin, stdout, _GatedOrchestrator)
     _GatedOrchestrator.hold = True  # run only finishes via cancel
-    monkeypatch.setattr(app_server.uuid, "uuid4", lambda: "sid")
+    monkeypatch.setattr(app_server.uuid, "uuid4", _FixedUuid)
 
     await asyncio.wait_for(app_server.serve_stdio(protocol="app-server"), 10)
 

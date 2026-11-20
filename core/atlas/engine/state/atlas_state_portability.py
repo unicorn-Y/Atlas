@@ -777,6 +777,144 @@ class SessionPortabilityMixin:
             )
         )
 
+    def append_inbox_enqueue_with_receipt(
+        self, session_id: str, payload: dict[str, Any],
+    ) -> tuple[str, int, bool]:
+        """Atomically deduplicate an inbox request id and append its receipt event."""
+        request_id = str(payload.get("request_id") or "").strip()
+        event_id = str(payload.get("event_id") or "").strip()
+        if not event_id:
+            raise ValueError("inbox event id must not be empty")
+        if request_id:
+            lane = payload.get("lane")
+            content = payload.get("content")
+
+            def _append(conn):
+                rows = conn.execute(
+                    "SELECT seq, payload_json FROM session_events "
+                    "WHERE session_id = ? AND event_type = 'inbox.enqueued' ORDER BY seq",
+                    (str(session_id),),
+                ).fetchall()
+                for row in rows:
+                    previous = safe_json_loads(row["payload_json"], default={})
+                    if not isinstance(previous, dict):
+                        continue
+                    if str(previous.get("request_id") or "").strip() != request_id:
+                        continue
+                    if previous.get("lane") != lane or previous.get("content") != content:
+                        raise ValueError("request id was already used with a different payload")
+                    previous_event_id = str(previous.get("event_id") or "").strip()
+                    if not previous_event_id:
+                        raise RuntimeError("durable inbox request is missing its event id")
+                    return previous_event_id, int(row["seq"]), False
+
+                sequence = self.append_session_event_with_cursor(
+                    conn, session_id, "inbox.enqueued", payload,
+                )
+                return event_id, sequence, True
+
+            return self._execute_write(_append)
+
+        sequence = self.append_session_event(session_id, "inbox.enqueued", payload)
+        return event_id, sequence, True
+
+    def claim_inbox_start(
+        self, session_id: str, *, event_id: str, lane: str, run_id: str,
+        request_id: str | None = None,
+    ) -> tuple[int | None, str | None, bool]:
+        """Atomically assign one pending inbox event to one worker run."""
+        session_key = str(session_id or "").strip()
+        event_key = str(event_id or "").strip()
+        lane_key = str(lane or "").strip()
+        run_key = str(run_id or "").strip()
+        if not session_key or not event_key or not run_key:
+            raise ValueError("session, event, and run identities must not be empty")
+        if lane_key not in {"next-turn", "next-step"}:
+            raise ValueError("invalid inbox lane")
+
+        def _claim(conn):
+            rows = conn.execute(
+                "SELECT seq, event_type, payload_json FROM session_events "
+                "WHERE session_id = ? AND event_type IN "
+                "('inbox.enqueued', 'inbox.started', 'inbox.consumed', 'inbox.cancelled') "
+                "ORDER BY seq",
+                (session_key,),
+            ).fetchall()
+            enqueued = False
+            started_run: str | None = None
+            started_seq: int | None = None
+            terminal = False
+            for row in rows:
+                payload = safe_json_loads(row["payload_json"], default={})
+                if not isinstance(payload, dict) or str(payload.get("event_id") or "") != event_key:
+                    continue
+                if row["event_type"] == "inbox.enqueued" and payload.get("lane") == lane_key:
+                    enqueued = True
+                elif row["event_type"] == "inbox.started":
+                    if started_run is None:
+                        started_run = str(payload.get("run_id") or "") or None
+                        started_seq = int(row["seq"])
+                elif row["event_type"] in {"inbox.consumed", "inbox.cancelled"}:
+                    terminal = True
+
+            if not enqueued or terminal:
+                return None, None, False
+            if started_run is not None:
+                return started_seq, started_run, started_run == run_key
+
+            sequence = self.append_session_event_with_cursor(
+                conn, session_key, "inbox.started", {
+                    "event_id": event_key, "lane": lane_key,
+                    "run_id": run_key, "request_id": request_id,
+                },
+            )
+            return sequence, run_key, True
+
+        return self._execute_write(_claim)
+
+    def cancel_inbox_if_unstarted(
+        self, session_id: str, *, event_id: str, lane: str,
+        request_id: str | None = None,
+    ) -> bool:
+        """Append cancellation only if no worker has durably started the event."""
+        session_key = str(session_id or "").strip()
+        event_key = str(event_id or "").strip()
+        lane_key = str(lane or "").strip()
+        if not session_key or not event_key:
+            raise ValueError("session and event identities must not be empty")
+        if lane_key not in {"next-turn", "next-step"}:
+            raise ValueError("invalid inbox lane")
+
+        def _cancel(conn):
+            rows = conn.execute(
+                "SELECT event_type, payload_json FROM session_events "
+                "WHERE session_id = ? AND event_type IN "
+                "('inbox.enqueued', 'inbox.started', 'inbox.consumed', 'inbox.cancelled') "
+                "ORDER BY seq",
+                (session_key,),
+            ).fetchall()
+            enqueued = False
+            started = False
+            terminal = False
+            for row in rows:
+                payload = safe_json_loads(row["payload_json"], default={})
+                if not isinstance(payload, dict) or str(payload.get("event_id") or "") != event_key:
+                    continue
+                if row["event_type"] == "inbox.enqueued" and payload.get("lane") == lane_key:
+                    enqueued = True
+                elif row["event_type"] == "inbox.started":
+                    started = True
+                elif row["event_type"] in {"inbox.consumed", "inbox.cancelled"}:
+                    terminal = True
+            if not enqueued or started or terminal:
+                return False
+            self.append_session_event_with_cursor(conn, session_key, "inbox.cancelled", {
+                "event_id": event_key, "lane": lane_key, "request_id": request_id,
+            })
+            return True
+
+        return self._execute_write(_cancel)
+
     def repair_interrupted_turns(self, session_id: str, turn_ids: set[str]) -> int:
         """Append reader-discovered turn closers without modifying transcript messages.
 
@@ -835,6 +973,47 @@ class SessionPortabilityMixin:
             "payload": json.loads(row["payload_json"]),
             "created_at": str(row["created_at"]),
         } for row in rows]
+
+    def list_inbox_events(
+        self, session_id: str, *, after_seq: int = 0, limit: int = 1000,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Read only inbox lifecycle events after a cursor and return its safe high-water mark."""
+        session_id = str(session_id or "").strip()
+        if not session_id:
+            raise ValueError("session_id must not be empty")
+        if type(after_seq) is not int or after_seq < 0:
+            raise ValueError("after_seq must be a non-negative integer")
+        if type(limit) is not int or not 1 <= limit <= 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+
+        event_types = (
+            "inbox.enqueued", "inbox.started", "inbox.consumed", "inbox.cancelled",
+        )
+        with self._lock:
+            self._conn.execute("BEGIN")
+            try:
+                rows = self._conn.execute(
+                    "SELECT seq, session_id, event_type, payload_json, created_at "
+                    "FROM session_events WHERE session_id = ? AND seq > ? "
+                    "AND event_type IN (?, ?, ?, ?) ORDER BY seq LIMIT ?",
+                    (session_id, after_seq, *event_types, limit),
+                ).fetchall()
+                high_water = int(self._conn.execute(
+                    "SELECT COALESCE(MAX(seq), ?) FROM session_events WHERE session_id = ?",
+                    (after_seq, session_id),
+                ).fetchone()[0])
+            finally:
+                self._conn.execute("ROLLBACK")
+
+        events = [{
+            "seq": int(row["seq"]),
+            "session_id": str(row["session_id"]),
+            "event_type": str(row["event_type"]),
+            "payload": json.loads(row["payload_json"]),
+            "created_at": str(row["created_at"]),
+        } for row in rows]
+        next_cursor = events[-1]["seq"] if len(events) == limit else high_water
+        return events, max(after_seq, int(next_cursor))
 
     def import_sessions(
         self, sessions: list[dict[str, Any]], *,

@@ -1,0 +1,185 @@
+{
+  "candidate_worktree": "D:\\Atlas\\.worktrees\\zcode-par10-sdk-cancel-integration",
+  "candidate_head": "060071ab",
+  "python": "3.11.16 (main, Sep  1 2026, 14:15:24) [MSC v.1944 64 bit (AMD64)]",
+  "scenarios": [
+    {
+      "scenario": "R1-sdk-cancel-late-answer-restart",
+      "status": "PASS",
+      "checks": {
+        "status_is_cancelled": true,
+        "prompt_text_not_an_answer": true,
+        "input_request_carries_request_id_and_call_id": true,
+        "input_request_session_id_matches": true,
+        "exactly_one_input_request": true,
+        "exactly_one_cancellation_notification": true,
+        "cancellation_payload_exact": true,
+        "cancellation_seen_before_terminal": true,
+        "late_answer_by_request_id_-32602": true,
+        "late_answer_by_legacy_call_id_-32602": true,
+        "process_survived_late_answers": true,
+        "durable_pending_then_invalidated": true,
+        "durable_fields_exact": true,
+        "tool_never_received_empty_answer": true,
+        "process_exit_0": true,
+        "restart_same_conversation": true,
+        "restart_rejects_old_request_-32602": true,
+        "restart_keeps_single_invalidated": true,
+        "restart_process_exit_0": true,
+        "info": {
+          "request_id": "836f7ef5-4abb-4552-870e-8d5f479ef354",
+          "model_main_requests": 1,
+          "stderr_tail": [
+            "2026-11-20 05:23:10 [info     ] config.loaded                  path=D:\\Atlas\\.worktrees\\_codex-par10-probes\\t6-22-r2\\tmp\\real-r1-cancel\\atlas\\config\\atlas.toml\n",
+            "2026-11-20 05:23:10 [info     ] memory.init                    db=D:\\Atlas\\.worktrees\\_codex-par10-probes\\t6-22-r2\\tmp\\real-r1-cancel\\atlas\\data\\atlas.db\n",
+            "2026-11-20 05:23:10 [info     ] model_manager.init             api_base=http://127.0.0.1:18970/v1 default=fake-model source=atlas.toml\n",
+            "2026-11-20 05:23:10 [info     ] agent.run                      conv=37095b2d-e03a-4211-8153-f48d4ead8ec0 model=openai/fake-model msg_len=14\n",
+            "2026-11-20 05:23:10 [warning  ] memory.library.embed_unavailable error=\"No module named 'fastembed'\"\n"
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "R2-sdk-accepted-answer-duplicate-restart",
+      "status": "PASS",
+      "checks": {
+        "status_completed": true,
+        "final_text_done": true,
+        "exactly_one_input_request": true,
+        "zero_cancellation_notifications": true,
+        "duplicate_answer_-32602": true,
+        "duplicate_legacy_answer_-32602": true,
+        "durable_pending_then_resolved": true,
+        "process_exit_0": true,
+        "restart_rejects_resolved_answer_-32602": true,
+        "restart_same_conversation": true,
+        "restart_keeps_resolved": true,
+        "restart_process_exit_0": true,
+        "info": {
+          "request_id": "fd992183-5dbe-415a-b13e-24eeffe04301",
+          "stderr_tail": [
+            "2026-11-20 05:23:15 [info     ] memory.init                    db=D:\\Atlas\\.worktrees\\_codex-par10-probes\\t6-22-r2\\tmp\\real-r2-accept\\atlas\\data\\atlas.db\n",
+            "2026-11-20 05:23:15 [info     ] model_manager.init             api_base=http://127.0.0.1:18970/v1 default=fake-model source=atlas.toml\n",
+            "2026-11-20 05:23:16 [info     ] agent.run                      conv=c4b37915-e375-4006-b960-d12c36fc6075 model=openai/fake-model msg_len=14\n",
+            "2026-11-20 05:23:16 [warning  ] memory.library.embed_unavailable error=\"No module named 'fastembed'\"\n",
+            "2026-11-20 05:23:17 [info     ] agent.idle_maintenance_ran     result={'skipped': True, 'pruned': 0, 'closed': 0, 'vacuumed': False}\n"
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "R3-raw-double-trigger-single-frame",
+      "status": "PASS",
+      "checks": {
+        "exactly_one_cancellation_frame": true,
+        "cancellation_payload_exact": true,
+        "cancellation_precedes_terminal": true,
+        "terminal_status_cancelled": true,
+        "cancel_request_ack_true": true,
+        "close_request_ack_true": true,
+        "durable_pending_then_invalidated": true,
+        "tool_never_received_empty_answer": true,
+        "process_exit_0": true,
+        "info": {
+          "request_id": "60da38a9-bf8c-41f3-99fc-f221b0516a8d",
+          "frame_methods": [
+            "session/status",
+            "session/event",
+            "session/event",
+            "session/event",
+            "session/event",
+            "session/event",
+            "input/request",
+            "user-question.cancelled",
+            "response:101",
+            "response:102",
+            "session/event",
+            "response:100",
+            "session/status"
+          ],
+          "stderr_tail": [
+            "2026-11-20 05:23:21 [info     ] config.loaded                  path=D:\\Atlas\\.worktrees\\_codex-par10-probes\\t6-22-r2\\tmp\\real-r3-double\\atlas\\config\\atlas.toml\n",
+            "2026-11-20 05:23:21 [info     ] memory.init                    db=D:\\Atlas\\.worktrees\\_codex-par10-probes\\t6-22-r2\\tmp\\real-r3-double\\atlas\\data\\atlas.db\n",
+            "2026-11-20 05:23:21 [info     ] model_manager.init             api_base=http://127.0.0.1:18970/v1 default=fake-model source=atlas.toml\n",
+            "2026-11-20 05:23:22 [info     ] agent.run                      conv=640822fe-12fa-40a2-a7e2-738edd92e7ea model=openai/fake-model msg_len=8\n",
+            "2026-11-20 05:23:22 [warning  ] memory.library.embed_unavailable error=\"No module named 'fastembed'\"\n"
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "R4-eof-disconnect-single-frame",
+      "status": "PASS",
+      "checks": {
+        "exactly_one_cancellation_frame_on_drain": true,
+        "cancellation_payload_exact": true,
+        "terminal_status_cancelled": true,
+        "durable_pending_then_invalidated": true,
+        "tool_never_received_empty_answer": true,
+        "process_exit_0": true,
+        "info": {
+          "request_id": "924e0584-96e7-459a-a2c9-0bfa32b217bf",
+          "exit_code": 0,
+          "stderr_full": "2026-11-20 05:23:25 [info     ] config.loaded                  path=D:\\Atlas\\.worktrees\\_codex-par10-probes\\t6-22-r2\\tmp\\real-r4-eof\\atlas\\config\\atlas.toml\n2026-11-20 05:23:25 [info     ] memory.init                    db=D:\\Atlas\\.worktrees\\_codex-par10-probes\\t6-22-r2\\tmp\\real-r4-eof\\atlas\\data\\atlas.db\n2026-11-20 05:23:25 [info     ] model_manager.init             api_base=http://127.0.0.1:18970/v1 default=fake-model source=atlas.toml\n2026-11-20 05:23:25 [info     ] agent.run                      conv=f56fbd55-05c9-4740-9d06-e92059df6ee9 model=openai/fake-model msg_len=8\n2026-11-20 05:23:25 [warning  ] memory.library.embed_unavailable error=\"No module named 'fastembed'\"\n"
+        }
+      }
+    },
+    {
+      "scenario": "R5-broken-stdout-single-durable-transition",
+      "status": "PASS",
+      "checks": {
+        "server_still_cancelled_after_write_failure": true,
+        "durable_exactly_one_invalidated": true,
+        "server_terminated": true,
+        "no_duplicate_audit_rows": true,
+        "info": {
+          "request_id": "f2f48be9-ca14-4438-b86f-9a8cc1418cab",
+          "exit_code": 1,
+          "stderr_tail": [
+            "ProxyError: HTTPSConnectionPool(host='openaipublic.blob.core.windows.net', \n",
+            "port=443): Max retries exceeded with url: /encodings/cl100k_base.tiktoken \n",
+            "(Caused by ProxyError('Unable to connect to proxy', \n",
+            "NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=1): Failed to \n",
+            "establish a new connection: [WinError 10061] \n",
+            "由于目标计算机积极拒绝，无法连接。\")))\n",
+            "\n",
+            "{\"type\": \"error\", \"scope\": \"cli\", \"detail\": \"[Errno 22] Invalid argument\"}\n"
+          ],
+          "note": "wire frames are unobservable after the client closes its read end; the single durable transition plus pop-before-notify state machine proves no duplicate emission server-side"
+        }
+      }
+    },
+    {
+      "scenario": "R6-inproc-notify-write-failure-single-attempt",
+      "status": "PASS",
+      "checks": {
+        "exactly_one_notification_attempt": true,
+        "durable_pending_then_invalidated": true,
+        "tool_never_received_empty_answer": true,
+        "info": {
+          "request_id": "59ff5825-3191-4e77-be0f-c25fd9874ed0",
+          "writer_error_surfaced": true
+        }
+      }
+    },
+    {
+      "scenario": "R7-inproc-durable-write-failure-wire-still-once",
+      "status": "PASS",
+      "checks": {
+        "wire_frame_emitted_exactly_once_despite_audit_failure": true,
+        "cancellation_payload_exact": true,
+        "terminal_status_cancelled": true,
+        "tool_never_received_empty_answer": true,
+        "durable_shows_only_pending_after_failed_invalidated_write": true,
+        "info": {
+          "request_id": "38feded1-7eb7-4acd-9cff-bd9f3fcdbe24",
+          "durable_rows": [
+            "pending"
+          ]
+        }
+      }
+    }
+  ],
+  "passed": 7,
+  "failed": 0
+}

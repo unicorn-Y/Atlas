@@ -1,0 +1,72 @@
+EXEC-06 · B-F08-FORGE-01 复核:worktree 模型工具与 Atlas 内部 worktree 服务
+日期: 2026-11-18;DSH rc.4 3f321d32;Atlas wave3@060071ab + 在途
+
+================================================================================
+A. DSH:create_worktree 是模型可直接调用的工具(此前“专用 git 工具未见”不成立)
+================================================================================
+- packages/experimental/tool-worktree/src/index.ts:13-45
+  - defineTool name='create_worktree';inject ['tools','worktrees'];
+  - description: 从本地 commit/branch/tag 创建新分支+worktree,然后把本会话工作目录切过去;
+    未提交文件留在源 checkout;重名失败;可用 working_directory 离开,checkout/branch 保留。
+  - parameters: name(可选,缺省生成唯一名;同时作为目录名)、from(默认 HEAD,不 fetch)。
+  - output schema: {path, branch, baseCommit, repositoryRoot} 全部 required。
+  - execute: 要求 exec.agent;调用 ctx.worktrees.create(agent,args,signal)。
+- packages/experimental/worktree/src/index.ts:86-179,251-281
+  - WorktreeService.create:解析 revision→`rev-parse --verify --end-of-options <rev>^{commit}`;
+    `show-ref --verify --quiet refs/heads/<branch>` 检查重名;
+    池目录 resolve + prepareDirectory;
+    `git --work-tree <repo> worktree add --no-checkout -b <branch> -- <path> <baseCommit>`;
+    再在目标 `reset --hard --no-recurse-submodules <baseCommit>`;
+    返回 CreatedWorktree{path(规范路径),branch,baseCommit,repositoryRoot}。
+  - restore:baseCommit 必须是完整 40/64 hex;check-ref-format/rev-parse 校验;失败回滚 worktree remove。
+- 测试:packages/experimental/tool-worktree/tests/loader-composition.spec.ts:90-108
+  (调用、无 agent 报错、presentCall、未加载时不暴露 schema);
+  packages/experimental/worktree/tests/worktree.spec.ts。
+- 可选 bundle:tool-worktree 属 OPTIONAL_BUNDLES 之一(BEHAVIORS B-F09-BUNDLE-CATALOG-01 已列)。
+
+================================================================================
+B. Atlas 实际能力(内部服务,不是模型工具)
+================================================================================
+- core/atlas/task_artifacts.py:215-260 class WorktreeService:
+  create(workspace, conversation_id, base_branch?, name?) → 校验 .git、
+  branch=atlas/<shortid>(-suffix)、path=<workspace.parent>/.atlas-worktrees/<repo>/<shortid>、
+  `git worktree add -b <branch> <path> <base>`;返回 worktree_path/branch/base_branch。
+  status(ahead/behind/dirty/changed_files)、remove(脏树需 force,keep_branch)、merge(merge|squash)。
+- core/atlas/api/workspace_router.py:1598-1665
+  GET /api/conversations/{id}/worktree(status)、POST …/worktree/merge、POST …/worktree/sync;
+  **没有 POST create**。
+- core/atlas/api/conversations_router.py:2161-2199
+  仅在 fork 时调用 `_worktrees().create(checkpoint_root, fork_id, …)`,把 worktree 字段写回会话。
+- core/atlas/agent/subagent_worktree.py:282+ create_subagent_worktree:
+  子 Agent 隔离 worktree(GHSA 加固:非交互 git env、filter 发现 fail-closed、clean/smudge 中和);
+  core/atlas/agent/enrichment.py:1264-1380 创建后收集 diff/name-only/binary patch。
+- 验证:grep `create_worktree` 于 core/atlas/{agent,engine,tools} = **0**;
+  对话 worktree create POST = **0**。
+
+================================================================================
+C. 差距
+================================================================================
+G1 无模型可调用的 create_worktree 工具(工具目录 0 命中);模型只能用 shell 调 git。
+G2 无“创建后自动切换会话工作目录”语义;Atlas 的 worktree 只在 fork/子 Agent/任务内部生效。
+G3 无独立 worktree 的 POST create API(仅 GET/merge/sync + fork 隐式创建)。
+G4 无 forgePanel Host Remote/变更请求模型;Atlas 用 ChangesPanel diff(D11/D12)。
+G5 命名规则不同:DSH 用用户给的 name;Atlas 用 atlas/<conversation-id8>(-suffix)。
+
+================================================================================
+D. 验收标准(二值)
+================================================================================
+A-1 工具注册:`create_worktree` 出现在模型工具 schema;参数 {name?,from?};缺 agent 拒绝。
+A-2 创建:返回 {path,branch,baseCommit,repositoryRoot};分支不存在时创建;重名→显式失败且不改 cwd。
+A-3 cwd 切换:成功后本会话 working_directory 指向新 path;`working_directory` 改到别处后
+    checkout/branch 仍保留;源 checkout 未提交文件不受影响。
+A-4 安全:复用 subagent_worktree 的非交互 git env/过滤 fail-closed;路径限制在配置池目录。
+A-5 复验:pytest(创建/重名/cwd/清理)+ 真实 git 临时仓库;工具 schema 快照。
+实施依赖:tool_catalog.py/tool_node.py 当前在途(原协作者),先登记 F08-tools blocked-on-author;
+后端 API POST create 可先在 workspace_router.py(干净)单独做,作为工具的前置入口。
+
+================================================================================
+E. 结论
+================================================================================
+Atlas=部分(内部 worktree 服务完整且更安全,缺模型工具/自动 cwd/独立 create API)。
+B-F08-FORGE-01 已按本节更新;此前 F08 next_entry“专用 git 工具未见(走 shell)”修正为
+“模型工具缺失,内部服务已有”。

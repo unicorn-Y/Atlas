@@ -1,0 +1,119 @@
+diff --git a/frontend/src/renderer/shell/panels/codePreview.test.tsx b/frontend/src/renderer/shell/panels/codePreview.test.tsx
+new file mode 100644
+index 00000000..e9b09ef9
+--- /dev/null
++++ b/frontend/src/renderer/shell/panels/codePreview.test.tsx
+@@ -0,0 +1,40 @@
++import { renderToStaticMarkup } from 'react-dom/server';
++import { describe, expect, it } from 'vitest';
++import type { WorkspaceFile } from '@atlas/backend-adapter';
++import { canPreviewDocument, DocumentPreview, documentPreviewRenderer } from './documentPreviewRegistry';
++
++const file = (over: Partial<WorkspaceFile>): WorkspaceFile => ({
++  path: 'src/app.py', content: 'def main():\n    return 1', truncated: false, binary: false, ...over,
++});
++
++describe('built-in code preview', () => {
++  it('claims common source extensions and keeps other built-in families', () => {
++    for (const path of ['src/app.ts', 'src/main.py', 'conf/settings.yaml', 'style.css', 'data.json', 'run.sh']) {
++      expect(documentPreviewRenderer(path)?.id).toBe('code');
++      expect(canPreviewDocument(path)).toBe(true);
++    }
++    expect(documentPreviewRenderer('notes.MD')?.id).toBe('markdown');
++    expect(documentPreviewRenderer('report.pdf')?.id).toBe('pdf');
++    expect(documentPreviewRenderer('workbook.xlsx')?.id).toBe('office');
++    expect(canPreviewDocument('plain.txt')).toBe(false);
++  });
++
++  it('renders numbered lines without altering content', () => {
++    const markup = renderToStaticMarkup(<DocumentPreview file={file({})} workspace="C:/ws" fallback={<p>built-in</p>} />);
++    expect(markup).toContain('data-code-preview="src/app.py"');
++    expect(markup).toContain('def main():');
++    expect(markup).toContain('return 1');
++    expect(markup).toContain('>1</span>');
++    expect(markup).not.toContain('built-in');
++  });
++
++  it('does not fake binary content and notes truncation explicitly', () => {
++    const binary = renderToStaticMarkup(<DocumentPreview file={file({ binary: true, content: '' })} workspace="C:/ws" fallback={<p>built-in</p>} />);
++    expect(binary).toContain('data-code-preview="binary"');
++    expect(binary).toContain('二进制文件');
++    expect(binary).not.toContain('def main():');
++    const truncated = renderToStaticMarkup(<DocumentPreview file={file({ truncated: true })} workspace="C:/ws" fallback={<p>built-in</p>} />);
++    expect(truncated).toContain('已截断');
++    expect(truncated).toContain('def main():');
++  });
++});
+diff --git a/frontend/src/renderer/shell/panels/codePreview.tsx b/frontend/src/renderer/shell/panels/codePreview.tsx
+new file mode 100644
+index 00000000..ebad0066
+--- /dev/null
++++ b/frontend/src/renderer/shell/panels/codePreview.tsx
+@@ -0,0 +1,48 @@
++import type { DocumentPreviewProps } from './documentPreviewRegistry';
++
++/** Built-in code preview claims text source extensions (html/pdf/office stay separate). */
++export const CODE_PREVIEW_EXTENSIONS = [
++  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'rs', 'go', 'java', 'c', 'h', 'cpp', 'hpp',
++  'cs', 'rb', 'php', 'swift', 'kt', 'sh', 'bat', 'ps1', 'sql', 'toml', 'yaml', 'yml', 'ini',
++  'css', 'json', 'xml',
++] as const;
++
++const MAX_RENDERED_LINES = 2000;
++
++/**
++ * Built-in preview for text source files: numbered monospace lines.
++ * Binary files and empty files render an explicit note instead of invented content.
++ */
++export function CodeFilePreview({ file }: DocumentPreviewProps) {
++  if (file.binary) {
++    return (
++      <div className="rounded border border-border p-3 text-xs text-muted-foreground" role="note" data-code-preview="binary">
++        二进制文件不以代码预览呈现。
++      </div>
++    );
++  }
++  const lines = file.content.length ? file.content.split('\n') : [];
++  const shown = lines.slice(0, MAX_RENDERED_LINES);
++  return (
++    <div className="flex flex-col gap-1" data-code-preview={file.path} aria-label={`代码预览 ${file.path}`}>
++      {file.truncated && (
++        <div className="text-xs text-amber-600" role="note">内容已截断，仅显示已加载部分。</div>
++      )}
++      {lines.length === 0 ? (
++        <div className="rounded border border-border p-3 text-xs text-muted-foreground">空文件。</div>
++      ) : (
++        <pre className="max-h-96 overflow-auto rounded border border-border bg-muted/30 p-2 font-mono text-xs leading-5">
++          {shown.map((line, index) => (
++            <div key={index} className="whitespace-pre">
++              <span className="mr-2 inline-block w-10 select-none text-right text-muted-foreground">{index + 1}</span>
++              {line.length ? line : ' '}
++            </div>
++          ))}
++          {lines.length > MAX_RENDERED_LINES && (
++            <div className="text-muted-foreground">… 其余 {lines.length - MAX_RENDERED_LINES} 行未渲染</div>
++          )}
++        </pre>
++      )}
++    </div>
++  );
++}
+diff --git a/frontend/src/renderer/shell/panels/documentPreviewRegistry.tsx b/frontend/src/renderer/shell/panels/documentPreviewRegistry.tsx
+index 57eaadef..faea628b 100644
+--- a/frontend/src/renderer/shell/panels/documentPreviewRegistry.tsx
++++ b/frontend/src/renderer/shell/panels/documentPreviewRegistry.tsx
+@@ -1,5 +1,6 @@
+ import { useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
+ import type { WorkspaceFile } from '@atlas/backend-adapter';
++import { CODE_PREVIEW_EXTENSIONS, CodeFilePreview } from './codePreview';
+ 
+ export interface DocumentPreviewProps {
+   file: WorkspaceFile;
+@@ -31,6 +32,7 @@ for (const [id, extensions] of Object.entries({
+   markdown: ['md', 'markdown'], image: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'],
+   pdf: ['pdf'], html: ['html', 'htm'], office: ['docx', 'xlsx', 'pptx'],
+ })) renderers.set(id, { id, extensions, renderer: BuiltinPreview });
++renderers.set('code', { id: 'code', extensions: CODE_PREVIEW_EXTENSIONS, renderer: CodeFilePreview });
+ 
+ /** Later registrations take precedence over built-in file formats until disposed. */
+ export function registerDocumentPreview(definition: DocumentPreviewDefinition): () => void {

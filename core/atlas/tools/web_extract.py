@@ -25,6 +25,10 @@ EXTRACT_TIMEOUT_SECONDS = 15.0
 CHEAP_PATH_BYTES = 2 * 1024 * 1024
 
 
+class WebFetchPolicyError(ValueError):
+    """A web request was rejected by Atlas URL or redirect policy."""
+
+
 class _TextParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -98,9 +102,9 @@ async def _extract_with_fallback(html: str) -> tuple[str, str]:
 def _validate_url(url: str, allow_local: bool) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("只支持 http 或 https 网页地址。")
+        raise WebFetchPolicyError("只支持 http 或 https 网页地址。")
     if parsed.username is not None or parsed.password is not None:
-        raise ValueError("网址不能包含登录凭据。")
+        raise WebFetchPolicyError("网址不能包含登录凭据。")
     host = parsed.hostname.rstrip(".").casefold()
     local_exception = allow_local and host in {"localhost", "127.0.0.1"}
     try:
@@ -115,8 +119,18 @@ def _validate_url(url: str, allow_local: bool) -> str:
             raise ValueError("无法解析这个网址。") from exc
         addresses = [ipaddress.ip_address(record[4][0]) for record in records]
     if not local_exception and any(not is_public_address(address) for address in addresses):
-        raise ValueError("出于安全考虑，不能读取内网或本机地址。")
+        raise WebFetchPolicyError("出于安全考虑，不能读取内网或本机地址。")
     return url
+
+
+def _origin(url: str) -> tuple[str, str, int]:
+    parsed = urlparse(url)
+    scheme = parsed.scheme.casefold()
+    host = (parsed.hostname or "").rstrip(".").casefold()
+    port = parsed.port
+    if port is None:
+        port = 443 if scheme == "https" else 80
+    return scheme, host, port
 
 
 async def _video_captions(url: str) -> tuple[str, str]:
@@ -260,8 +274,17 @@ async def extract_web(url: str, *, allow_local: bool = False,
                 location = response.headers.get("location")
                 if response.status_code not in {301, 302, 303, 307, 308} or not location:
                     break
+                target = urljoin(current, location)
+                try:
+                    cross_origin = _origin(target) != _origin(current)
+                except WebFetchPolicyError:
+                    await response.aclose()
+                    raise
+                if cross_origin:
+                    await response.aclose()
+                    raise WebFetchPolicyError("跨源网页跳转已拒绝。")
                 await response.aclose()
-                current = urljoin(current, location)
+                current = target
             else:
                 raise ValueError("网页跳转次数过多。")
             if response is None:
@@ -284,6 +307,6 @@ async def extract_web(url: str, *, allow_local: bool = False,
             clipped = text[:MAX_TEXT_LENGTH]
             return {"url": current, "title": title[:500], "kind": "page", "text": clipped,
                     "length": len(clipped), "truncated": len(text) > MAX_TEXT_LENGTH,
-                    "extraction": degraded}
+                    "extraction": degraded, "status_code": response.status_code}
 
     return await asyncio.wait_for(fetch_page(), timeout=20.0)

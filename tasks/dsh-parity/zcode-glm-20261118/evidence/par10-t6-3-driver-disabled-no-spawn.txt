@@ -1,0 +1,9 @@
+SCENARIO disabled-no-spawn
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 06:14:16 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\.tmp\par10-t6-3\data\disabled-no-spawn\config\atlas.toml
+2026-11-19 06:14:16 [info     ] mcp.no_servers_configured
+CHECK PASS disabled: start does not spawn :: []
+CHECK PASS disabled: state disabled :: {'name': 'off', 'configured': True, 'enabled': False, 'transport': 'stdio', 'connected': False, 'state': 'disabled', 'tool_discovery': 'not_started', 'tool_count': 0, 'blocking_reason': 'server is disabled'}
+CHECK PASS disabled: explicit restart does not spawn :: []
+CHECK PASS disabled: restart keeps disabled :: {'name': 'off', 'configured': True, 'enabled': False, 'transport': 'stdio', 'connected': False, 'state': 'disabled', 'tool_discovery': 'not_started', 'tool_count': 0, 'blocking_reason': 'server is disabled'}
+RESULT disabled-no-spawn checks=4 failed=0

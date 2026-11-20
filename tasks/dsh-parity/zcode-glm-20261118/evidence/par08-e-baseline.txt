@@ -1,0 +1,69 @@
+PAR-08-E read-only baseline capture 2026-11-18T19:23:35Z
+main worktree HEAD: 060071ab2ecf86d41cab90e98160183ce126bc69
+
+== sha256 (main working tree, read-only) ==
+4f6d2de924d65c0d8986f6b0b81c87390b583bf7f22476d25ef60996bb533d40 *core/atlas/tools/app_server.py
+43f4dd1c34a3b05bdc41d3da0bd1800a32e92e4a5a571110c9ae9a94539d4b5a *sdk/python/atlas_sdk/app_server.py
+4bcc3acb1520f59e2013c122b0dd808357371cdccfe5df4bb4f731fcdeed3b61 *core/atlas/engine/session_sync.py
+2762e9133a765e657373ceddb2281152d45ced351a3bd5a242c6d1bd9cd400d6 *core/atlas/engine/kernel/inbox.py
+8371447ec54ff9911897ac5f5c193bccc2d83ebd1d1bc3993854857a0ab1e881 *core/tests/test_app_server_acp.py
+4431a7ab91366f64196ec79a45e6474e6c909e09dc11eb86247ec508c96eed37 *core/tests/test_app_server_sdk_lifecycle.py
+a128e9d168043e3c70b814472332a898b8ce34b1f022201be5e648ca656a0844 *core/tests/fakes/fake_llm_provider.py
+3d655843f3071a35309a097e8f0b14f55966ae968bcab16597a4033a7f19c85a *core/tests/test_app_server_sdk_subprocess_attempts.py
+
+== git diff 060071ab stat ==
+ core/atlas/engine/kernel/inbox.py           | 227 +++++--
+ core/atlas/engine/session_sync.py           | 146 ++++-
+ core/atlas/tools/app_server.py              | 949 +++++++++++++++++++++++++++-
+ core/tests/fakes/fake_llm_provider.py       |  15 +
+ core/tests/test_app_server_acp.py           | 506 ++++++++++++++-
+ core/tests/test_app_server_sdk_lifecycle.py |  64 +-
+ sdk/python/atlas_sdk/app_server.py          | 601 ++++++++++++++++--
+ 7 files changed, 2371 insertions(+), 137 deletions(-)
+
+== untracked subprocess test ==
+?? core/tests/test_app_server_sdk_subprocess_attempts.py
+== additional minimal support copied 2026-11-18T19:32:18Z ==
+4ca0d3dd8b3b4ba7a5041837e3f118437fd4683950e7ba63ee06e36ff9bbb845 *core/atlas/agent/__init__.py
+2b6b5575a995f81ca52deba3007cfd76f0b0e848b6a8c4cb777a7e2b25c35ea4 *core/atlas/agent/project_instructions.py
+97026bf0e4fbc3741e02abcad38c186faac90416374fa92011a1766abb1ab345 *core/atlas/agent/run_phases.py
+5ec93798cae26b53c6e9c2fc2fac3116b13a41707e406d5c002740028fddd8d4 *core/atlas/agent/session_queries.py
+a05be14f908c9696c79caee73a7deb9e22eea4f6e781abbe13ddb697ff80ce2e *core/atlas/agent/tool_catalog.py
+39cb946d4f4981aa380c104b18c1ed6de77fe27f064c6abb6b27084534141217 *core/atlas/agent/tool_node.py
+1d18e5dcc21be3708560c3bbab9396c5e7d5973551d7ab563a5e9b3f87b5d4bb *core/atlas/engine/state/atlas_state_portability.py
+9a7e2f4f8135ada5a2eb1e301d97dfb8eb4014f434602f57cdc5e93749f5cf09 *core/atlas/engine/state/atlas_state_repair.py
+
+ core/atlas/agent/__init__.py                       |  63 ++++---
+ core/atlas/agent/project_instructions.py           | 123 +++++++++++++
+ core/atlas/agent/run_phases.py                     |  65 ++++++-
+ core/atlas/agent/session_queries.py                | 144 ++++++++++++++-
+ core/atlas/agent/tool_catalog.py                   |  13 ++
+ core/atlas/agent/tool_node.py                      | 200 ++++++++++++++++++---
+ core/atlas/engine/state/atlas_state_portability.py | 179 ++++++++++++++++++
+ core/atlas/engine/state/atlas_state_repair.py      |  13 +-
+ 8 files changed, 739 insertions(+), 61 deletions(-)
+== kernel support copied 2026-11-18T19:34:21Z ==
+2b6b5671e9078a286ad1f8620ac36ffc43d6a4603eb0255ab6af462f1d90a403 *core/atlas/engine/kernel/loop.py
+d075f961b4cfa57082e68cfa5d8c606efc0c054f15375639ed28eb00ba0e1107 *core/atlas/engine/kernel/model_call.py
+dea4c24cf331d162def883f4ada993d52e3c07cdfcd385eeb115225c2989f8ff *core/atlas/engine/kernel/edit.py
+8f6e93196eb6b30e5d74eb1067713e8ee1c3e93e9533ac6a63a16386d63c0dc0 *core/atlas/engine/kernel/exec.py
+d546770d96952652de15b6046f65c1f727762a454f3e2779afd19c31bf382138 *core/atlas/engine/kernel/tools.py
+
+ core/atlas/engine/kernel/edit.py       |  24 ++
+ core/atlas/engine/kernel/exec.py       |  14 +
+ core/atlas/engine/kernel/loop.py       | 533 ++++++++++++++++++++++++++++-----
+ core/atlas/engine/kernel/model_call.py | 142 +++++++--
+ core/atlas/engine/kernel/tools.py      |  10 +
+ 5 files changed, 633 insertions(+), 90 deletions(-)
+== local_execution support copied 2026-11-18T19:35:41Z ==
+565b868d4136dc42727dff8f9220fae99e8bc52748e74beeef8aff7b8ae097e5 *core/atlas/tools/local_execution.py
+ core/atlas/tools/local_execution.py | 213 +++++++++++++++++++++++++++++++++++-
+ 1 file changed, 207 insertions(+), 6 deletions(-)
+== models/router support copied 2026-11-18T19:39:20Z ==
+1a5adb9d57ca404b0e8ba2ab3f1c065312652e98876d166ebaf736d73bac3069 *core/atlas/models/router.py
+ core/atlas/models/router.py | 139 ++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 120 insertions(+), 19 deletions(-)
+== ssh support copied 2026-11-18T20:08:59Z ==
+84c3473b61dccb714a02f0dc7b980f4aa0f42db0bd1aa608df42f588ad1d8028 *core/atlas/ssh.py
+ core/atlas/ssh.py | 1637 +++++++++++++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 1589 insertions(+), 48 deletions(-)

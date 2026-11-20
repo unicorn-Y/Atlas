@@ -1,0 +1,60 @@
+============================= test session starts =============================
+collecting ... collected 22 items
+
+tests/test_skill_sources_dsh.py::test_dsh_project_roots_join_only_when_present_and_win_same_name 2026-11-19 03:56:29 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-vog88fau\atlas\config\atlas.toml
+PASSED [  4%]
+tests/test_skill_sources_dsh.py::test_dsh_user_roots_follow_dsh_precedence PASSED [  9%]
+tests/test_skill_sources_dsh.py::test_custom_runtime_and_bundled_roots_follow_the_ladder PASSED [ 13%]
+tests/test_skill_sources_dsh.py::test_invocation_policy_survives_new_sources PASSED [ 18%]
+tests/test_skill_sources_dsh.py::test_absent_dsh_roots_leave_the_source_list_unchanged PASSED [ 22%]
+tests/test_skill_sources_dsh.py::test_extension_config_absent_or_invalid_values_change_nothing PASSED [ 27%]
+tests/test_skill_sources_dsh.py::test_extension_config_wires_custom_runtime_and_bundled_roots PASSED [ 31%]
+tests/test_skill_sources_dsh.py::test_project_sources_do_not_escape_the_workspace PASSED [ 36%]
+tests/test_skill_sources_dsh.py::test_runtime_root_is_a_filesystem_source_only PASSED [ 40%]
+tests/test_skill_sources_dsh.py::test_same_name_precedence_walks_the_whole_dsh_ladder PASSED [ 45%]
+tests/test_skill_sources_dsh.py::test_adjacent_dual_source_same_name_prefers_higher_priority[project-dsh-beats-project-agents] PASSED [ 50%]
+tests/test_skill_sources_dsh.py::test_adjacent_dual_source_same_name_prefers_higher_priority[project-agents-beats-runtime] PASSED [ 54%]
+tests/test_skill_sources_dsh.py::test_adjacent_dual_source_same_name_prefers_higher_priority[runtime-beats-custom] PASSED [ 59%]
+tests/test_skill_sources_dsh.py::test_adjacent_dual_source_same_name_prefers_higher_priority[custom-beats-user-dsh] PASSED [ 63%]
+tests/test_skill_sources_dsh.py::test_adjacent_dual_source_same_name_prefers_higher_priority[user-dsh-beats-user-agents] PASSED [ 68%]
+tests/test_skill_sources_dsh.py::test_adjacent_dual_source_same_name_prefers_higher_priority[user-agents-beats-bundled] PASSED [ 72%]
+tests/test_skill_sources_dsh.py::test_project_skill_sources_only_cover_the_given_workspace PASSED [ 77%]
+tests/test_skill_sources_dsh.py::test_workspace_views_isolate_same_name_winner_and_unique_skills PASSED [ 81%]
+tests/test_skill_sources_dsh.py::test_with_sources_drop_removes_stale_project_family_from_the_view_only PASSED [ 86%]
+tests/test_skill_sources_dsh.py::test_scoped_project_skill_activation_keeps_the_source_policy_gate PASSED [ 90%]
+tests/test_skill_sources_dsh.py::test_desktop_run_start_resolves_skills_in_the_session_workspace PASSED [ 95%]
+tests/test_skill_sources_dsh.py::test_cli_exec_preload_reads_the_command_workspace_project_sources PASSED [100%]
+
+============================== warnings summary ===============================
+tests/test_skill_sources_dsh.py::test_dsh_project_roots_join_only_when_present_and_win_same_name
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_skill_sources_dsh.py::test_dsh_project_roots_join_only_when_present_and_win_same_name
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_skill_sources_dsh.py::test_dsh_project_roots_join_only_when_present_and_win_same_name
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_skill_sources_dsh.py::test_dsh_project_roots_join_only_when_present_and_win_same_name
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_skill_sources_dsh.py::test_dsh_project_roots_join_only_when_present_and_win_same_name
+  D:\Atlas\.worktrees\zcode-exec06-skill-sources\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 22 passed, 5 warnings in 3.73s ========================

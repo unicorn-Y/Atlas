@@ -234,7 +234,8 @@ async def test_web_extract_caps_text_redirect_checks_and_reports_missing_caption
         async def __aenter__(self): return self.client
         async def __aexit__(self, *_args): await self.client.aclose()
 
-    with pytest.raises(ValueError, match="内网"):
+    # Cross-origin redirects are rejected before the target is fetched or resolved.
+    with pytest.raises(ValueError, match="跨源"):
         await extract_web("https://example.com/redirect", client_factory=RedirectClient)
 
     class LongClient:

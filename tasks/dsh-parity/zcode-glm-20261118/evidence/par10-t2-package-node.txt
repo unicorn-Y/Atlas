@@ -1,0 +1,29 @@
+PAR-10-T2 package:node evidence 2026-11-18T21:52:06Z
+
+=== first attempt (official source download; environment npmrc has allow-scripts=...) ===
+observed: download+extract OK; npm ci for whatsapp bridge failed:
+npm error code EALLOWSCRIPTS
+npm error --allow-scripts is not allowed in project-scoped installs. Add the entries to the "allowScripts" field in package.json, or to .npmrc, instead.
+npm error path .../frontend
+npm error command failed
+package-node.mjs: Error: ...backend-release\runtime\node\node.exe exited with code 1
+EXIT=1
+
+=== retry with user npmrc bypassed and local official archive ===
+$ ATLAS_NODE_ARCHIVE=...\backend-build\node-runtime\node-v24.21.0-win-x64.zip NPM_CONFIG_USERCONFIG=...\empty.npmrc npm run package:node
+npm notice run @atlas/frontend@0.1.1 package:node
+npm notice run node scripts/package-node.mjs
+Clearing Node runtime staging: D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\backend-release\runtime\node
+Node runtime source selection: local archive D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\backend-build\node-runtime\node-v24.21.0-win-x64.zip
+Node runtime archive SHA-256: 158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541
+npm warn Unknown env config "global-ignore-file". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+added 89 packages in 6s
+npm warn install-scripts 2 packages have install scripts not yet covered by allowScripts:
+npm warn install-scripts   @whiskeysockets/baileys@6.7.24 (preinstall: node ./engine-requirements.js)
+npm warn install-scripts   protobufjs@7.6.6 (postinstall: node scripts/postinstall)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+Bundled Node v24.21.0 and npm/npx under frontend\backend-release\runtime\node; verified local archive D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\backend-build\node-runtime\node-v24.21.0-win-x64.zip; archive SHA-256 158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541
+Bundled WhatsApp Baileys bridge under frontend\backend-release\runtime\whatsapp-bridge.
+EXIT=0

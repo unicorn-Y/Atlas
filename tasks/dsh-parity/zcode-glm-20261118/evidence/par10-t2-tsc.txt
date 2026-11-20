@@ -1,0 +1,4 @@
+$ npx tsc -p tsconfig.electron.json --noEmit
+npm notice run atlas@0.1.0 npx
+npm notice run tsc -p tsconfig.electron.json --noEmit
+EXIT=0

@@ -1,0 +1,141 @@
+EXEC-06 · 17 项“仅在途快照失败”的等价对照
+日期: 2026-11-18
+当前树: D:/Atlas wave3 @ 060071ab + 141 项在途改动(git status 只读,未改产品文件)
+基线隔离树: D:/Atlas/.worktrees/zcode-exec06-baseline @ 060071ab(detached,新建)
+Python/依赖: 同一解释器与同一 conftest 语义;所有运行使用独立 --basetemp,未触碰 8765/用户数据
+原始快照来源: evidence/pair2-inflight-failed.txt(20 项,含 3 项两树皆败)、pair2-clean-failed.txt(3 项)
+
+================================================================================
+0. 17 项划分(与 WATCH-05 交接一致)
+================================================================================
+基线存在(8):
+  test_app_server_sdk_lifecycle.py: 5
+    - test_session_wait_unknown_session_is_rejected
+    - test_session_wait_on_idle_session_returns_immediately
+    - test_session_wait_blocks_until_run_settles_with_status_notifications
+    - test_shutdown_acknowledges_and_drains_active_run
+    - test_acp_protocol_rejects_app_server_lifecycle_methods
+  test_app_server_acp.py: 3
+    - test_acp_session_list_resume_and_permission_config_round_trip
+    - test_app_server_rejects_acp_session_list_method
+    - test_acp_approval_waits_for_client_and_rejects_reject_once
+基线不存在(9):
+  test_app_server_sdk_lifecycle.py: 1
+    - test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event
+  test_app_server_acp.py: 6
+    - test_real_acp_subprocess_cancel_discards_partial_attempt_and_persists_audit
+    - test_acp_free_text_input_fails_explicitly_without_waiting_or_permission
+    - test_acp_does_not_stream_discarded_attempt_text
+    - test_acp_kernel_attempt_stream_returns_only_committed_attempt
+    - test_acp_kernel_permission_decision_controls_real_tool_side_effect[reject_once-False]
+    - test_acp_kernel_permission_decision_controls_real_tool_side_effect[allow_once-True]
+  test_projects.py: 2
+    - test_child_directory_instruction_update_reaches_next_kernel_model_request
+    - test_kernel_instruction_bootstrap_requires_matching_trusted_workspace
+基线存在性判定: git show 060071ab:<file> | grep "def <name>(";
+基线文件存在但 def 缺失 = 测试函数为在途新增(9);计数与 WATCH-05 的 8/9 完全一致。
+
+================================================================================
+1. 8 项基线存在:逐同名节点复验(两产品代码 × 同一测试)
+================================================================================
+命令 A(基线代码 + 基线测试;pristine worktree,基线测试文件)
+  cd D:/Atlas/.worktrees/zcode-exec06-baseline/core
+  python -m pytest -q -o addopts= --tb=line --basetemp=...base8b \
+    <8 个 nodeid>
+结果: 8 passed;EXIT=0
+证据: evidence/exec06-17fail-baseline-basetests-8pass.txt
+
+命令 B(当前代码 + 当前测试)
+  cd D:/Atlas/core
+  python -m pytest -q -o addopts= --tb=line --basetemp=...inflight8 <8 个 nodeid>
+结果: 8 passed;EXIT=0(2026-11-18 本轮)
+说明: 早前快照中这 8 项失败,本轮同名节点在当前树上全部通过 → 早前失败不可复现。
+
+命令 C(基线代码 + 当前测试;同测试同夹具)
+  把当前树的 test_app_server_sdk_lifecycle.py/test_app_server_acp.py/test_projects.py/
+  test_app_server_sdk_subprocess_attempts.py/fakes/fake_llm_provider.py/conftest.py
+  复制进基线 worktree,再运行同一 17 nodeid 超集。
+结果: 8 项全部在 11 passed 中(见 §2 矩阵) → 测试本身不依赖当前产品代码。
+
+结论: 8/8 基线存在项 = 基线通过、当前通过、同测试跨代码通过。无代码回归可归因。
+
+================================================================================
+2. 9 项基线不存在:同一测试 + 同一夹具,两套产品代码
+================================================================================
+命令 D(当前代码 + 当前测试)
+  cd D:/Atlas/core
+  python -m pytest -q -o addopts= --tb=line --basetemp=...cur17full <17 nodeid>
+结果: 17 passed;EXIT=0
+证据: evidence/exec06-17fail-currenttree-curtests.txt
+
+命令 E(基线代码 + 当前测试,同 §1 命令 C 的复制)
+  cd D:/Atlas/.worktrees/zcode-exec06-baseline/core
+  python -m pytest -q -o addopts= --tb=line --basetemp=...base17full <同一 17 nodeid>
+结果: 6 failed, 11 passed;EXIT=1
+证据: evidence/exec06-17fail-baseline-curtests.txt
+
+命令 F(仅 6 个基线失败项,取精确断言)
+  同命令 E 的子树;--tb=short
+结果: 6 failed, 1 passed(参数化另一个分支);EXIT=1
+证据: evidence/exec06-17fail-baseline-productcode-6fails.txt
+
+逐项矩阵(CT=当前代码+当前测试;BT=基线代码+当前测试):
+基线存在 8:
+  1 test_session_wait_unknown_session_is_rejected                     CT pass  BT pass
+  2 test_session_wait_on_idle_session_returns_immediately            CT pass  BT pass
+  3 test_session_wait_blocks_until_run_settles_with_status_notifications CT pass BT pass
+  4 test_shutdown_acknowledges_and_drains_active_run                  CT pass  BT pass
+  5 test_acp_protocol_rejects_app_server_lifecycle_methods            CT pass  BT pass
+  6 test_acp_session_list_resume_and_permission_config_round_trip     CT pass  BT pass
+  7 test_app_server_rejects_acp_session_list_method                   CT pass  BT pass
+  8 test_acp_approval_waits_for_client_and_rejects_reject_once        CT pass  BT pass
+基线不存在 9:
+  9 test_app_server_prompt_returns_only_successful_attempt_and_keeps_rollback_event
+      CT pass  BT FAIL  E AssertionError: assert 'OLDNEW' == 'NEW'
+      → 基线把失败尝试的部分文本与成功尝试拼接;在途产品实现已隔离尝试。测试针对在途修复。
+ 10 test_real_acp_subprocess_cancel_discards_partial_attempt_and_persists_audit
+      CT pass  BT FAIL  E subprocess.TimeoutExpired: 'atlas.cli acp' timed out after 15 seconds
+      → 基线 ACP 取消路径不结束;在途实现补齐。测试针对在途功能。
+ 11 test_acp_free_text_input_fails_explicitly_without_waiting_or_permission
+      CT pass  BT pass → 可移植测试(两套产品行为一致)
+ 12 test_acp_does_not_stream_discarded_attempt_text
+      CT pass  BT FAIL  E assert ['OLD','NEW'] == ['NEW']
+      → 基线泄漏被丢弃尝试的文本;在途实现过滤。测试针对在途修复。
+ 13 test_acp_kernel_attempt_stream_returns_only_committed_attempt
+      CT pass  BT FAIL  E 'OLDNEW NEW answer' != 'NEW answer'
+      → 同上,基线流未只保留已提交尝试。
+ 14 test_acp_kernel_permission_decision_controls_real_tool_side_effect[reject_once-False]
+      CT pass  BT pass → 可移植(拒绝路径两套一致)
+ 15 test_acp_kernel_permission_decision_controls_real_tool_side_effect[allow_once-True]
+      CT pass  BT FAIL  E assert False is True (must-not-be-created.txt exists)
+      → 基线 allow_once 未真正放行工具副作用;在途实现补齐。
+ 16 test_child_directory_instruction_update_reaches_next_kernel_model_request
+      CT pass  BT FAIL  E 'ROOT_RULE_FOR_MODEL' not in first prompt
+      → 基线不注入项目指令;在途 project_instructions 实现新增。测试针对在途功能。
+ 17 test_kernel_instruction_bootstrap_requires_matching_trusted_workspace
+      CT pass  BT pass → 可移植(信任边界两套一致)
+
+归因:
+- 代码回归 = 0 项。17/17 在当前代码 + 当前测试下通过;8/8 基线项在两套代码下通过。
+- 测试范围 = 6 项(9/10/12/13/15/16):测试断言的是在途产品新增/修复的行为,
+  基线代码不具备,故在基线上失败;这些是“在途功能测试”,不是对既有行为的回归。
+- 可移植新增测试 = 3 项(11/14/17):两套产品都通过。
+- 环境/顺序 = 早前 17 项在 7 文件混合批次中的失败签名:
+  `AttributeError: 'types.SimpleNamespace' object has no attribute
+  'local_execution_permission_mode'` 出现在 serve_stdio/LocalExecutionRuntime 构造,
+  是测试把 atlas.config.get_config 替换为窄 stub 后泄漏到长生命周期服务线程的
+  全局状态产物,不是产品断言。旁证:本轮 3 文件整跑出现 2 项 test_projects 失败
+  (test_session_search_scopes_to_project_conversations /
+  test_find_by_conversation_and_orchestrator_context_block),单独运行 2 passed;
+  即同一批内存在顺序/全局状态污染,单独/目标 nodeid 运行不复现。
+
+================================================================================
+3. 结论与后续
+================================================================================
+- 交接要求完成:8 项逐同名节点复验(基线+当前);9 项同测试同夹具跑两套产品代码。
+- 原“17 项在途回归”定性修正为:0 项代码回归;6 项在途功能测试范围;3 项可移植测试;
+  早前快照的失败为环境/测试顺序污染(不可复现)。
+- 遗留(非 17 项):test_app_server_sdk_lifecycle/test_app_server_acp/test_projects 三文件
+  整跑存在测试间污染(2 项 project 失败单独通过)。建议后续批次做 fixture 隔离
+  (get_config patch 不跨线程/不跨测试),不在本批改测试文件。
+- 基线 worktree 在取证后已恢复为基线测试文件,当前树产品文件未改动。

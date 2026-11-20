@@ -1,0 +1,126 @@
+EXEC-06 · F03 残余 4 行(架构级)Atlas 对照
+日期: 2026-11-18;当前树 D:/Atlas wave3@060071ab + 在途;DSH rc.4 3f321d32
+方法: 只读源码/配置核对 + grep 反查;不改产品文件。
+
+================================================================================
+A. B-F03-WEB-BOOT-01 · Web 双模式启动
+================================================================================
+DSH:
+- apps/web/src/main.ts:1-40
+  - `dshDesktopBoot` 存在 → 桌面模式:先 `desktop.ready()` 取 injections+streamBaseUrl,
+    设置 `__DSH_TRANSPORT__={ownsHost:true,streamBaseUrl}`,applyIndexInjections,
+    再 resolve `__DSH_BOOT_READY__` gate;异常走 `desktop.failed(message)`.
+  - 不存在 → 独立浏览器:直接 `new AppWebEntry(el).run(undefined)`.
+  - 缺 #root / 桌面缺 boot gate 均显式报错,不静默。
+- packages/client/web/src/boot.ts:23-120
+  - AppWebEntry.run: await `__DSH_BOOT_READY__.promise`,
+    要求 `__ModuleLoader__` facade,`moduleLoader.create({boot:__DSH_BOOT__,
+    staticModules:getStaticModules(),...transport})`,boot page → 激活审计 → mountClient。
+  - 失败:console.error + onFailure(桌面原生恢复)或 BootPage.fail(浏览器页内)。
+- 证据:apps/web/tests/desktop-boot.spec.ts:19-64(桌面转发失败/拒绝 gate/浏览器
+  失败留在 Web 内核/缺 root/缺 readiness 四类断言)。
+
+Atlas:
+- frontend/index.html:14 `<div id="root">` + :16 `/src/renderer/main.tsx`。
+- frontend/src/renderer/main.tsx:13-15 无条件 `ReactDOM.createRoot(#root).render(<App/>)`;
+  无 boot gate、无启动失败上报、无注入表。
+- Electron 装载:frontend/src/main/electron.ts:603-623(窗口 load dev URL 或
+  dist/index.html;dev 分支仅 VITE_DEV_SERVER_URL)、:1124-1132(主窗口同)、
+  :1791-1839(app ready → createWindow/startBackend;异常 dialog.showErrorBox + exit(1))。
+- preload:frontend/src/preload/index.cts:180 `exposeInMainWorld('atlasDesktop',...)`;
+  apiBaseUrl 在 :8 由 `ATLAS_API_BASE_URL/ATLAS_PORT` 同步给出;后端启动进度经
+  `BACKEND_STARTUP_CHANNEL` 推送(electron.ts:1831-1832),渲染层可先渲染后等待。
+- 后端只托管极简移动页 `core/atlas/api/remote_router.py:16-18`(`/remote`,内嵌 HTML),
+  不是完整 SPA。
+
+差距:
+- 无独立浏览器完整应用模式(全 UI 只能由 Electron 装载);
+- 无 boot 握手三元组(ready → injections/streamBaseUrl → boot-ready gate);
+- 无 boot-failed 协议;
+- 后端不托管 Vite 产物的完整应用。
+状态: 部分(桌面分支存在,浏览器分支缺失)。
+验收目标:
+1) 浏览器直接访问后端托管地址即可加载完整 UI(无 Electron);
+2) 启动就绪门闩存在:插件/资源注入完成前不挂载根;
+3) 启动失败有用户可见面并可重试;
+4) 复验:后端路由测试(SPA index/assets 200 + 正确 CSP)+ 浏览器 e2e 首屏/失败注入。
+
+================================================================================
+B. B-F03-RENDER-02 · renderSlot('root') 应用装配
+================================================================================
+DSH:
+- packages/client/ui-renderer/src/client/app.tsx:1-21: `buildRenderApp` 返回
+  `() => ctx.slots.renderSlot('root',{})`;注释:root 是应用里唯一的 ctx 级 slot 渲染。
+- packages/client/ui-renderer/src/client/registry.ts:24-40: SlotMap 内置 'root'
+  {kind:'single',scope:'root'};SlotCore 预置该洞;ui-layout 的 AppFrame 占据,
+  禁止二次注册(root 单槽 shadows),浮层应注册到 shell.overlay。
+- packages/client/ui-layout/src/client/index.ts:193-201: AppFrame 在 root 内声明
+  sidebar/main/rightbar/shell.bottom/shell.overlay/shell.leading。
+- 证据:packages/client/ui-renderer/tests/ui-renderer.client.spec.tsx、
+  tests/registry.client.spec.ts。
+
+Atlas:
+- frontend/src/renderer/main.tsx:13-15 直接 `createRoot().render(<App/>)`;
+- App.tsx 为单体组件树;全 renderer grep `renderSlot|SlotRegistry|registerSlot` = 0 命中;
+- 面板/组件注册为硬编码 import(无运行时候选表)。
+
+差距: 无 slot 注册表/root 洞/declare+render+unload 生命周期/单槽占用冲突规则;
+扩展面无法在不改 App.tsx 的情况下插入。
+状态: 部分(有应用渲染入口,无 slot 装配机制)。
+验收目标:
+1) SlotRegistry 服务:declare(kind/scope)、renderSlot(name)、卸载级联;
+2) root 为 single/root scope,第二注册被拒绝而非覆盖;
+3) App 根只渲染 root,AppFrame 经注册占据并声明子槽;
+4) 复验:registry 单测(declare/render/unload/冲突)+ 现有页面回归 vitest。
+
+================================================================================
+C. B-F03-RENDER-07 · 平台静态模块表(seed)
+================================================================================
+DSH:
+- packages/client/web/src/seed.ts:1-43: 平台单例表=getStaticModules(),
+  仅 11 个词(react、react/jsx-runtime、react-dom、react-dom/client、cordis、zod、
+  @tanstack/react-virtual、dsh-client-store、dsh-client-ui-slots、
+  dsh-client-ui-primitives、dsh-client-ui-dockkit);`satisfies Record<PlatformModule,unknown>`
+  与 platform.ts 单一事实源对齐,漂移即编译失败。
+- packages/client/modules/src/client/manifest.ts:378-381 staticModules 进入创建参数;
+- packages/client/modules/src/client/system.ts:101,136 `seed = new Map(Object.entries(...))`;
+  :330-336 require 顺序 seed→materialized→factory,全部未命中即 loud error;
+  :384-392 import 顺序 seed→cache→graph row,未命中 loud error(运行时 bundle 纯度门)。
+Atlas:
+- frontend/vite.config.ts + 静态 import;frontend/package.json build=vite build;
+- grep `staticModules|PLATFORM_MODULES|getStaticModules|__ModuleLoader__` = 0 命中。
+差距: 无运行时模块表/seed/require miss 的显式错误;所有依赖构建期打包,插件无法
+在渲染层动态装载共享单例。
+状态: 缺失。
+验收目标: 平台单例表 + require 解析顺序 + 未命中 loud error 的渲染层单测;
+词表与导出一致性(编译期或启动期断言)。
+
+================================================================================
+D. B-F03-RENDER-08 · parseBootManifest
+================================================================================
+DSH:
+- packages/client/modules/src/client/manifest.ts:229-330 逐字段校验:
+  rev:string;release 可选{version:string,commit?:string}(其余成员丢弃);
+  entries/batches 必须数组;entry 必含 string id/url/rev,重复 id 拒绝,
+  inject/external 可选 string[],immediately 可选 boolean;
+  batch.phase ∈ {bootstrap,application},url/rev 为 string,entries 非空 string[],
+  批次 URL 不得重复,条目必须属于且仅属于一个批次,未知条目/无批次均 loud 抛错;
+  产物 BootManifest{rev,release?,modules[{id,url,rev,inject,external,initialUrl}],
+  plugins[{id,inject,immediately}]}。
+- 证据:packages/client/modules/tests/loader.client.spec.ts:683-794(12 类拒绝/边界)。
+Atlas:
+- 无 boot manifest;frontend/index.html 固定单入口,Vite 产出一组静态 assets;
+- grep `__DSH_BOOT__|parseBootManifest|boot manifest` = 0 命中。
+差距: 无 rev/release/entries/batches 解析、重复/未知/无批次校验、两相位调度。
+状态: 缺失。
+验收目标: 与 DSH 同等校验矩阵(重复 id、未知批次条目、一条目多批次、无批次、
+错误 phase、重复批次 URL、release 形状、immediately 类型)全部 loud 拒绝;
+正常图投影 modules/plugins 两视图;复验:parser 单测逐条对应。
+
+================================================================================
+E. 复验命令(只读)
+================================================================================
+cd D:/Atlas && grep -rn "renderSlot\|SlotRegistry\|registerSlot" frontend/src --include=*.ts --include=*.tsx
+cd D:/Atlas && grep -rn "staticModules\|PLATFORM_MODULES\|__DSH_BOOT__\|parseBootManifest" frontend/src --include=*.ts --include=*.tsx
+结果: 均为 0 命中(2026-11-18)。
+DSH 侧锚点以 rc.4 检出的文件与行号为准(见上)。

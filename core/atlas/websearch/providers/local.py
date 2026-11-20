@@ -34,12 +34,16 @@ class LocalProvider(WebProvider):
     can_extract = True
 
     async def extract(self, urls: list[str], settings: WebSettings) -> list[dict[str, Any]]:
-        from atlas.tools.web_extract import extract_web
+        from atlas.tools.web_extract import WebFetchPolicyError, extract_web
 
         out = []
         for url in urls:
             try:
                 page = await extract_web(url)
+            except WebFetchPolicyError as exc:
+                out.append({"url": url, "title": "", "content": "",
+                            "error": str(exc), "error_category": "policy"})
+                continue
             except VENDOR_ERRORS as exc:
                 out.append(page_error(url, f"local read failed: {exc}"))
                 continue
@@ -53,7 +57,8 @@ class LocalProvider(WebProvider):
                 out.append(page_error(url, f"local read got only {len(text.strip())} chars (JS-rendered or blocked page)"))
                 continue
             out.append(document(str(page.get("url") or url), str(page.get("title") or ""), text,
-                                served_by="local", kind=page.get("kind"), truncated=page.get("truncated")))
+                                served_by="local", kind=page.get("kind"),
+                                truncated=page.get("truncated"), status_code=page.get("status_code")))
         return out
 
 

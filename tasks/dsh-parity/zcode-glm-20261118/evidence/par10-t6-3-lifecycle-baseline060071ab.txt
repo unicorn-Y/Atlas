@@ -1,0 +1,185 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+rootdir: D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core
+configfile: pyproject.toml
+plugins: anyio-4.12.1, langsmith-0.14.0, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 3 items
+
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child 2026-11-19 06:07:45 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-llll_pdj\atlas\config\atlas.toml
+FAILED [ 33%]
+tests/test_mcp_lifecycle_shutdown.py::test_cancelled_mcp_discovery_stops_its_real_stdio_child FAILED [ 66%]
+tests/test_mcp_lifecycle_shutdown.py::test_cancelled_owner_does_not_skip_other_server_cleanup FAILED [100%]
+
+================================== FAILURES ===================================
+______________ test_stdio_session_shutdown_exits_its_real_child _______________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par10-mcp-lifecycle-gate/.tmp/t63-baseline2/test_stdio_session_shutdown_ex0')
+
+    async def test_stdio_session_shutdown_exits_its_real_child(tmp_path: Path) -> None:
+        server_script = _write_fake_server(tmp_path)
+        config = MCPServerConfig(
+            name="lifecycle-test",
+            command=sys.executable,
+            args=[str(server_script)],
+            cwd=str(tmp_path),
+        )
+        client = MCPClient()
+        owner_tasks: dict[str, asyncio.Task[object] | None] = {"enter": None, "exit": None}
+        original_stdio_client = mcp_client_module.stdio_client
+    
+        @asynccontextmanager
+        async def record_stdio_owner(parameters, errlog):
+            transport_cm = original_stdio_client(parameters, errlog)
+            streams = await transport_cm.__aenter__()
+            owner_tasks["enter"] = asyncio.current_task()
+            try:
+                yield streams
+            finally:
+                owner_tasks["exit"] = asyncio.current_task()
+                await transport_cm.__aexit__(None, None, None)
+    
+        try:
+            with (
+                patch("atlas.tools.mcp_client._parse_server_configs", return_value=[config]),
+                patch("atlas.tools.mcp_client.stdio_client", side_effect=record_stdio_owner),
+            ):
+                await client.start()
+>               assert client.get_server_names() == ["lifecycle-test"], client.get_runtime_status()
+E               AssertionError: {'available': True, 'node_required': False, 'blocking_reason': None, 'servers': [{'name': 'lifecycle-test', 'configured': True, 'enabled': True, 'transport': 'stdio', ...}], ...}
+E               assert [] == ['lifecycle-test']
+E                 
+E                 Right contains one more item: 'lifecycle-test'
+E                 
+E                 Full diff:
+E                 + []
+E                 - [
+E                 -     'lifecycle-test',
+E                 - ]
+
+tests\test_mcp_lifecycle_shutdown.py:93: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-11-19 06:07:45 [info     ] mcp.starting                   count=1 names=['lifecycle-test']
+-------------------------- Captured stdout teardown ---------------------------
+2026-11-19 06:07:47 [warning  ] mcp.owner_cancelled            server=lifecycle-test
+___________ test_cancelled_mcp_discovery_stops_its_real_stdio_child ___________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par10-mcp-lifecycle-gate/.tmp/t63-baseline2/test_cancelled_mcp_discovery_s0')
+
+    async def test_cancelled_mcp_discovery_stops_its_real_stdio_child(tmp_path: Path) -> None:
+        server_script = _write_fake_server(tmp_path)
+        config = MCPServerConfig(
+            name="lifecycle-test",
+            command=sys.executable,
+            args=[str(server_script)],
+            cwd=str(tmp_path),
+        )
+        client = MCPClient()
+        discovery_started = asyncio.Event()
+    
+        async def wait_for_discovery(self):
+            discovery_started.set()
+            await asyncio.Event().wait()
+    
+        try:
+            with (
+                patch("atlas.tools.mcp_client._parse_server_configs", return_value=[config]),
+                patch.object(mcp_client_module.ClientSession, "list_tools", wait_for_discovery),
+            ):
+                start_task = asyncio.create_task(client.start())
+                await asyncio.wait_for(discovery_started.wait(), timeout=5)
+                assert _matching_children(server_script)
+                start_task.cancel()
+>               with pytest.raises(asyncio.CancelledError):
+E               Failed: DID NOT RAISE CancelledError
+
+tests\test_mcp_lifecycle_shutdown.py:137: Failed
+---------------------------- Captured stdout call -----------------------------
+2026-11-19 06:07:47 [info     ] mcp.starting                   count=1 names=['lifecycle-test']
+2026-11-19 06:07:47 [info     ] mcp.server_initialized         protocol=2025-11-25 server=lifecycle-test server_info="name='lifecycle-test' title=None version='1' description=None website_url=None icons=None"
+-------------------------- Captured stdout teardown ---------------------------
+2026-11-19 06:07:47 [warning  ] mcp.owner_cancelled            server=lifecycle-test
+___________ test_cancelled_owner_does_not_skip_other_server_cleanup ___________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par10-mcp-lifecycle-gate/.tmp/t63-baseline2/test_cancelled_owner_does_not_0')
+
+    async def test_cancelled_owner_does_not_skip_other_server_cleanup(tmp_path: Path) -> None:
+        first_dir = tmp_path / "first"
+        second_dir = tmp_path / "second"
+        first_dir.mkdir()
+        second_dir.mkdir()
+        first_script = _write_fake_server(first_dir)
+        second_script = _write_fake_server(second_dir)
+        configs = [
+            MCPServerConfig(
+                name=name,
+                command=sys.executable,
+                args=[str(script)],
+                cwd=str(script.parent),
+            )
+            for name, script in (("first", first_script), ("second", second_script))
+        ]
+        client = MCPClient()
+    
+        try:
+            with patch("atlas.tools.mcp_client._parse_server_configs", return_value=configs):
+                await client.start()
+>           assert len(_matching_children(first_script)) >= 1
+E           AssertionError: assert 0 >= 1
+E            +  where 0 = len([])
+E            +    where [] = _matching_children(WindowsPath('D:/Atlas/.worktrees/zcode-par10-mcp-lifecycle-gate/.tmp/t63-baseline2/test_cancelled_owner_does_not_0/first/fake_mcp_server.py'))
+
+tests\test_mcp_lifecycle_shutdown.py:175: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-11-19 06:07:47 [info     ] mcp.starting                   count=2 names=['first', 'second']
+-------------------------- Captured stdout teardown ---------------------------
+2026-11-19 06:07:47 [warning  ] mcp.owner_cancelled            server=second
+2026-11-19 06:07:47 [warning  ] mcp.owner_cancelled            server=first
+============================== warnings summary ===============================
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+  D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+  D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+  D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+  D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child
+  D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_mcp_lifecycle_shutdown.py::test_stdio_session_shutdown_exits_its_real_child - AssertionError: {'available': True, 'node_required': False, 'blocking_reason': None, 'servers': [{'name': 'lifecycle-test', 'configured': True, 'enabled': True, 'transport': 'stdio', ...}], ...}
+assert [] == ['lifecycle-test']
+  
+  Right contains one more item: 'lifecycle-test'
+  
+  Full diff:
+  + []
+  - [
+  -     'lifecycle-test',
+  - ]
+FAILED tests/test_mcp_lifecycle_shutdown.py::test_cancelled_mcp_discovery_stops_its_real_stdio_child - Failed: DID NOT RAISE CancelledError
+FAILED tests/test_mcp_lifecycle_shutdown.py::test_cancelled_owner_does_not_skip_other_server_cleanup - AssertionError: assert 0 >= 1
+ +  where 0 = len([])
+ +    where [] = _matching_children(WindowsPath('D:/Atlas/.worktrees/zcode-par10-mcp-lifecycle-gate/.tmp/t63-baseline2/test_cancelled_owner_does_not_0/first/fake_mcp_server.py'))
+======================== 3 failed, 5 warnings in 5.61s ========================

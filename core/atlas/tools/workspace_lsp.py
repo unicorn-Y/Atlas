@@ -5,11 +5,15 @@
 
 from __future__ import annotations
 
+import os
+import posixpath
 from pathlib import Path
 from typing import Any
 
 
-def _workspace_file(workspace: str, raw_path: Any) -> tuple[Path, Path]:
+def _workspace_file(workspace: str, raw_path: Any, remote_world: Any = None) -> tuple[Any, str]:
+    if remote_world is not None:
+        return remote_world.workspace_file(raw_path)
     root = Path(workspace).expanduser().resolve()
     path = Path(str(raw_path or ""))
     path = (root / path).resolve() if not path.is_absolute() else path.resolve()
@@ -19,10 +23,10 @@ def _workspace_file(workspace: str, raw_path: Any) -> tuple[Path, Path]:
         raise ValueError("LSP queries are restricted to the active workspace.") from exc
     if not path.is_file():
         raise FileNotFoundError(f"File not found: {path}")
-    return root, path
+    return root, str(path)
 
 
-def _service_for(path: Path) -> tuple[Any, Any]:
+def _service_for(path: str) -> tuple[Any, Any]:
     from atlas.lsp import get_service
 
     service = get_service()
@@ -30,22 +34,25 @@ def _service_for(path: Path) -> tuple[Any, Any]:
         return None, {"available": False, "reason": "LSP is disabled or unavailable."}
     server = service._server_for(str(path))
     if server is None:
-        return None, {"available": False, "reason": f"No configured LSP server handles {path.suffix or 'this file type'}."}
+        suffix = os.path.splitext(path)[1]
+        return None, {"available": False, "reason": f"No configured LSP server handles {suffix or 'this file type'}."}
     return service, server
 
 
 async def _query(service: Any, server: Any, path: Path, method: str,
                  line: int | None = None, character: int | None = None,
-                 include_declaration: bool = True) -> Any:
-    client = await service._get_or_spawn(str(path))
+                 include_declaration: bool = True, remote_world: Any = None) -> Any:
+    if remote_world is None:
+        client = await service._get_or_spawn(str(path))
+    else:
+        client = await service._get_or_spawn(str(path), remote_world=remote_world)
     if client is None:
         return {"available": False, "reason": "No trusted and ready LSP server is available for this workspace."}
-    from atlas.lsp.client import file_uri
     from atlas.lsp.servers import language_id_for
 
     version = await client.open_file(str(path), language_id=language_id_for(str(path), server))
     del version
-    params: dict[str, Any] = {"textDocument": {"uri": file_uri(str(path))}}
+    params: dict[str, Any] = {"textDocument": {"uri": client._uri_for_path(str(path))}}
     if line is not None and character is not None:
         params["position"] = {"line": line, "character": character}
     if method == "textDocument/references":
@@ -60,23 +67,24 @@ async def _query(service: Any, server: Any, path: Path, method: str,
 
 def query_lsp(workspace: str, *, operation: str, path: str,
               line: int | None = None, character: int | None = None,
-              include_declaration: bool = True) -> dict[str, Any]:
-    root, file_path = _workspace_file(workspace, path)
+              include_declaration: bool = True, remote_world: Any = None) -> dict[str, Any]:
+    root, file_path = _workspace_file(workspace, path, remote_world)
+    relative = posixpath.relpath(file_path, root) if remote_world is not None else Path(file_path).relative_to(root).as_posix()
     service, server_or_error = _service_for(file_path)
     if service is None:
-        return {**server_or_error, "path": file_path.relative_to(root).as_posix()}
+        return {**server_or_error, "path": relative}
     if operation == "diagnostics":
         try:
             diagnostics = service._loop.run(
-                service._open_and_wait_async(str(file_path)), timeout=25.0,
+                service._open_and_wait_async(str(file_path), remote_world=remote_world), timeout=25.0,
             )
         except Exception as exc:
-            return {"available": False, "path": file_path.relative_to(root).as_posix(),
+            return {"available": False, "path": relative,
                     "reason": f"LSP diagnostics failed: {exc}"}
         if diagnostics is None:
-            return {"available": False, "path": file_path.relative_to(root).as_posix(),
+            return {"available": False, "path": relative,
                     "reason": "The language server did not return fresh diagnostics in time."}
-        return {"available": True, "path": file_path.relative_to(root).as_posix(),
+        return {"available": True, "path": relative,
                 "diagnostics": diagnostics}
     if operation in {"hover", "definition", "implementation", "references"}:
         if line is None or character is None or line < 0 or character < 0:
@@ -94,11 +102,11 @@ def query_lsp(workspace: str, *, operation: str, path: str,
     try:
         result = service._loop.run(
             _query(service, server_or_error, file_path, method, line, character,
-                   include_declaration), timeout=25.0,
+                   include_declaration, remote_world), timeout=25.0,
         )
     except Exception as exc:
         result = {"available": False, "reason": f"LSP {operation} failed: {exc}"}
-    result["path"] = file_path.relative_to(root).as_posix()
+    result["path"] = relative
     return result
 
 

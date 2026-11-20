@@ -11,12 +11,359 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from tests.fakes.fake_llm_provider import Error, FakeLLMServer, Hang, Text, ToolCall, write_atlas_home
+from tests.fakes.fake_llm_provider import DropMidStream, Error, FakeLLMServer, Hang, Text, ToolCall, write_atlas_home
 from atlas.engine.atlas_runtime import AtlasRuntime
 from atlas.agent import AgentOrchestrator, AgentRunContext
 from atlas.models.router import ModelRouter
 from atlas.tools.local_execution import LocalExecutionRuntime
 from tests.test_engine_model_wiring import _NativeAnthropicManager, _ProviderKeyManager
+
+
+@pytest.mark.asyncio
+async def test_retry_attempt_rollback_is_emitted_by_kernel_before_new_answer(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setenv("HERMES_STREAM_RETRIES", "1")
+    monkeypatch.setenv("ATLAS_MODEL_RETRY_BUDGET_ATTEMPTS", "2")
+    monkeypatch.setenv("ATLAS_MODEL_RETRY_BUDGET_SECONDS", "30")
+    monkeypatch.setattr("atlas.engine.kernel.model_call.asyncio.sleep", AsyncMock())
+
+    with FakeLLMServer([
+        DropMidStream("OLD answer", after_chars=3),
+        Text("NEW answer", chunk_chars=4),
+    ]) as fake:
+        home = tmp_path / "engine"
+        write_atlas_home(home, fake.base_url)
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        manager = _ProviderKeyManager(fake.base_url, current="fake-model")
+        manager._models = [{
+            "id": "fake-model", "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
+            "litellm_model": "openai/fake-model", "native_model": "fake-model",
+            "max_output_tokens": 256,
+        }]
+        manager._find_model = lambda model: next(
+            (item for item in manager._models if item["id"] == model), None,
+        )
+        manager._find_model = lambda _model: manager._models[0]
+        mcp = MagicMock()
+        mcp.get_tools_for_llm.return_value = []
+        mcp.list_tools.return_value = []
+        mcp.tool_count = 0
+        local = LocalExecutionRuntime()
+        agent = AgentOrchestrator(manager, MagicMock(), mcp_client=mcp, local_execution=local)
+        context = AgentRunContext(
+            cancel_event=asyncio.Event(), run_id="attempt-rollback",
+            conversation_id="attempt-rollback", workspace=str(tmp_path),
+            permission_mode="full_access",
+        )
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
+        monkeypatch.setattr(runtime, "_ensure_atlas_mcp_registered", lambda: [])
+        events = [event async for event in runtime.run_turn(
+            message="exercise retry attempt rollback", conversation_id="attempt-rollback",
+            workspace=str(tmp_path), history=[], atlas_agent=agent, atlas_context=context,
+        )]
+        await runtime.aclose()
+        await local.shutdown()
+
+    rollback = next(event for event in events if event["type"] == "message.rollback")
+    assert rollback["attempt"] == 1
+    assert rollback["attempt_id"]
+    chunks = [(index, event) for index, event in enumerate(events) if event["type"] == "chunk"]
+    old_chunks = [(index, event) for index, event in chunks if "OLD" in str(event.get("content", ""))]
+    new_chunks = [(index, event) for index, event in chunks if "NEW" in str(event.get("content", ""))]
+    assert old_chunks and all(event.get("attempt_id") == rollback["attempt_id"] for _, event in old_chunks)
+    assert new_chunks and all(event.get("attempt_id") != rollback["attempt_id"] for _, event in new_chunks)
+    assert events.index(rollback) < min(index for index, _ in new_chunks)
+    result = next(event for event in events if event["type"] == "atlas.result")
+    assert result["result"]["final_response"] == "NEW answer"
+    assert [event["type"] for event in events].index("message.rollback") < max(
+        index for index, event in enumerate(events) if event["type"] == "chunk"
+    )
+    from hermes_state import SessionDB
+
+    with SessionDB(db_path=runtime.home / "state.db") as db:
+        transcript = db.get_messages_as_conversation("attempt-rollback")
+        persisted_events = db.list_session_events("attempt-rollback", after_seq=0, limit=1000)
+    assistant_text = [str(item.get("content") or "") for item in transcript if item.get("role") == "assistant"]
+    discarded = [item for item in persisted_events if item.get("event_type") == "model/attempt"]
+    assert assistant_text and assistant_text[-1] == "NEW answer"
+    assert all("OLD" not in content for content in assistant_text)
+    assert any(
+        item["payload"].get("status") == "discarded"
+        and str(item["payload"].get("partial_text") or "").startswith("OLD")
+        and item["payload"].get("attempt_id") == rollback["attempt_id"]
+        for item in discarded
+    ), [(item.get("event_type"), item.get("payload")) for item in discarded]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_kernel_cancelled_stream_rolls_back_old_attempt_before_persisting_interrupt(
+    tmp_path, monkeypatch,
+):
+    from atlas.engine.kernel import loop as kernel_loop
+
+    with FakeLLMServer([Text("OLD answer", chunk_chars=4)]) as fake:
+        home = tmp_path / "engine"
+        write_atlas_home(home, fake.base_url)
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        manager = _ProviderKeyManager(fake.base_url, current="fake-model")
+        manager._models = [{
+            "id": "fake-model", "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
+            "litellm_model": "openai/fake-model", "native_model": "fake-model",
+            "max_output_tokens": 256,
+        }]
+        manager._find_model = lambda _model: manager._models[0]
+        mcp = MagicMock()
+        mcp.get_tools_for_llm.return_value = []
+        mcp.list_tools.return_value = []
+        mcp.tool_count = 0
+        local = LocalExecutionRuntime()
+        agent = AgentOrchestrator(manager, MagicMock(), mcp_client=mcp, local_execution=local)
+        cancel = asyncio.Event()
+        context = AgentRunContext(
+            cancel_event=cancel, run_id="attempt-cancel-rollback",
+            conversation_id="attempt-cancel-rollback", workspace=str(tmp_path),
+            permission_mode="full_access",
+        )
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
+        monkeypatch.setattr(runtime, "_ensure_atlas_mcp_registered", lambda: [])
+        original_complete_stream = kernel_loop.complete_stream
+
+        async def cancel_after_first_delta(*args, **kwargs):
+            on_text = kwargs["on_text"]
+
+            async def set_cancel_after_delta(delta):
+                await on_text(delta)
+                cancel.set()
+
+            kwargs["on_text"] = set_cancel_after_delta
+            return await original_complete_stream(*args, **kwargs)
+
+        monkeypatch.setattr(kernel_loop, "complete_stream", cancel_after_first_delta)
+        try:
+            events = []
+            cancelled = False
+            try:
+                async for event in runtime.run_turn(
+                    message="cancel after an OLD stream fragment",
+                    conversation_id="attempt-cancel-rollback", workspace=str(tmp_path),
+                    history=[], atlas_agent=agent, atlas_context=context, cancel_event=cancel,
+                ):
+                    events.append(event)
+            except asyncio.CancelledError:
+                cancelled = True
+        finally:
+            await runtime.aclose()
+            await local.shutdown()
+
+    old_chunk_index = next(
+        index for index, event in enumerate(events)
+        if event["type"] == "chunk" and "OLD" in str(event.get("content") or "")
+    )
+    rollback_index = next(
+        index for index, event in enumerate(events) if event["type"] == "message.rollback"
+    )
+    assert rollback_index > old_chunk_index
+    rollback = events[rollback_index]
+    result = next((event for event in events if event["type"] == "atlas.result"), None)
+    assert cancelled or (result and result["result"]["terminal_status"] == "user_interrupted")
+    from hermes_state import SessionDB
+
+    with SessionDB(db_path=runtime.home / "state.db") as db:
+        transcript = db.get_messages_as_conversation("attempt-cancel-rollback")
+        persisted_events = db.list_session_events("attempt-cancel-rollback", after_seq=0, limit=1000)
+    assistant_text = [str(item.get("content") or "") for item in transcript if item.get("role") == "assistant"]
+    assert all("OLD" not in content for content in assistant_text)
+    audit = [
+        item["payload"] for item in persisted_events
+        if item["event_type"] == "model/attempt"
+        and item["payload"].get("attempt_id") == rollback["attempt_id"]
+    ]
+    assert any(item.get("status") == "discarded" and item.get("category") == "cancelled"
+               and item.get("partial_text") for item in audit)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_configured_fallback_commits_new_attempt_and_audits_filtered_primary(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setenv("ATLAS_MODEL_RETRY_BUDGET_ATTEMPTS", "2")
+    monkeypatch.setenv("ATLAS_MODEL_RETRY_BUDGET_SECONDS", "30")
+    monkeypatch.setenv("CLAUDE_CODE_MAX_RETRIES", "0")
+    monkeypatch.setattr("atlas.engine.kernel.model_call.asyncio.sleep", AsyncMock())
+    from atlas.engine.kernel import loop as kernel_loop
+
+    original_complete_stream = kernel_loop.complete_stream
+    supplied_fallbacks = []
+
+    async def capture_complete_stream(*args, **kwargs):
+        supplied_fallbacks.append(list(kwargs.get("fallback_models") or []))
+        return await original_complete_stream(*args, **kwargs)
+
+    monkeypatch.setattr(kernel_loop, "complete_stream", capture_complete_stream)
+
+    with FakeLLMServer([
+        Text("OLD filtered answer", finish_reason="content_filter"),
+        Text("NEW fallback answer", chunk_chars=5),
+    ]) as fake:
+        home = tmp_path / "engine"
+        write_atlas_home(home, fake.base_url, extra_config=(
+            "engine:\n"
+            "  model_retries: 0\n"
+        ))
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        manager = _ProviderKeyManager(fake.base_url, current="primary-model")
+        base_route = {
+            "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
+            "base_url": fake.base_url, "max_output_tokens": 256,
+        }
+        manager._models = [
+            {
+                **base_route, "id": "primary-model", "litellm_model": "openai/primary-model",
+                "native_model": "primary-model",
+            },
+            {
+                **base_route, "id": "fallback-model", "litellm_model": "openai/fallback-model",
+                "native_model": "fallback-model",
+            },
+        ]
+        manager.current_litellm_model = "openai/primary-model"
+        manager._find_model = lambda model: next(
+            (item for item in manager._models if item["id"] == model), None,
+        )
+        mcp = MagicMock()
+        mcp.get_tools_for_llm.return_value = []
+        mcp.list_tools.return_value = []
+        mcp.tool_count = 0
+        local = LocalExecutionRuntime()
+        agent = AgentOrchestrator(manager, MagicMock(), mcp_client=mcp, local_execution=local)
+        context = AgentRunContext(
+            cancel_event=asyncio.Event(), run_id="fallback-attempt-isolation",
+            conversation_id="fallback-attempt-isolation", workspace=str(tmp_path),
+            permission_mode="full_access", fallback_models=["fallback-model"],
+        )
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
+        monkeypatch.setattr(runtime, "_ensure_atlas_mcp_registered", lambda: [])
+        try:
+            events = [event async for event in runtime.run_turn(
+                message="exercise configured fallback attempt isolation",
+                conversation_id="fallback-attempt-isolation", workspace=str(tmp_path),
+                history=[], atlas_agent=agent, atlas_context=context,
+            )]
+        finally:
+            await runtime.aclose()
+            await local.shutdown()
+
+    requests = fake.main_requests()
+    observed_models = [request["model"] for request in requests]
+    assert observed_models == ["primary-model", "fallback-model"], {
+        "observed_models": observed_models,
+        "supplied_fallbacks": supplied_fallbacks,
+    }
+    result = next(event for event in events if event["type"] == "atlas.result")
+    assert result["result"]["final_response"] == "NEW fallback answer"
+    assert not any(event.get("type") == "tool_started" for event in events)
+    from hermes_state import SessionDB
+
+    with SessionDB(db_path=runtime.home / "state.db") as db:
+        transcript = db.get_messages_as_conversation("fallback-attempt-isolation")
+        persisted_events = db.list_session_events("fallback-attempt-isolation", after_seq=0, limit=1000)
+    assistant_text = [str(item.get("content") or "") for item in transcript if item.get("role") == "assistant"]
+    assert assistant_text and "NEW fallback answer" in "\n".join(assistant_text)
+    assert all("OLD filtered answer" not in content for content in assistant_text)
+    discarded = [
+        item["payload"] for item in persisted_events
+        if item["event_type"] == "model/attempt" and item["payload"].get("status") == "discarded"
+    ]
+    assert any(str(item.get("partial_text") or "").startswith("OLD filtered answer") for item in discarded)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_kernel_discards_partial_failed_tool_call_before_retry_and_persists_only_new(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setenv("HERMES_STREAM_RETRIES", "1")
+    monkeypatch.setenv("ATLAS_MODEL_RETRY_BUDGET_ATTEMPTS", "2")
+    monkeypatch.setenv("ATLAS_MODEL_RETRY_BUDGET_SECONDS", "30")
+    monkeypatch.setattr("atlas.engine.kernel.model_call.asyncio.sleep", AsyncMock())
+    target = tmp_path / "must-not-be-written-by-failed-attempt.txt"
+    partial_arguments = (
+        f'{{"path":{json.dumps(str(target))},"content":"OLD partial side effect'
+    )
+
+    with FakeLLMServer([
+        DropMidStream(
+            "OLD answer", after_chars=3,
+            partial_tool_calls=[{
+                "id": "failed-write", "name": "write_file", "arguments": partial_arguments,
+            }],
+        ),
+        Text("NEW answer", chunk_chars=4, finish_reason="length"),
+        Text("continuation completed", chunk_chars=5),
+    ]) as fake:
+        home = tmp_path / "engine"
+        write_atlas_home(home, fake.base_url)
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        manager = _ProviderKeyManager(fake.base_url, current="fake-model")
+        manager._models = [{
+            "id": "fake-model", "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
+            "litellm_model": "openai/fake-model", "native_model": "fake-model",
+            "max_output_tokens": 256,
+        }]
+        manager._find_model = lambda _model: manager._models[0]
+        mcp = MagicMock()
+        mcp.get_tools_for_llm.return_value = []
+        mcp.list_tools.return_value = []
+        mcp.tool_count = 0
+        local = LocalExecutionRuntime()
+        agent = AgentOrchestrator(manager, MagicMock(), mcp_client=mcp, local_execution=local)
+        context = AgentRunContext(
+            cancel_event=asyncio.Event(), run_id="attempt-tool-isolation",
+            conversation_id="attempt-tool-isolation", workspace=str(tmp_path),
+            permission_mode="full_access",
+        )
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
+        monkeypatch.setattr(runtime, "_ensure_atlas_mcp_registered", lambda: [])
+        events = [event async for event in runtime.run_turn(
+            message="exercise failed partial tool attempt", conversation_id="attempt-tool-isolation",
+            workspace=str(tmp_path), history=[], atlas_agent=agent, atlas_context=context,
+        )]
+        await runtime.aclose()
+        await local.shutdown()
+
+    assert not target.exists(), "tool arguments from a discarded model attempt must never execute"
+    requests = fake.main_requests()
+    assert len(requests) == 3
+    continuation_messages = requests[2]["messages"]
+    assert any(row.get("role") == "assistant" and "NEW answer" in str(row.get("content"))
+               for row in continuation_messages)
+    assert any(row.get("role") == "user" and "Output token limit hit" in str(row.get("content"))
+               for row in continuation_messages)
+    result = next(event for event in events if event["type"] == "atlas.result")
+    assert result["result"]["final_response"] == "continuation completed"
+    streamed_text = "".join(
+        str(event.get("content") or "") for event in events if event.get("type") == "chunk"
+    )
+    assert "NEW answer" in streamed_text and "continuation completed" in streamed_text
+    from hermes_state import SessionDB
+
+    with SessionDB(db_path=runtime.home / "state.db") as db:
+        transcript = db.get_messages_as_conversation("attempt-tool-isolation")
+        persisted_events = db.list_session_events("attempt-tool-isolation", after_seq=0, limit=1000)
+    assistant_text = [str(item.get("content") or "") for item in transcript if item.get("role") == "assistant"]
+    assert assistant_text and any("NEW answer" in content for content in assistant_text)
+    assert any("continuation completed" in content for content in assistant_text)
+    assert all("OLD" not in content for content in assistant_text)
+    assert any(
+        item["event_type"] == "model/attempt"
+        and item["payload"].get("status") == "discarded"
+        and item["payload"].get("attempt_id")
+        and str(item["payload"].get("partial_text") or "").startswith("OLD")
+        for item in persisted_events
+    )
 
 
 def _disable_external_mcp(monkeypatch):
@@ -129,11 +476,29 @@ async def test_budget_unknown_usage_disables_retries_and_audits_one_send(tmp_pat
     assert events[-1]["type"] == "atlas.result"
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 @pytest.mark.parametrize("budgeted,expected_requests", [(True, 1), (False, 2)])
 async def test_stream_fault_budget_disables_hidden_retry_only_when_opted_in(
     tmp_path, monkeypatch, budgeted, expected_requests,
 ):
+    from atlas.usage import RunUsageBudget
+
+    budget_calls = []
+    original_reserve = RunUsageBudget.reserve
+    original_record = RunUsageBudget.record
+
+    def observe_reserve(self, request_id, estimated_input_tokens, **kwargs):
+        allowed = original_reserve(self, request_id, estimated_input_tokens, **kwargs)
+        budget_calls.append(("reserve", allowed, self.usage_unknown, estimated_input_tokens))
+        return allowed
+
+    def observe_record(self, usage):
+        budget_calls.append(("record", usage.get("usage_available"), usage.get("request_id")))
+        return original_record(self, usage)
+
+    monkeypatch.setattr(RunUsageBudget, "reserve", observe_reserve)
+    monkeypatch.setattr(RunUsageBudget, "record", observe_record)
     audit_path = tmp_path / "stream-budget.jsonl"
     if budgeted:
         monkeypatch.setenv("ATLAS_RUN_INPUT_TOKEN_LIMIT", "10000")
@@ -148,31 +513,69 @@ async def test_stream_fault_budget_disables_hidden_retry_only_when_opted_in(
     monkeypatch.setenv("HERMES_STREAM_RETRIES", "1")
     with FakeLLMServer([Hang(seconds=0.1), Text("retry reached")]) as fake:
         home = tmp_path / "engine"
-        write_atlas_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url, extra_config=(
+            "auxiliary:\n"
+            "  title_generation:\n"
+            "    enabled: false\n"
+        ))
         monkeypatch.setenv("HERMES_HOME", str(home))
-        manager = SimpleNamespace(
-            current_model="fake-model", current_litellm_model="fake-model",
-            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
-            list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
+        manager = _ProviderKeyManager(fake.base_url, current="fake-model")
+        manager._models = [{
+            "id": "fake-model", "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
+            "litellm_model": "openai/fake-model", "native_model": "fake-model",
+            "max_output_tokens": 256,
+        }]
+        manager._find_model = lambda _model: manager._models[0]
+        mcp = MagicMock()
+        mcp.get_tools_for_llm.return_value = []
+        mcp.list_tools.return_value = []
+        mcp.tool_count = 0
+        local = LocalExecutionRuntime()
+        agent = AgentOrchestrator(manager, MagicMock(), mcp_client=mcp, local_execution=local)
+        conversation_id = f"stream-budget-{budgeted}"
+        context = AgentRunContext(
+            cancel_event=asyncio.Event(), run_id=conversation_id,
+            conversation_id=conversation_id, workspace=str(tmp_path),
+            permission_mode="full_access",
         )
         runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
+        monkeypatch.setattr(runtime, "_ensure_atlas_mcp_registered", lambda: [])
         events = [event async for event in runtime.run_turn(
-            message="exercise stream retry policy", conversation_id=f"stream-budget-{budgeted}",
-            workspace=str(tmp_path), history=[],
+            message="exercise stream retry policy", conversation_id=conversation_id,
+            workspace=str(tmp_path), history=[], atlas_agent=agent, atlas_context=context,
         )]
         await runtime.aclose()
+        await local.shutdown()
 
-    assert len(fake.main_requests()) == expected_requests
-    assert events[-1]["type"] == "atlas.result"
+    requests = fake.main_requests()
+    assert len(requests) == expected_requests, [
+        {
+            "response": row.get("response"),
+            "tool_count": len(row.get("body", {}).get("tools") or []),
+            "last_role": ((row.get("body", {}).get("messages") or [{}])[-1].get("role")),
+        }
+        for row in fake.requests
+    ] + [{"budget_calls": budget_calls}]
+    result = next((event for event in events if event["type"] == "atlas.result"), None)
     if budgeted:
         import json
 
+        assert result is None
+        assert any(event["type"] == "error" for event in events), [
+            event.get("type") for event in events
+        ]
+        reservations = [call for call in budget_calls if call[0] == "reserve"]
+        records = [call for call in budget_calls if call[0] == "record"]
+        assert [call[1] for call in reservations] == [True, False], budget_calls
+        assert len(records) == 1 and records[0][1] is False, budget_calls
         rows = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
         assert len(rows) == 1 and rows[0]["budget_usage_unknown"] is True
     else:
-        assert events[-1]["result"]["final_response"] == "retry reached"
+        assert result is not None
+        assert result["result"]["final_response"] == "retry reached"
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 @pytest.mark.parametrize("budgeted,expected_requests", [(True, 1), (False, 2)])
 async def test_stream_options_compat_retry_is_budgeted_only_when_opted_in(
@@ -195,32 +598,151 @@ async def test_stream_options_compat_retry_is_budgeted_only_when_opted_in(
         Text("compatibility retry reached"),
     ]) as fake:
         home = tmp_path / "engine"
-        write_atlas_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url, extra_config=(
+            "auxiliary:\n"
+            "  title_generation:\n"
+            "    enabled: false\n"
+        ))
         monkeypatch.setenv("HERMES_HOME", str(home))
-        manager = SimpleNamespace(
-            current_model="fake-model", current_litellm_model="fake-model",
-            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
-            list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
+        manager = _ProviderKeyManager(fake.base_url, current="fake-model")
+        manager._models = [{
+            "id": "fake-model", "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
+            "litellm_model": "openai/fake-model", "native_model": "fake-model",
+            "max_output_tokens": 256,
+        }]
+        manager._find_model = lambda model: next(
+            (item for item in manager._models if item["id"] == model), None,
+        )
+        mcp = MagicMock()
+        mcp.get_tools_for_llm.return_value = []
+        mcp.list_tools.return_value = []
+        mcp.tool_count = 0
+        local = LocalExecutionRuntime()
+        agent = AgentOrchestrator(manager, MagicMock(), mcp_client=mcp, local_execution=local)
+        context = AgentRunContext(
+            cancel_event=asyncio.Event(), run_id=f"stream-options-{budgeted}",
+            conversation_id=f"stream-options-budget-{budgeted}", workspace=str(tmp_path),
+            permission_mode="full_access",
         )
         runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
+        monkeypatch.setattr(runtime, "_ensure_atlas_mcp_registered", lambda: [])
         events = [event async for event in runtime.run_turn(
             message="exercise stream_options compatibility retry",
-            conversation_id=f"stream-options-budget-{budgeted}",
-            workspace=str(tmp_path), history=[],
+            conversation_id=context.conversation_id, workspace=str(tmp_path), history=[],
+            atlas_agent=agent, atlas_context=context,
         )]
         await runtime.aclose()
+        await local.shutdown()
 
     requests = fake.main_requests()
     assert len(requests) == expected_requests
     assert "stream_options" in requests[0]
-    assert events[-1]["type"] == "atlas.result"
+    result = next((event for event in events if event["type"] == "atlas.result"), None)
     if budgeted:
         import json
 
+        assert result is None
+        assert any(event["type"] == "error" for event in events)
         rows = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
         assert len(rows) == 1 and rows[0]["budget_usage_unknown"] is True
     else:
-        assert events[-1]["result"]["final_response"] == "compatibility retry reached"
+        assert result is not None
+        assert result["result"]["final_response"] == "compatibility retry reached"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_stream_options_unrelated_bad_request_does_not_retry(tmp_path, monkeypatch):
+    for name in (
+        "ATLAS_RUN_INPUT_TOKEN_LIMIT", "ATLAS_RUN_BUDGET_ID",
+        "ATLAS_RUN_USAGE_AUDIT_FILE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    with FakeLLMServer([
+        Error(400, "invalid model parameter"), Text("must not be sent"),
+    ]) as fake:
+        home = tmp_path / "engine"
+        write_atlas_home(home, fake.base_url, extra_config=(
+            "auxiliary:\n"
+            "  title_generation:\n"
+            "    enabled: false\n"
+        ))
+        monkeypatch.setenv("HERMES_HOME", str(home))
+        manager = _ProviderKeyManager(fake.base_url, current="fake-model")
+        manager._models = [{
+            "id": "fake-model", "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
+            "litellm_model": "openai/fake-model", "native_model": "fake-model",
+            "max_output_tokens": 256,
+        }]
+        manager._find_model = lambda model: next(
+            (item for item in manager._models if item["id"] == model), None,
+        )
+        mcp = MagicMock()
+        mcp.get_tools_for_llm.return_value = []
+        mcp.list_tools.return_value = []
+        mcp.tool_count = 0
+        local = LocalExecutionRuntime()
+        agent = AgentOrchestrator(manager, MagicMock(), mcp_client=mcp, local_execution=local)
+        context = AgentRunContext(
+            cancel_event=asyncio.Event(), run_id="stream-options-other-400",
+            conversation_id="stream-options-other-400", workspace=str(tmp_path),
+            permission_mode="full_access",
+        )
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
+        monkeypatch.setattr(runtime, "_ensure_atlas_mcp_registered", lambda: [])
+        events = [event async for event in runtime.run_turn(
+            message="exercise unrelated bad request",
+            conversation_id=context.conversation_id, workspace=str(tmp_path), history=[],
+            atlas_agent=agent, atlas_context=context,
+        )]
+        await runtime.aclose()
+        await local.shutdown()
+
+    requests = fake.main_requests()
+    assert len(requests) == 1
+    assert "stream_options" in requests[0]
+    assert not any(event["type"] == "atlas.result" for event in events)
+    assert any(event["type"] == "error" for event in events)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("budgeted,expected_requests", [(True, 1), (False, 2)])
+async def test_auxiliary_complete_transport_retry_obeys_run_budget(
+    tmp_path, monkeypatch, budgeted, expected_requests,
+):
+    import httpx
+
+    if budgeted:
+        monkeypatch.setenv("ATLAS_RUN_INPUT_TOKEN_LIMIT", "10000")
+        monkeypatch.setenv("ATLAS_RUN_BUDGET_ID", "aux-complete-budgeted")
+        monkeypatch.setenv("ATLAS_RUN_USAGE_AUDIT_FILE", str(tmp_path / "aux-budget.jsonl"))
+    else:
+        for name in (
+            "ATLAS_RUN_INPUT_TOKEN_LIMIT", "ATLAS_RUN_BUDGET_ID",
+            "ATLAS_RUN_USAGE_AUDIT_FILE",
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+    auxiliary_responses = iter([Hang(seconds=0.05), Text("auxiliary retry reached")])
+    with FakeLLMServer([], aux=lambda _request: next(auxiliary_responses)) as fake:
+        manager = _ProviderKeyManager(fake.base_url, current="fake-model")
+        manager._models = [{
+            "id": "fake-model", "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
+            "litellm_model": "openai/fake-model", "native_model": "fake-model",
+        }]
+        router = ModelRouter(manager)
+        route = await router.resolve("fake-model", "conversation")
+        if budgeted:
+            with pytest.raises(httpx.HTTPError):
+                await router.complete(route, [{"role": "user", "content": "auxiliary probe"}])
+        else:
+            result = await router.complete(
+                route, [{"role": "user", "content": "auxiliary probe"}],
+            )
+            assert result.text == "auxiliary retry reached"
+
+    assert len(fake.aux_requests()) == expected_requests
 
 
 @pytest.mark.asyncio
@@ -868,32 +1390,67 @@ async def _collect_turn(runtime, tmp_path, queue):
 
 
 @pytest.mark.asyncio
+@pytest.mark.unit
 async def test_real_atlas_turn_stops_when_atlas_cancel_is_set(tmp_path, monkeypatch):
     with FakeLLMServer([Hang(seconds=8)]) as fake:
         home = tmp_path / "engine"
         write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
-        models = SimpleNamespace(
-            current_model="fake-model", current_litellm_model="fake-model",
-            gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
-            list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
-        )
+        manager = _ProviderKeyManager(fake.base_url, current="fake-model")
+        manager._models = [{
+            "id": "fake-model", "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
+            "litellm_model": "openai/fake-model", "native_model": "fake-model",
+            "max_output_tokens": 256,
+        }]
+        manager._find_model = lambda _model: manager._models[0]
+        mcp = MagicMock()
+        mcp.get_tools_for_llm.return_value = []
+        mcp.list_tools.return_value = []
+        mcp.tool_count = 0
+        local = LocalExecutionRuntime()
+        agent = AgentOrchestrator(manager, MagicMock(), mcp_client=mcp, local_execution=local)
         cancel = asyncio.Event()
-        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
+        context = AgentRunContext(
+            cancel_event=cancel, run_id="cancel-before-first-token",
+            conversation_id="cancel-before-first-token", workspace=str(tmp_path),
+            permission_mode="full_access",
+        )
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
+        monkeypatch.setattr(runtime, "_ensure_atlas_mcp_registered", lambda: [])
         started = asyncio.get_running_loop().time()
-        turn = asyncio.create_task(_collect_cancelled_turn(runtime, tmp_path, cancel))
-        await asyncio.sleep(0.15)
+        turn = asyncio.create_task(_collect_cancelled_turn(
+            runtime, tmp_path, cancel, agent=agent, context=context,
+        ))
+        deadline = started + 2
+        while not fake.main_requests() and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.01)
+        assert fake.main_requests(), "kernel never sent the scripted hanging request"
         cancel.set()
-        events = await asyncio.wait_for(turn, timeout=3)
+        try:
+            events, interrupted = await asyncio.wait_for(turn, timeout=3)
+        finally:
+            await runtime.aclose()
+            await local.shutdown()
         assert asyncio.get_running_loop().time() - started < 3
-        assert events[-1].get("type") == "atlas.result"
+        assert interrupted
+        assert any(
+            event["type"] == "message.rollback" and event.get("category") == "cancelled"
+            for event in events
+        ), [{"type": event.get("type"), "category": event.get("category"), "content": event.get("content")}
+            for event in events]
 
 
-async def _collect_cancelled_turn(runtime, tmp_path, cancel):
-    return [event async for event in runtime.run_turn(
-        message="stop this", conversation_id="cancel", workspace=str(tmp_path), history=[],
-        cancel_event=cancel,
-    )]
+async def _collect_cancelled_turn(runtime, tmp_path, cancel, *, agent, context):
+    events = []
+    try:
+        async for event in runtime.run_turn(
+            message="stop this", conversation_id="cancel-before-first-token", workspace=str(tmp_path),
+            history=[], atlas_agent=agent, atlas_context=context, cancel_event=cancel,
+        ):
+            events.append(event)
+    except asyncio.CancelledError:
+        return events, True
+    return events, False
 
 
 @pytest.mark.asyncio

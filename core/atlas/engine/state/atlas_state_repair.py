@@ -582,11 +582,14 @@ def preflight_db_writability(db_path: Path, *, db_label: str = "state.db") -> No
         wal_note = (" Do NOT delete the -wal file — it contains committed data that "
                     "will be merged into the database once it is writable." if p.name.endswith("-wal") else "")
         if not p.is_file() and not is_dir:
-            # A sidecar named in the error but absent from disk was removed between the
-            # probe and here, or belongs to a concurrent process that just released it.
-            # Reporting chmod for a missing file sends the user chasing a ghost.
-            missing_note = (" The file is no longer present, so a concurrent process most likely "
-                            "released it; retry the run.")
+            if p in sidecars:
+                # SQLite can remove a WAL/SHM sidecar while another process is
+                # closing its connection. There is no file left to repair or
+                # reject; the real open below will evaluate the current state.
+                continue
+            # The main database disappeared between the probe and the final check;
+            # retrying can establish whether the path is still being replaced.
+            missing_note = " The file disappeared during preflight; retry the run."
         else:
             missing_note = ""
         raise sqlite3.OperationalError(

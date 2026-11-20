@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BackendAdapter, BackendError } from '../src/client';
+import { normalizeRuntimeEvent } from '../../frontend/src/renderer/services/runtimeEvents';
+import { useAtlasStore } from '../../frontend/src/renderer/store/useAtlasStore';
+import { projectMessageDeltaText, TimelineProjection } from '../../frontend/src/renderer/components/timelineProjection';
 
 class MockWebSocket extends EventTarget {
   static OPEN = 1;
@@ -19,9 +22,9 @@ class MockWebSocket extends EventTarget {
   close() { this.disconnect(); }
 }
 
-const runtimeEvent = (sequence: number, event: string) => ({
+const runtimeEvent = (sequence: number, event: string, data: Record<string, unknown> = {}) => ({
   type: 'agent_event', event_id: `event-${sequence}`, run_id: 'run-1', sequence,
-  timestamp: new Date(0).toISOString(), event, data: {},
+  timestamp: new Date(0).toISOString(), event, data,
 });
 
 const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -33,6 +36,58 @@ afterEach(() => {
 });
 
 describe('BackendAdapter availability and recovery', () => {
+  it('delivers cancelled attempt rollback through the adapter callback into renderer state', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      return String(input).endsWith('/api/health')
+        ? { ok: true } as Response
+        : { ok: true, json: async () => ({ version: '1.3' }) } as Response;
+    }));
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    vi.stubGlobal('window', new EventTarget());
+    vi.stubGlobal('localStorage', {
+      values: new Map<string, string>(),
+      getItem(key: string) { return this.values.get(key) ?? null; },
+      setItem(key: string, value: string) { this.values.set(key, value); },
+      removeItem(key: string) { this.values.delete(key); },
+    });
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+    const timestamp = new Date(0).toISOString();
+    useAtlasStore.setState({ runs: [{
+      id: 'run-1', conversationId: 'conv-1', title: 'cancelled attempt', status: 'running', phase: 'execution',
+      startedAt: timestamp, updatedAt: timestamp, lastEventSequence: 0, events: [],
+    }], activeRunId: 'run-1', activeConversationId: 'conv-1', busy: true });
+
+    const running = adapter.startRun(
+      { type: 'run.start', run_id: 'run-1', content: 'prompt', conversation_id: 'conv-1' },
+      (envelope) => {
+        const event = normalizeRuntimeEvent(envelope);
+        if (event) useAtlasStore.getState().appendEvent(event);
+      },
+    );
+    while (!MockWebSocket.instances.length) await flushAsync();
+    const socket = MockWebSocket.instances[0];
+    socket.open();
+    expect(JSON.parse(socket.sent[0])).toMatchObject({ type: 'run.start', run_id: 'run-1' });
+    socket.receive(runtimeEvent(1, 'run.started', { content: 'prompt' }));
+    socket.receive(runtimeEvent(2, 'message.delta', { content: 'OLD answer', attempt_id: 'attempt-old' }));
+    socket.receive(runtimeEvent(3, 'message.rollback', { attempt: 1, attempt_id: 'attempt-old', category: 'cancelled' }));
+    socket.receive(runtimeEvent(4, 'message.delta', { content: 'NEW answer', attempt_id: 'attempt-new' }));
+    socket.receive(runtimeEvent(5, 'run.cancelled', { category: 'cancelled' }));
+    await running;
+
+    const run = useAtlasStore.getState().getRun('run-1')!;
+    expect(run.status).toBe('cancelled');
+    expect(run.events.map((event) => event.sequence)).toEqual([1, 2, 3, 4, 5]);
+    expect(run.events[1].data.attempt_id).toBe('attempt-old');
+    expect(run.events[2].type).toBe('message.rollback');
+    expect(run.events[3].data.attempt_id).toBe('attempt-new');
+    const projection = new TimelineProjection().project(run.events);
+    expect(projectMessageDeltaText(run.events)).toBe('NEW answer');
+    expect(projection.some((item) => item.kind === 'reply' && item.content.includes('NEW answer'))).toBe(true);
+    expect(projection.some((item) => item.kind === 'reply' && item.content.includes('OLD answer'))).toBe(false);
+  });
+
   it('reports an undelivered stop instead of silently ignoring it', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true } as Response)));
     vi.stubGlobal('WebSocket', MockWebSocket);

@@ -1,0 +1,19 @@
+== selected task-queue/invalidation regression (3.11.16) ==
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 20 deselected, 5 warnings in 51.78s
+
+== selected task-queue/invalidation regression (3.14) ==
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 20 deselected, 5 warnings in 46.03s
+
+== full in-flight SDK subprocess suite (3.11.16) ==
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+28 passed, 5 warnings in 214.02s (0:03:34)
+
+== full in-flight SDK subprocess suite (3.14) ==
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+28 passed, 5 warnings in 198.81s (0:03:18)

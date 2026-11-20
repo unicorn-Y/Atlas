@@ -1,0 +1,76 @@
+EXEC-06 · B-F03-PREVIEW-08/09 复核:office/excel 预览不是“缺失”,但当前环境与格式覆盖需降级为部分
+日期: 2026-11-18;Atlas wave3@060071ab + 在途;DSH rc.4 3f321d32
+
+================================================================================
+A. Atlas 实际实现(产品入口链)
+================================================================================
+后端:
+- core/atlas/api/workspace_router.py:642-675 `GET /api/workspace/preview?root&path`
+  - 仅接受 .docx/.xlsx/.pptx/.pdf(其余 415);10 MB 上限(413);
+  - 本地或 ssh:// 工作区读取;调用 `render_isolated_preview(raw, suffix)`;
+  - 返回 text/html + CSP `sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'`,
+    `X-Atlas-Preview-Mode`、`X-Atlas-Preview-Isolated: true`。
+- core/atlas/office.py:29-61 `render_isolated_preview`: 拒绝非 4 后缀/超大;
+  把字节写入私有临时目录,`sys.executable -I core/scripts/isolated_preview_worker.py`
+  子进程渲染(45s 超时),env 只保留 SYSTEMROOT/WINDIR/COMSPEC/PATHEXT/TEMP。
+- core/atlas/office.py:224+ `render_office`: docx→python-docx 段落/标题/表格/图片;
+  xlsx→openpyxl 工作表;pptx→python-pptx 幻灯片。
+- core/scripts/isolated_preview_worker.py:57-75: PDF 走 pdftoppm 或 pypdf 文本降级;
+  Office 走 `render_office`,返回 {html, mode}。
+- 依赖声明 core/pyproject.toml:72-74: python-docx>=1.1.2、openpyxl>=3.1.5、python-pptx>=1.0.2。
+前端:
+- backend-adapter/src/client.ts:341-344 `officePreviewUrl(root,path)`。
+- frontend/src/renderer/shell/panels/FilesPanel.tsx:392-407 xlsx: fetch officePreviewUrl →
+  `workbookSheets(html)` 解析工作表;:409-425 pptx: `presentationSlides(html)`;
+  :663-667 通用 OFFICE: `<iframe sandbox="" src=officePreviewUrl>`(docx/pptx/xlsx 均可走);
+  :667-679 PDF: 专属 iframe + 错误面;:369-391 + :811-816 Windows Sandbox 隔离预览开关。
+
+================================================================================
+B. 真实执行探针(不经过 HTTP,直接产品函数;私有 temp)
+================================================================================
+命令:
+  cd D:/Atlas/core
+  PYTHONDONTWRITEBYTECODE=1 python D:/ENGINE-V3-UPSTREAM-20261118/scripts/probe_office_preview.py
+输出(2026-11-18,EXIT=0):
+  xlsx: mode=office-html, bytes=500, has_table=true, has_alpha=true, has_42=true
+        → 真实 .xlsx(openpyxl 生成)经隔离子进程渲染成功,表格/值存在。
+  docx: ModuleNotFoundError: No module named 'docx'
+        → 当前开发运行时未安装 core/pyproject.toml 已声明的 python-docx;
+          docx 路径在该环境返回 422,不是代码缺失,是依赖未安装。
+  zip : 手工构造的 OOXML docx 包成员有效([Content_Types].xml/_rels/.rels/word/document.xml),
+        说明失败点在解析器依赖,不在输入构造。
+
+判定:
+- xlsx: 产品链路已可用(后端渲染+前端解析/iframe),有真实执行证据。
+- docx/pptx: 代码链路完整但当前运行时缺 python-docx/python-pptx;
+  生产打包若安装 pyproject 依赖则同链路可用(需打包端实测,记为环境边界)。
+- 遗留格式: .doc/.ppt/.xls 不在后端 accepted set(415);DSH PREVIEW-08 覆盖 doc/docx/ppt/pptx,
+  PREVIEW-09 覆盖 xlsx/xls/csv/tsv。Atlas 的 .doc/.ppt/.xls 与 csv/tsv 表格化未实现。
+
+================================================================================
+C. 表格行修正
+================================================================================
+B-F03-PREVIEW-08(Office doc/docx/ppt/pptx):
+  原: 对齐已验 + gap“office/excel 渲染为 Atlas 缺口”(与代码矛盾)
+  新: 部分
+  Atlas entry: workspace_router.py:642-675 + office.py:224+ + FilesPanel.tsx:663-667
+  证据: 探针 xlsx 成功/docx 缺依赖(本节 B);后端 accepted set 仅 docx/xlsx/pptx/pdf
+  gap: 当前运行时缺 python-docx/python-pptx(声明在 pyproject:72-74,需打包端安装验证);
+       .doc/.ppt 不支持(415);无 DSH 的字体缺失提示/转换动作席。
+  验收: 在安装声明依赖的环境跑 docx+pptx 探针(HTML 含正文/页)并通过;若要求 legacy,
+       增加 .doc/.ppt→PDF 转换路径与 415 之外的明确提示。
+
+B-F03-PREVIEW-09(表格 xlsx/xls/csv/tsv):
+  原: 对齐已验
+  新: 部分
+  Atlas entry: workspace_router.py:642-675 + office.py:114-138 + FilesPanel.tsx:392-407
+  证据: 探针 xlsx mode=office-html,table/alpha/42(本节 B);XLSX=/\.xlsx$/ 仅 xlsx
+  gap: .xls 无解析(不在 accepted set);csv/tsv 无表格渲染(按文本/代码面显示);
+       数字/日期格式化未对齐 DSH worker 解析器。
+  验收: .xlsx 保持现值;新增 .xls 转换或解析、csv/tsv 表格化(分隔符探测+表头+单元格转义),
+       各配 fixture 单测与渲染层快照。
+
+================================================================================
+D. 计数影响
+================================================================================
+ATLAS-MAP: 对齐已验 84→82;部分 201→203;缺失 82;待核 1。总 368 不变。

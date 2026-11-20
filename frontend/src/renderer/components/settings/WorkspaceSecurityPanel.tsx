@@ -121,6 +121,8 @@ export default function WorkspaceSecurityPanel({ apiBaseUrl, conversation, onCha
   const docker = conversation.sandbox?.type === 'docker' ? conversation.sandbox : null;
   const workspace = conversation.workspace ?? '';
   const remoteWorkspace = workspace.startsWith('ssh://');
+  const remoteSandbox = conversation.sandbox?.type === 'ssh-bwrap' ? conversation.sandbox : null;
+  const activeSandbox = remoteWorkspace ? remoteSandbox : docker;
   const allowedPaths = conversation.allowed_paths ?? [];
   const extraRoots = conversation.extra_roots ?? [];
   const restrictedPaths = allowedPaths.length > 0;
@@ -206,8 +208,8 @@ export default function WorkspaceSecurityPanel({ apiBaseUrl, conversation, onCha
   };
 
   const externalExecutor = Boolean(conversation.executor && conversation.executor !== 'atlas');
-  const dockerBlock = remoteWorkspace
-    ? '远程工作区暂不支持 Docker 沙箱。'
+  const sandboxBlock = remoteWorkspace
+    ? externalExecutor ? '远程 bubblewrap 隔离只支持 Atlas Agent。' : ''
     : externalExecutor
       ? 'Docker 沙箱只支持 Atlas Agent；先在运行方式设置中切回 Atlas。'
       : sandboxStatus && !sandboxStatus.docker.available
@@ -220,10 +222,12 @@ export default function WorkspaceSecurityPanel({ apiBaseUrl, conversation, onCha
     onChange(patch);
   };
 
-  const enableDocker = () => onChange({ sandbox: { type: 'docker', network: false } });
-  const disableDocker = () => onChange({ sandbox: null });
+  const enableSandbox = () => onChange({
+    sandbox: remoteWorkspace ? { type: 'ssh-bwrap', network: false } : { type: 'docker', network: false },
+  });
+  const disableSandbox = () => onChange({ sandbox: null });
   const toggleNetwork = () => {
-    if (docker) onChange({ sandbox: { ...docker, network: !docker.network } });
+    if (activeSandbox) onChange({ sandbox: { ...activeSandbox, network: !activeSandbox.network } });
   };
   const addAllowedPath = () => {
     const path = allowedPathDraft.trim();
@@ -444,34 +448,36 @@ export default function WorkspaceSecurityPanel({ apiBaseUrl, conversation, onCha
       <div className="flex items-start gap-2.5">
         <Box size={16} className="mt-0.5 shrink-0 text-fg-3" />
         <div className="grid min-w-0 flex-1 gap-1">
-          <strong className="text-[13px] font-medium text-fg">Docker 命令隔离</strong>
+          <strong className="text-[13px] font-medium text-fg">{remoteWorkspace ? 'SSH Linux 命令隔离' : 'Docker 命令隔离'}</strong>
           <p className="m-0 text-[12px] leading-[1.55] text-fg-3">
-            容器设置保存在当前对话，只对之后的运行生效；容器联网默认关闭。
+            {remoteWorkspace
+              ? '目标机须运行 Linux 并安装受信任的 bwrap；未通过探测时运行会失败关闭。网络默认关闭。'
+              : '容器设置保存在当前对话，只对之后的运行生效；容器联网默认关闭。'}
           </p>
         </div>
       </div>
 
-      {docker ? <>
-        {dockerBlock && <p className={styles.settingsError} role="alert">{dockerBlock}</p>}
+      {activeSandbox ? <>
+        {sandboxBlock && <p className={styles.settingsError} role="alert">{sandboxBlock}</p>}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <label className="flex items-center gap-2 text-[12.5px] text-fg">
-            <input type="checkbox" checked={Boolean(docker.network)} onChange={toggleNetwork} />
-            <Globe size={15} />允许容器联网
+            <input type="checkbox" checked={Boolean(activeSandbox.network)} onChange={toggleNetwork} />
+            <Globe size={15} />{remoteWorkspace ? '允许隔离命令联网' : '允许容器联网'}
           </label>
-          <Button variant="ghost" size="sm" onClick={disableDocker}>关闭 Docker 隔离</Button>
+          <Button variant="ghost" size="sm" onClick={disableSandbox}>{remoteWorkspace ? '关闭 SSH 隔离' : '关闭 Docker 隔离'}</Button>
         </div>
-        {docker.network && <p className="m-0 text-[12px] leading-[1.55] text-fg-3">
-          联网权限会开放给容器内运行的命令；只在安装依赖或访问网络资源时开启。
+        {activeSandbox.network && <p className="m-0 text-[12px] leading-[1.55] text-fg-3">
+          {remoteWorkspace ? '联网权限会开放给远端隔离命令；只在安装依赖或访问网络资源时开启。' : '联网权限会开放给容器内运行的命令；只在安装依赖或访问网络资源时开启。'}
         </p>}
       </> : <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-[12px] text-fg-3">
-          {dockerBlock || (checkingDocker ? '正在检查 Docker…' : '当前命令在本机运行。')}
+          {sandboxBlock || (remoteWorkspace ? '远端命令尚未隔离。' : checkingDocker ? '正在检查 Docker…' : '当前命令在本机运行。')}
         </span>
-        <Button variant="secondary" size="sm" disabled={checkingDocker || !sandboxStatus || Boolean(dockerBlock)} onClick={enableDocker}>
-          启用 Docker 隔离
+        <Button variant="secondary" size="sm" disabled={remoteWorkspace ? Boolean(sandboxBlock) : checkingDocker || !sandboxStatus || Boolean(sandboxBlock)} onClick={enableSandbox}>
+          {remoteWorkspace ? '启用 SSH 隔离' : '启用 Docker 隔离'}
         </Button>
       </div>}
-      {dockerError && <p className={styles.settingsError} role="alert">Docker 状态检查失败：{dockerError}</p>}
+      {!remoteWorkspace && dockerError && <p className={styles.settingsError} role="alert">Docker 状态检查失败：{dockerError}</p>}
     </div>
   </section>;
 }

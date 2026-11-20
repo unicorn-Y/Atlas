@@ -1,0 +1,8 @@
+PAR-10-T6-5 stage: write-release-manifest
+2026-11-18T22:46:54Z
+CMD: node scripts/write-release-manifest.mjs
+-----
+Release manifest written: D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\windows-release\release-manifest.json
+Installer SHA-256: 94e71e0125e7d84e0321f5afdb57ef1b9519014c9ff3e43ad8bbba192e40c3ee
+EXIT=0
+2026-11-18T22:46:55Z

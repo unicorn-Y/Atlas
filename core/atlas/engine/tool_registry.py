@@ -16,6 +16,30 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
+def _default_process_cwd(runtime: Any) -> str:
+    """Choose a process cwd without changing the run's workspace authority."""
+    workspace = str(getattr(runtime, "workspace", "") or "")
+    if not workspace:
+        return ""
+    if workspace.startswith("ssh://"):
+        from atlas.ssh import SSHWorkspaceManager
+
+        _host, remote_root = SSHWorkspaceManager.parse_workspace(workspace)
+        return remote_root
+    selected = str(getattr(runtime, "working_directory", "") or "")
+    if not selected:
+        return workspace
+    root = Path(workspace).expanduser().resolve(strict=True)
+    candidate = Path(selected).expanduser().resolve(strict=True)
+    if not root.is_dir() or not candidate.is_dir():
+        raise ValueError("process working directory must be an existing directory")
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("process working directory must remain inside the trusted workspace") from exc
+    return str(candidate)
+
 _context = threading.local()
 _lock = threading.Lock()
 _registered: set[str] = set()
@@ -603,14 +627,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                         or str(tool_args.get("action", "")) == "start"
                     )
                     if starts_process and not tool_args.get("cwd"):
-                        workspace = str(getattr(bound_runtime, "workspace", "") or "")
-                        if workspace:
-                            if workspace.startswith("ssh://"):
-                                from atlas.ssh import SSHWorkspaceManager
-
-                                _host, tool_args["cwd"] = SSHWorkspaceManager.parse_workspace(workspace)
-                            else:
-                                tool_args["cwd"] = workspace
+                        tool_args["cwd"] = _default_process_cwd(bound_runtime)
                 if tool_name in {"local_shell", "local_process"}:
                     tool_args["_atlas_conversation_id"] = str(bound_runtime.conversation_id or "")
                 from langchain_core.messages import AIMessage

@@ -239,7 +239,16 @@ interface Plugin {
   agents?: string[];
   hooks?: number;
   mcp_servers?: string[];
+  compatibility?: PluginCompatibility | null;
   capability_groups?: PluginCapabilityGroup[];
+}
+
+interface PluginCompatibility {
+  name: string;
+  version: string;
+  runtime_version: string;
+  peers: Record<string, string>;
+  exempted: boolean;
 }
 
 interface PluginCapabilityItem {
@@ -324,6 +333,14 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [confirmRemove, setConfirmRemove] = useState('');
   const [browsing, setBrowsing] = useState<{ name: string; entries: MarketplacePluginEntry[] } | null>(null);
   const [pluginValidation, setPluginValidation] = useState<{ result: PluginValidation; action: 'install' | 'enable'; pluginName?: string } | null>(null);
+  const [compatibilityRisk, setCompatibilityRisk] = useState<Record<string, boolean>>({});
+  const [installRequestId, setInstallRequestId] = useState<string | null>(() => {
+    try { return localStorage.getItem('atlas.plugin.install.requestId'); } catch { return null; }
+  });
+  const [installOperation, setInstallOperation] = useState<{
+    requestId: string; status: string; approvalRequired?: string[]; error?: string;
+  } | null>(null);
+  const [installStartPending, setInstallStartPending] = useState(false);
 
   const authorText = (author: Plugin['author']): string => {
     if (typeof author === 'string') return author;
@@ -396,6 +413,45 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
     }
   };
   const post = (path: string, body?: unknown, done?: string | ((body: Record<string, unknown>) => string)) => act(`${apiBaseUrl}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }, done);
+  useEffect(() => {
+    if (!installRequestId) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/plugins/install/${encodeURIComponent(installRequestId)}?wait_ms=1000`);
+        if (!response.ok) throw new Error(`安装状态查询失败（HTTP ${response.status}）`);
+        const body = await response.json() as { requestId: string; status: string; approvalRequired?: string[]; error?: string };
+        if (!active) return;
+        if (body.status === 'unknown' && installStartPending) {
+          timer = setTimeout(() => { void poll(); }, 250);
+          return;
+        }
+        setInstallOperation(body);
+        if (['completed', 'failed', 'cancelled', 'unknown', 'too_late'].includes(body.status)) {
+          try {
+            localStorage.removeItem('atlas.plugin.install.requestId');
+            localStorage.removeItem('atlas.plugin.install.pending');
+          } catch { /* local storage may be unavailable */ }
+          if (body.status === 'completed') {
+            setNotice(`插件安装完成 · ${body.requestId}`);
+            await refresh();
+          } else if (body.status === 'failed') setError(`插件安装失败：${body.error ?? '未知错误'}`);
+          else if (body.status === 'unknown') setNotice('找不到该安装任务；没有将未知状态视为成功');
+          else if (body.status === 'cancelled') setNotice('安装已取消，暂存目录已清理');
+          setInstallRequestId(null);
+          return;
+        }
+        timer = setTimeout(() => { void poll(); }, 500);
+      } catch (cause) {
+        if (active) setError(cause instanceof Error ? cause.message : String(cause));
+        timer = setTimeout(() => { void poll(); }, 1500);
+      }
+    };
+    void poll();
+    return () => { active = false; if (timer) clearTimeout(timer); };
+  }, [apiBaseUrl, installRequestId, installStartPending, refresh]);
+
   const validatePluginSource = async (target: string, action: 'install' | 'enable', pluginName?: string) => {
     setBusy(true); setError(null); setPluginValidation(null);
     try {
@@ -406,16 +462,67 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
     } catch (cause) { setError(`插件校验请求失败：${cause instanceof Error ? cause.message : String(cause)}`); }
     finally { setBusy(false); }
   };
+  const startPluginInstall = async (sourceValue: string, refValue?: string, sourceType?: 'local' | 'npm' | 'git' | 'marketplace', marketplace?: string, pluginName?: string) => {
+    setBusy(true); setError(null); setNotice(null);
+    const requestId = crypto.randomUUID();
+    try {
+      localStorage.setItem('atlas.plugin.install.requestId', requestId);
+      localStorage.setItem('atlas.plugin.install.pending', JSON.stringify({ requestId, source: sourceValue, ref: refValue, sourceType, marketplace, plugin: pluginName }));
+    } catch { /* continue with the in-memory request ID */ }
+    setInstallOperation({ requestId, status: 'queued' });
+    setInstallStartPending(true);
+    setInstallRequestId(requestId);
+    try {
+      const endpoint = marketplace
+        ? `${apiBaseUrl}/api/plugin-marketplaces/${encodeURIComponent(marketplace)}/install`
+        : `${apiBaseUrl}/api/plugins/install`;
+      const requestBody = marketplace ? { plugin: pluginName, requestId } : { source: sourceValue, ref: refValue, sourceType, requestId };
+      const response = await fetch(endpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+      const body = await response.json() as { requestId?: string; status?: string; detail?: unknown };
+      if (!response.ok || !body.requestId) throw new Error(typeof body.detail === 'string' ? body.detail : `无法启动安装任务（HTTP ${response.status}）`);
+      setInstallStartPending(false);
+      setInstallOperation({ requestId: body.requestId, status: body.status ?? 'queued' });
+      if (!marketplace) { setSource(''); setSourceRef(''); setPluginValidation(null); }
+      setNotice(`安装任务已启动 · ${body.requestId}`);
+    } catch (cause) {
+      setInstallStartPending(false);
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally { setBusy(false); }
+  };
   const installValidatedPlugin = async () => {
     if (!pluginValidation?.result.valid || pluginValidation.action !== 'install') return;
-    const done = await act(`${apiBaseUrl}/api/plugins/install`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: source.trim(), ref: sourceRef.trim() || undefined }) }, `已安装 ${pluginValidation.result.plugin?.name ?? source}`);
-    if (done) { setSource(''); setSourceRef(''); setPluginValidation(null); }
+    await startPluginInstall(source.trim(), sourceRef.trim() || undefined, 'local');
+  };
+  const installSourceType = (value: string): 'npm' | 'git' | null => {
+    const text = value.trim();
+    if (text.startsWith('npm:') || /^@[a-z0-9._-]+\/[a-z0-9._-]+(?:@[^\s]+)?$/i.test(text) || /^[a-z0-9._-]+(?:@[^\s]+)?$/i.test(text)) return 'npm';
+    if (/^(https?:\/\/|ssh:\/\/|git\+|git@)/i.test(text) || /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(text)) return 'git';
+    return null;
+  };
+  const cancelInstall = async () => {
+    if (!installRequestId) return;
+    const response = await fetch(`${apiBaseUrl}/api/plugins/install/${encodeURIComponent(installRequestId)}/cancel`, { method: 'POST' });
+    const body = await response.json() as { status?: string };
+    if (!response.ok) { setError(`取消请求失败（HTTP ${response.status}）`); return; }
+    setNotice(body.status === 'too_late' ? '安装已进入不可取消阶段' : body.status === 'cancelled' ? '安装已取消并清理' : '正在结束安装进程并清理暂存文件…');
+  };
+  const approveInstallScript = async (packageName: string) => {
+    const response = await fetch(`${apiBaseUrl}/api/plugins/script-approvals`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ packageName, days: 30, requestId: installRequestId }),
+    });
+    if (!response.ok) { setError(`脚本审批失败（HTTP ${response.status}）`); return; }
+    setNotice(`已允许 ${packageName} 执行构建脚本，授权 30 天`);
   };
   const enableValidatedPlugin = async () => {
     if (!pluginValidation?.result.valid || pluginValidation.action !== 'enable' || !pluginValidation.pluginName) return;
     const name = pluginValidation.pluginName;
     if (await post(`/api/plugins/${encodeURIComponent(name)}/enabled`, { enabled: true }, `已启用 ${name}`)) setPluginValidation(null);
   };
+  const compatibilityKey = (plugin: Plugin) => `${plugin.name}@${plugin.version}@${plugin.compatibility?.runtime_version ?? ''}`;
 
   const browse = async (name: string) => {
     setBusy(true);
@@ -474,10 +581,24 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
     </header>
     {error && <p className={styles.settingsError} role="alert">{error}</p>}
     {notice && <p role="status" style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--fg-2)' }}>{notice}</p>}
+    {installOperation && <section aria-label="插件安装任务" className="rounded-lg border border-[var(--line)] p-3" role="status">
+      <strong>安装任务 · {installOperation.status}</strong>
+      <p style={{ margin: '4px 0', fontSize: 12.5 }}>请求 ID：{installOperation.requestId}</p>
+      {installStartPending && <p>正在校验来源并创建安装任务…</p>}
+      {installOperation.status === 'awaiting_approval' && <div>
+        <p style={{ margin: '4px 0', fontSize: 12.5 }}>pnpm 报告以下依赖的构建脚本被阻断。仅批准后才会对这些包运行 rebuild；授权有效 30 天。</p>
+        <ul style={{ margin: '6px 0', paddingLeft: 20 }}>{(installOperation.approvalRequired ?? []).map((name) => <li key={name}>
+          <code>{name}</code>{' '}<button className={styles.quietButton} onClick={() => void approveInstallScript(name)}>允许此包脚本（30 天）</button>
+        </li>)}</ul>
+      </div>}
+      {installRequestId && <button className={styles.quietButton} disabled={installStartPending} onClick={() => void cancelInstall()}>取消安装</button>}
+    </section>}
     <form className={styles.settingsForm} onSubmit={async (event) => {
       event.preventDefault();
       if (!source.trim()) return;
-      await validatePluginSource(source.trim(), 'install');
+      const sourceType = installSourceType(source.trim());
+      if (sourceType) await startPluginInstall(source.trim(), sourceRef.trim() || undefined, sourceType);
+      else await validatePluginSource(source.trim(), 'install');
     }}>
       <label>从哪里安装
         <input aria-label="插件来源" placeholder="本地目录路径、git 地址，或 用户名/仓库" value={source} onChange={(e) => setSource(e.target.value)} />
@@ -524,6 +645,15 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
             <span style={{ flex: '1 1 240px', minWidth: 0 }}>
               <strong>{plugin.display_name || plugin.name}</strong> <small>v{plugin.version} · {SOURCE_LABEL[plugin.source ?? ''] ?? plugin.source ?? '本地'}{plugin.marketplace ? ` · ${plugin.marketplace}` : ''} · {plugin.enabled ? '已启用' : '已停用'} · {plugin.loaded ? '已加载' : '未加载'}{plugin.update_available ? ' · 有更新' : ''}</small>
               {plugin.description && <div><small>{plugin.description}</small></div>}
+              {plugin.compatibility && <div role={plugin.compatibility.exempted ? 'status' : 'alert'} style={{ marginTop: 6, color: plugin.compatibility.exempted ? 'var(--warning)' : 'var(--danger)' }}>
+                <small>Atlas {plugin.compatibility.runtime_version} 与此插件声明的 peer 范围不兼容：{Object.entries(plugin.compatibility.peers).map(([peer, range]) => `${peer} ${range}`).join('，')}。豁免只适用于 {plugin.name}@{plugin.version} 和此 Atlas 版本。</small>
+                {plugin.compatibility.exempted
+                  ? <button className={styles.quietButton} onClick={() => void act(`${apiBaseUrl}/api/plugins/${encodeURIComponent(plugin.name)}/compatibility-exemption`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pluginVersion: plugin.version, runtimeVersion: plugin.compatibility?.runtime_version }) }, `已撤销 ${plugin.name}@${plugin.version} 的兼容性豁免`)} disabled={busy}>撤销精确版本豁免</button>
+                  : <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <label><input type="checkbox" checked={compatibilityRisk[compatibilityKey(plugin)] === true} onChange={(event) => setCompatibilityRisk((old) => ({ ...old, [compatibilityKey(plugin)]: event.target.checked }))} /> 我了解该插件声明的 Atlas peer 范围不匹配，并接受继续加载风险。</label>
+                    <button className={styles.settingsAction} disabled={busy || compatibilityRisk[compatibilityKey(plugin)] !== true} onClick={() => void post(`/api/plugins/${encodeURIComponent(plugin.name)}/compatibility-exemption`, { pluginVersion: plugin.version, runtimeVersion: plugin.compatibility?.runtime_version, acceptRisk: true }, `已为 ${plugin.name}@${plugin.version} 明确接受风险并豁免`)}>明确接受风险并豁免</button>
+                  </div>}
+              </div>}
               {plugin.update_error && <div role="alert" style={{ color: 'var(--danger)' }}><small>{plugin.update_error}</small></div>}
               <div><small>技能 {plugin.skills?.length ?? 0} · 命令 {plugin.commands?.length ?? 0} · Agent {plugin.agents?.length ?? 0} · Hook {plugin.hooks ?? 0} · MCP {plugin.mcp_servers?.length ?? 0}</small></div>
             </span>
@@ -655,7 +785,7 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
                       {entry.category && <div><small>分类：{entry.category}</small></div>}
                     </span>
                     <button className={styles.quietButton} disabled={busy || !entry.name || installed}
-                      onClick={() => void post(`/api/plugin-marketplaces/${encodeURIComponent(market.name ?? '')}/install`, { plugin: entry.name })}>
+                      onClick={() => market.name && entry.name && void startPluginInstall(`marketplace:${market.name}/${entry.name}`, undefined, 'marketplace', market.name, entry.name)}>
                       {installed ? '已安装' : '安装'}
                     </button>
                   </div>

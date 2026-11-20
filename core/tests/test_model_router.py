@@ -4,8 +4,10 @@ import ast
 from dataclasses import dataclass
 from pathlib import Path
 
+import httpx
 import pytest
 
+from atlas.models import router as router_module
 from atlas.models.router import ModelRouter
 from atlas.models.tokens import count_tokens
 from tests.fakes.fake_llm_provider import AnthropicReply, FakeLLMServer, Text
@@ -425,3 +427,57 @@ def _litellm_hits(tree: ast.AST) -> list[str]:
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "acompletion":
             hits.append(f"acompletion call (line {node.lineno})")
     return hits
+
+
+@pytest.mark.unit
+def test_stream_transport_does_not_retry_after_managed_abort(monkeypatch):
+    state = {"aborted": False, "requests": 0}
+
+    class BlockingClient:
+        def build_request(self, *_args, **_kwargs):
+            return object()
+
+        def send(self, *_args, **_kwargs):
+            state["requests"] += 1
+            state["aborted"] = True
+            raise httpx.RemoteProtocolError("peer disconnected")
+
+    client = BlockingClient()
+    monkeypatch.setattr(router_module, "_shared_client", lambda *_args: (client, ("test",)))
+    pooled = router_module._PooledClient(
+        object(), object(), timeout=1, allow_retries=True,
+        retry_allowed=lambda: not state["aborted"],
+    )
+
+    with pytest.raises(httpx.RemoteProtocolError, match="peer disconnected"):
+        pooled.open_stream("https://provider.invalid/v1/chat/completions")
+
+    assert state["requests"] == 1
+
+
+@pytest.mark.unit
+def test_stream_transport_keeps_retrying_when_not_aborted(monkeypatch):
+    class Response:
+        status_code = 200
+        is_error = False
+
+    class FlakyClient:
+        def __init__(self):
+            self.requests = 0
+
+        def build_request(self, *_args, **_kwargs):
+            return object()
+
+        def send(self, *_args, **_kwargs):
+            self.requests += 1
+            if self.requests == 1:
+                raise httpx.RemoteProtocolError("stale pooled connection")
+            return Response()
+
+    client = FlakyClient()
+    monkeypatch.setattr(router_module, "_shared_client", lambda *_args: (client, ("test",)))
+    monkeypatch.setattr(router_module, "_MODEL_RETRY_DELAYS", (0,))
+    pooled = router_module._PooledClient(object(), object(), timeout=1, allow_retries=True)
+
+    assert pooled.open_stream("https://provider.invalid/v1/chat/completions").status_code == 200
+    assert client.requests == 2

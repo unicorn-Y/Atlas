@@ -1,0 +1,24 @@
+PAR-10-T2 release-manifest drift guard 2026-11-18T21:48:54Z
+1) backup embedded runtime manifest
+backup ok
+2) change embedded app_version to 0.1.0, run post-build generator
+file:///D:/Atlas/.worktrees/zcode-par10-release-startup/frontend/scripts/write-release-manifest.mjs:103
+    throw new Error(`Release manifest drift at ${field}: runtime=${String(embedded)} release=${String(release)}`);
+          ^
+
+Error: Release manifest drift at app_version: runtime=0.1.0 release=0.1.1
+    at file:///D:/Atlas/.worktrees/zcode-par10-release-startup/frontend/scripts/write-release-manifest.mjs:103:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:643:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.18.1
+DRIFT_GUARD_EXIT=1
+3) restore embedded manifest and rerun generator
+Release manifest written: D:\Atlas\.worktrees\zcode-par10-release-startup\frontend\windows-release\release-manifest.json
+Installer SHA-256: 9efb022194124ea74fd67ec6bc7603f4ea8e899aa1d0ec50245ded92d5b0647f
+RESTORE_EXIT=0
+4) hashes after restore
+228eecf83f8bf95539e8ef4ac3b55398c139938d506480c367b21958f0de164e *windows-release/win-unpacked/resources/atlas/release-manifest.json
+228eecf83f8bf95539e8ef4ac3b55398c139938d506480c367b21958f0de164e */d/Atlas/.tmp/par10-t2/embedded-manifest.backup.json
+3471c2881293cf1a7484b63de2002adca103f65d91b39094ac8fbf2e38812db2 *windows-release/release-manifest.json

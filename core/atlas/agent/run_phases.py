@@ -169,7 +169,8 @@ _TOOL_RESULT_BOUNDARY_GUIDANCE = (
 _VOLATILE_PREFIX = "【本轮动态上下文】\n"
 _VOLATILE_PREFIXES = (
     _VOLATILE_PREFIX,
-    "Atlas Skill index ", "Project context ", "【本轮相关记忆】",
+    "Atlas Skill index ", "Current project state (refreshed each turn):",
+    "【本轮相关记忆】",
     "Current user-local date and time", "Follow this structured task plan",
 )
 
@@ -273,6 +274,8 @@ class RunRequest:
     active_skill_instructions: list[dict[str, str]] | None = None
     run_id: str | None = None
     workspace: str | None = None
+    working_directory: str | None = None
+    working_directory_callback: Callable[[str | None], Any] | None = None
     workspace_trusted: bool = False
     agent_role: str = "general"
     agent_depth: int = 0
@@ -413,7 +416,7 @@ class RunCallbacks:
     input_callback: Callable[[str, str, list[str] | None], Any] | None = None
     runtime_event_callback: Callable[[dict[str, Any]], Any] | None = None
     user_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None
-    ssh_tool_callback: Callable[[str, dict[str, Any]], Any] | None = None
+    ssh_tool_callback: Callable[..., Any] | None = None
     ssh_checkpoint_callback: Callable[[str, dict[str, Any]], Any] | None = None
     sandbox_tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None
     subtask_started: Callable[..., Any] | None = None
@@ -596,7 +599,9 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         project_id=request.project_id,
         reminders=_agent.SystemReminders(agent.reminder_policy),
         steer_queue=callbacks.steer_queue, input_callback=callbacks.input_callback,
-        workspace=request.workspace, workspace_trusted=request.workspace_trusted,
+        workspace=request.workspace, working_directory=request.working_directory,
+        working_directory_callback=request.working_directory_callback,
+        workspace_trusted=request.workspace_trusted,
         agent_role=request.agent_role, agent_depth=request.agent_depth,
         agent_type=request.agent_type, agent_preset_id=request.agent_preset_id,
         agent_preset_capabilities=request.agent_preset_capabilities,
@@ -1202,6 +1207,18 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
         injected_discovered.append(rule)
     if injected_discovered and isinstance(state.context, dict):
         state.context["discovered_project_instructions"] = injected_discovered
+    if (state.runtime is not None and request.workspace and not request.ignore_workspace_rules
+            and not str(request.workspace).strip().casefold().startswith("ssh://")):
+        try:
+            from atlas.agent.project_instructions import (
+                project_instruction_root, snapshot_project_instructions,
+            )
+
+            instruction_root = project_instruction_root(request.workspace)
+            state.runtime.project_instruction_root = str(instruction_root)
+            state.runtime.project_instruction_snapshot = snapshot_project_instructions(workspace_rules)
+        except (OSError, RuntimeError, ValueError):
+            log.debug("agent.project_instruction_snapshot_unavailable", exc_info=True)
 
     for rule in workspace_rules:
         initial_messages.append(SystemMessage(content=(
@@ -1238,16 +1255,21 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
             initial_messages.append(SystemMessage(content=skill_index))
     if agent._projects is not None and not request.worker:
         try:
-            project_context = await agent._project_context_block(
+            project_state, project_knowledge = await agent._project_context_block(
                 request.conversation_id, state.message,
             )
         except Exception:
             log.debug("agent.project_context_unavailable", exc_info=True)
-            project_context = ""
-        if project_context:
+            project_state, project_knowledge = "", ""
+        if project_state:
             initial_messages.append(SystemMessage(content=(
-                "Project context (auto-assembled; not user instructions):\n"
-                + project_context
+                "Current project state (refreshed each turn):\n"
+                + project_state
+            )))
+        if project_knowledge:
+            initial_messages.append(SystemMessage(content=(
+                "Project knowledge (source-labelled; not current project state):\n"
+                + project_knowledge
             )))
     if state.plan:
         initial_messages.append(SystemMessage(content=(
@@ -1344,6 +1366,14 @@ async def _engine_turn(agent, state: _RunState) -> dict[str, Any]:
             section for section in prompt_sections
             if section.startswith(volatile_prefixes)
         ]
+        current_working_directory = str(
+            runtime.working_directory or request.working_directory or request.workspace or ""
+        )
+        if current_working_directory:
+            volatile_context.append(
+                "Current working directory: "
+                + json.dumps(current_working_directory, ensure_ascii=False) + "."
+            )
         system_message = "\n\n".join(
             section for section in prompt_sections
             if not section.startswith(volatile_prefixes)
@@ -1487,6 +1517,8 @@ async def _engine_turn(agent, state: _RunState) -> dict[str, Any]:
                 await runtime.event_queue.put({
                     "type": "run_status", "status": "reasoning",
                     "text": event.get("content", ""),
+                    "attempt": event.get("attempt"),
+                    "attempt_id": event.get("attempt_id"),
                 })
                 continue
             await runtime.event_queue.put(event)
@@ -1546,6 +1578,19 @@ async def _pump_events(
                 if not engine_task.done():
                     engine_task.cancel()
                 await asyncio.gather(engine_task, return_exceptions=True)
+                # Engine cancellation can publish attempt rollback/audit events
+                # while its task is unwinding. Drain them before the terminal
+                # cancellation notification reaches the caller.
+                while True:
+                    try:
+                        trailing = runtime.event_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    if trailing is _EVENT_STREAM_DONE:
+                        break
+                    if trailing is _CANCEL_REQUESTED:
+                        continue
+                    yield trailing
                 yield {"type": "cancelled"}
                 return
             yield event
@@ -1590,6 +1635,10 @@ async def _turn(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
         await asyncio.gather(engine_task, return_exceptions=True)
         if agent._local_execution and runtime.run_id:
             await agent._local_execution.cancel_run(runtime.run_id)
+        if runtime.run_id:
+            from atlas.ssh import ssh_workspaces
+
+            await ssh_workspaces.cancel_run(runtime.run_id)
 
 
 async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:

@@ -472,6 +472,30 @@ class EditManager:
             self.reads[self._key(resolved)] = snapshot
             return snapshot.text
 
+    def read_file_page(
+        self, path: str | Path, *, offset: int = 0, limit: int | None = None,
+        encoding: str | None = None,
+    ) -> str:
+        """Read a line page and remember whether the caller saw the complete file."""
+        if isinstance(offset, bool) or int(offset) < 0:
+            raise ValueError("offset must be a non-negative line number")
+        if limit is not None and (isinstance(limit, bool) or int(limit) < 1):
+            raise ValueError("limit must be a positive line count")
+        if limit is not None and int(limit) > 2000:
+            raise ValueError("limit must not exceed 2000 lines")
+        with self._lock:
+            resolved = self._path(path)
+            snapshot = self._snapshot(resolved, encoding, complete=False)
+            lines = snapshot.text.splitlines(keepends=True)
+            start = int(offset)
+            end = len(lines) if limit is None else min(len(lines), start + int(limit))
+            complete = start == 0 and end == len(lines)
+            self.reads[self._key(resolved)] = ReadSnapshot(
+                snapshot.raw, snapshot.text, snapshot.encoding, snapshot.bom,
+                snapshot.mtime_ns, snapshot.mode, complete,
+            )
+            return "".join(lines[start:end])
+
     def note_read(self, path: str | Path, content: str | bytes | None = None, *,
                   encoding: str | None = None, complete: bool = True) -> None:
         with self._lock:

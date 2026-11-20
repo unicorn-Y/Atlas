@@ -1,0 +1,139 @@
+2026-11-19 04:05:57 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-exec06-skill-sources\_tmp\lsp-fixtures\par08_skill_d7084f5467\atlas\config\atlas.toml
+INFO:     Started server process [63184]
+INFO:     Waiting for application startup.
+{"component": "dbos", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.556440Z"}
+{"component": "mcp", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.573257Z"}
+{"component": "skills", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.573257Z"}
+{"component": "plugins", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.573257Z"}
+{"component": "engine_registrations", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.573257Z"}
+{"component": "channels", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.573257Z"}
+{"component": "automation", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.573257Z"}
+{"component": "scheduler", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.573257Z"}
+{"component": "telegram", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.573257Z"}
+{"component": "extensions", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.573257Z"}
+{"component": "session_migration", "state": "starting", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:58.573257Z"}
+{"default": "fake-model", "api_base": "http://127.0.0.1:7697/v1", "source": "atlas.toml", "event": "model_manager.init", "level": "info", "logger": "atlas.models", "timestamp": "2026-11-18T20:05:58.574539Z"}
+{"db": "D:\\Atlas\\.worktrees\\zcode-exec06-skill-sources\\_tmp\\lsp-fixtures\\par08_skill_d7084f5467\\atlas\\data\\atlas.db", "event": "memory.init", "level": "info", "logger": "atlas.memory", "timestamp": "2026-11-18T20:05:58.627563Z"}
+{"event": "skills.change_invalidated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:05:58.903944Z"}
+{"event": "skills.change_invalidated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:05:58.903944Z"}
+{"event": "skills.change_invalidated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:05:58.903944Z"}
+{"event": "skills.change_invalidated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:05:58.903944Z"}
+{"count": 12, "sources": 4, "event": "skills.scanned", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:05:58.955226Z"}
+{"revision": 1, "skills": 12, "event": "skills.changed", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:05:58.961161Z"}
+{"event": "mcp.no_servers_configured", "level": "info", "logger": "atlas.api.deferred_startup", "timestamp": "2026-11-18T20:05:59.204636Z"}
+{"component": "mcp", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:59.204636Z"}
+{"component": "channels", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:59.204636Z"}
+{"component": "scheduler", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:59.204636Z"}
+{"component": "telegram", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:59.204636Z"}
+{"component": "extensions", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:59.894414Z"}
+{"component": "session_migration", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:59.897350Z"}
+{"component": "engine_registrations", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:05:59.900777Z"}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:7698 (Press CTRL+C to quit)
+INFO:     127.0.0.1:7713 - "WebSocket /ws/chat" [accepted]
+INFO:     connection open
+{"event": "skills.change_invalidated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:05:59.980814Z"}
+{"event": "skills.change_invalidated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:05:59.980814Z"}
+{"event": "skills.change_invalidated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:05:59.981927Z"}
+{"name": "shared", "existing": "D:\\Atlas\\.worktrees\\zcode-exec06-skill-sources\\_tmp\\lsp-fixtures\\par08_skill_d7084f5467\\ws-a\\.agents\\skills\\shared\\SKILL.md", "new": "D:\\Atlas\\.worktrees\\zcode-exec06-skill-sources\\_tmp\\lsp-fixtures\\par08_skill_d7084f5467\\ws-a\\.dsh\\skills\\shared\\SKILL.md", "event": "skills.duplicate_name", "level": "warning", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:00.056244Z"}
+{"count": 14, "sources": 7, "event": "skills.scanned", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:00.056244Z"}
+{"revision": 1, "skills": 14, "event": "skills.changed", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:00.073704Z"}
+{"name": "shared", "event": "skills.activated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:00.105222Z"}
+{"name": "only-a", "event": "skills.activated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:00.122918Z"}
+{"chunk_seconds": 21600.0, "event": "dbos.scheduler_wait_shim_applied", "level": "info", "logger": "atlas.capabilities.durable.dbos_compat", "timestamp": "2026-11-18T20:06:00.445851Z"}
+04:06:00 [    INFO] (dbos:_dbos.py:509) Initializing DBOS (v3.0.0)
+04:06:00 [    INFO] (dbos:_dbos.py:549) Executor ID: local
+04:06:00 [    INFO] (dbos:_dbos.py:550) Application version: 072afa0aa56a88508e42ee86daf8014a
+04:06:00 [    INFO] (dbos:_dbos.py:551) Application name: atlas
+04:06:00 [    INFO] (dbos:_sys_db.py:675) Initializing DBOS system database with URL: sqlite:///D%3A/Atlas/.worktrees/zcode-exec06-skill-sources/_tmp/lsp-fixtures/par08_skill_d7084f5467/atlas/data/dbos.sqlite (schema: dbos)
+04:06:00 [    INFO] (dbos:_sys_db.py:679) Using SQLite as a system database. The SQLite system database is for development and testing. PostgreSQL is recommended for production use.
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 1
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 2
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 3
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 4
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 5
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 6
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 7
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 8
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 9
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 10
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 11
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 12
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 13
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 14
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 15
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 16
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 17
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 18
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 19
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 20
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 21
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 22
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 23
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 24
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 25
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 26
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 27
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 28
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 29
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 30
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 31
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 32
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 33
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 34
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 35
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 36
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 37
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 38
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 39
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 40
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 100
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 101
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 102
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 103
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 104
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 106
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 107
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 108
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 109
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 110
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 111
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 112
+04:06:00 [    INFO] (dbos:_sys_db_sqlite.py:108) Applying DBOS SQLite system database schema migration 114
+04:06:00 [    INFO] (dbos:_dbos.py:634) No workflows to recover from application version 072afa0aa56a88508e42ee86daf8014a
+04:06:00 [    INFO] (dbos:_dbos.py:735) DBOS launched!
+04:06:00 [    INFO] (dbos:_queue.py:944) Listening to 0 queues:
+04:06:00 [    INFO] (dbos:_dbos.py:743) To view and manage workflows, connect to DBOS Conductor at: https://console.dbos.dev/self-host?appname=atlas
+{"component": "dbos", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:06:00.534082Z"}
+04:06:00 [    INFO] (dbos:_dbos.py:997) Registered and listening to new queue:
+04:06:00 [    INFO] (dbos:_queue.py:919) Queue: atlas-automation (concurrency=2)
+{"component": "automation", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:06:00.542230Z"}
+{"conversation_id": "250512c7-ba99-44f0-a171-b1626f3d50bd", "run_id": "256f338197ca43a88feb925acc237e86", "checkpoint_id": "24f892611b3c4bf08939606f507b35d8", "event": "rewind.checkpoint_created", "level": "info", "logger": "atlas.api.run_drive", "timestamp": "2026-11-18T20:06:00.606010Z"}
+{"model": "openai/fake-model", "conv": "250512c7-ba99-44f0-a171-b1626f3d50bd", "msg_len": 2, "event": "agent.run", "level": "info", "logger": "atlas.agent.run_phases", "timestamp": "2026-11-18T20:06:00.693397Z"}
+{"error": "No module named 'fastembed'", "event": "memory.library.embed_unavailable", "level": "warning", "logger": "atlas.memory.library.embed", "timestamp": "2026-11-18T20:06:01.116403Z"}
+{"event": "model.cache_usage provider=custom model=fake-model cached_tokens=0 cache_read=None usage={'prompt_tokens': 100, 'completion_tokens': 20, 'total_tokens': 120, 'prompt_tokens_details': {'cached_tokens': 0}}", "level": "info", "logger": "atlas.engine.kernel.model_call", "timestamp": "2026-11-18T20:06:01.743000Z"}
+{"result": {"skipped": false, "pruned": 0, "closed": 0, "vacuumed": false}, "event": "agent.idle_maintenance_ran", "level": "info", "logger": "atlas.agent.run_phases", "timestamp": "2026-11-18T20:06:01.859229Z"}
+{"event": "atlas_runtime.idle_maintenance_completed", "level": "info", "logger": "atlas.engine.atlas_runtime", "timestamp": "2026-11-18T20:06:01.859229Z"}
+INFO:     connection closed
+INFO:     127.0.0.1:7722 - "WebSocket /ws/chat" [accepted]
+INFO:     connection open
+{"event": "skills.change_invalidated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:02.093316Z"}
+{"event": "skills.change_invalidated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:02.093316Z"}
+{"event": "skills.change_invalidated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:02.093316Z"}
+{"count": 14, "sources": 7, "event": "skills.scanned", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:02.123533Z"}
+{"revision": 1, "skills": 14, "event": "skills.changed", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:02.132947Z"}
+{"name": "shared", "event": "skills.activated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:02.143880Z"}
+{"name": "only-b", "event": "skills.activated", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:02.154543Z"}
+{"session": "250512c7-ba99-44f0-a171-b1626f3d50bd", "added": 0, "changed": 0, "ended": 0, "forgotten": 0, "rejected": 0, "event": "memory.library.turn", "level": "info", "logger": "atlas.memory.library", "timestamp": "2026-11-18T20:06:02.308267Z"}
+{"conversation_id": "fcad5bd2-fc48-40e4-abae-dc42bdc550f5", "run_id": "0c770392cbaa44f190f37246e6dc99ba", "checkpoint_id": "ba2a5a9f94c741959cea4cd39d58a7da", "event": "rewind.checkpoint_created", "level": "info", "logger": "atlas.api.run_drive", "timestamp": "2026-11-18T20:06:02.353823Z"}
+{"model": "openai/fake-model", "conv": "fcad5bd2-fc48-40e4-abae-dc42bdc550f5", "msg_len": 2, "event": "agent.run", "level": "info", "logger": "atlas.agent.run_phases", "timestamp": "2026-11-18T20:06:02.446373Z"}
+{"count": 12, "sources": 4, "event": "skills.scanned", "level": "info", "logger": "atlas.skills", "timestamp": "2026-11-18T20:06:02.605939Z"}
+{"component": "skills", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:06:02.621781Z"}
+{"component": "plugins", "state": "ready", "event": "startup.component", "level": "info", "logger": "atlas.api.startup_components", "timestamp": "2026-11-18T20:06:02.621781Z"}
+{"event": "model.cache_usage provider=custom model=fake-model cached_tokens=0 cache_read=None usage={'prompt_tokens': 100, 'completion_tokens': 20, 'total_tokens': 120, 'prompt_tokens_details': {'cached_tokens': 0}}", "level": "info", "logger": "atlas.engine.kernel.model_call", "timestamp": "2026-11-18T20:06:03.015148Z"}
+{"result": {"skipped": true, "pruned": 0, "closed": 0, "vacuumed": false}, "event": "agent.idle_maintenance_ran", "level": "info", "logger": "atlas.agent.run_phases", "timestamp": "2026-11-18T20:06:03.086814Z"}
+{"event": "atlas_runtime.idle_maintenance_completed", "level": "info", "logger": "atlas.engine.atlas_runtime", "timestamp": "2026-11-18T20:06:03.087793Z"}
+INFO:     connection closed
+INFO:     127.0.0.1:7727 - "WebSocket /ws/chat" [accepted]
+INFO:     connection open
+INFO:     connection closed

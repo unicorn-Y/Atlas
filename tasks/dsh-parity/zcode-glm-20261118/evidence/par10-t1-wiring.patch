@@ -1,0 +1,278 @@
+--- a/core/atlas/plugins/runtime.py
++++ b/core/atlas/plugins/runtime.py
+@@ -30,6 +30,13 @@
+ from atlas.agent.enrichment import HOOK_POINTS
+ from atlas.plugins import patch_layer
+ from atlas.plugins.compatibility import ATLAS_VERSION, evaluate_plugin_compatibility
++from atlas.plugins.registry_install import (
++    build_install_plan,
++    classify_registry_failure,
++    redact_output,
++    run_registry_attempts,
++)
++from atlas.plugins.registry_plan import RegistryPlan, attribute_failure
+ 
+ log = structlog.get_logger(__name__)
+ 
+@@ -368,7 +375,8 @@
+         return "approved" if expiry > current else "expired"
+ 
+     async def start_install_operation(
+-        self, source: str, *, ref: str | None = None, registry: str | None = None, request_id: str | None = None,
++        self, source: str, *, ref: str | None = None, registry: str | None = None,
++        fallback_registries: list[str] | None = None, request_id: str | None = None,
+         on_complete: Any = None, source_type: str | None = None, marketplace: str | None = None,
+         plugin_name: str | None = None,
+     ) -> dict[str, Any]:
+@@ -376,7 +384,22 @@
+         if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", request_id):
+             raise ValueError("requestId is invalid")
+         source_type = source_type or self._infer_install_source_type(source)
++        try:
++            plan, attempt_urls = build_install_plan(
++                source, registry=registry, fallback_registries=fallback_registries,
++            )
++        except ValueError as exc:
++            # The raw URL may carry registry credentials; never echo it back.
++            raise ValueError("registry configuration is invalid") from exc
++        fallbacks = tuple(
++            item.strip() for item in fallback_registries
++            if isinstance(item, str) and item.strip()
++        ) if isinstance(fallback_registries, (list, tuple)) else ()
+         args = (source, ref, registry, source_type, marketplace, plugin_name)
++        if fallbacks:
++            # Requests without fallbacks keep the digest earlier runtimes
++            # recorded for the same requestId.
++            args = (*args, fallbacks)
+         previous = self._install_request_args.get(request_id)
+         if previous is not None:
+             if previous != args:
+@@ -397,7 +420,7 @@
+         self._install_operations[request_id] = {
+             "requestId": request_id, "source": source, "status": "queued",
+             "createdAt": datetime.now(timezone.utc).isoformat(), "updatedAt": datetime.now(timezone.utc).isoformat(),
+-            "approvalRequired": [],
++            "approvalRequired": [], "registryPlan": plan.to_dict(),
+         }
+         self._install_cancel_events[request_id] = asyncio.Event()
+         self._install_done_events[request_id] = asyncio.Event()
+@@ -405,6 +428,7 @@
+         self._install_request_args[request_id] = args
+         task = loop.create_task(self._run_install_operation(
+             request_id, source, ref, registry, on_complete, source_type, marketplace, plugin_name,
++            plan, attempt_urls,
+         ))
+         self._install_tasks[request_id] = task
+         return self._install_snapshot(request_id)
+@@ -764,15 +788,18 @@
+     async def _run_install_operation(
+         self, request_id: str, source: str, ref: str | None, registry: str | None, on_complete: Any,
+         source_type: str, marketplace: str | None, requested_plugin_name: str | None,
++        plan: RegistryPlan, attempt_urls: tuple[str | None, ...],
+     ) -> None:
+         async with self._install_transaction_lock:
+             await self._run_install_operation_locked(
+-                request_id, source, ref, registry, on_complete, source_type, marketplace, requested_plugin_name,
++                request_id, source, ref, registry, on_complete, source_type, marketplace,
++                requested_plugin_name, plan, attempt_urls,
+             )
+ 
+     async def _run_install_operation_locked(
+         self, request_id: str, source: str, ref: str | None, registry: str | None, on_complete: Any,
+         source_type: str, marketplace: str | None, requested_plugin_name: str | None,
++        plan: RegistryPlan, attempt_urls: tuple[str | None, ...],
+     ) -> None:
+         operation = self._install_operations[request_id]
+         cancel_event = self._install_cancel_events[request_id]
+@@ -825,10 +852,17 @@
+                     source_workspace = Path(tempfile.mkdtemp(prefix="ag-"))
+                     checkout = source_workspace / "r"
+                     operation.update(status="running", phase="source_fetch")
+-                    code, _ = await self._run_git_clone_operation(request_id, url, checkout, ref=ref)
++                    code, clone_output = await self._run_git_clone_operation(request_id, url, checkout, ref=ref)
+                     if cancel_event.is_set():
+                         raise asyncio.CancelledError
+                     if code != 0:
++                        kind = classify_registry_failure(code, clone_output)
++                        operation["failureKind"] = kind
++                        operation["failureAttribution"] = attribute_failure(kind, clone_output, url)
++                        operation["failureSummary"] = redact_output(
++                            clone_output, sensitive_paths=(source_workspace, Path.home(), tempfile.gettempdir()),
++                            max_chars=500,
++                        )
+                         raise RuntimeError("source_fetch_failed")
+                     source_root = self._plugin_root(checkout / subdir if subdir else checkout)
+                     source_record.update({"subdir": subdir, "ref": ref})
+@@ -841,10 +875,17 @@
+                 source_workspace = Path(tempfile.mkdtemp(prefix="ag-"))
+                 checkout = source_workspace / "r"
+                 operation.update(status="running", phase="source_fetch")
+-                code, _ = await self._run_git_clone_operation(request_id, url, checkout, ref=ref)
++                code, clone_output = await self._run_git_clone_operation(request_id, url, checkout, ref=ref)
+                 if cancel_event.is_set():
+                     raise asyncio.CancelledError
+                 if code != 0:
++                    kind = classify_registry_failure(code, clone_output)
++                    operation["failureKind"] = kind
++                    operation["failureAttribution"] = attribute_failure(kind, clone_output, url)
++                    operation["failureSummary"] = redact_output(
++                        clone_output, sensitive_paths=(source_workspace, Path.home(), tempfile.gettempdir()),
++                        max_chars=500,
++                    )
+                     raise RuntimeError("source_fetch_failed")
+                 source_root = self._plugin_root(checkout)
+                 plugin_name = _plugin_name(Path(url.rstrip("/")).name.removesuffix(".git"))
+@@ -854,10 +895,32 @@
+                 spec = source.removeprefix("npm:")
+                 source_workspace = Path(tempfile.mkdtemp(prefix="an-"))
+                 operation.update(status="running", phase="source_fetch")
+-                code, _ = await self._run_npm_pack(request_id, spec, source_workspace, registry)
++
++                async def _pack_attempt(attempt_registry: str | None) -> tuple[int, str]:
++                    # A failed registry must not leave an archive the next
++                    # registry's result would be confused with.
++                    for stale in source_workspace.glob("*.tgz"):
++                        stale.unlink(missing_ok=True)
++                    return await self._run_npm_pack(
++                        request_id, spec, source_workspace, attempt_registry,
++                    )
++
++                outcome = await run_registry_attempts(
++                    plan, _pack_attempt, spec=source, attempt_urls=attempt_urls,
++                    classify=classify_registry_failure, cancelled=cancel_event.is_set,
++                    on_attempt=lambda record: operation.update(
++                        registryAttempts=[*operation.get("registryAttempts", ()), record],
++                    ),
++                    sensitive_paths=(source_workspace, Path.home(), tempfile.gettempdir()),
++                    max_output_chars=1500,
++                )
++                operation["registryOutcome"] = outcome.to_dict()
+                 if cancel_event.is_set():
+                     raise asyncio.CancelledError
+-                if code != 0:
++                if not outcome.ok:
++                    operation["failureAttribution"] = outcome.attribution
++                    operation["failureKind"] = outcome.failure_kind
++                    operation["failureSummary"] = outcome.failure_summary
+                     raise RuntimeError("source_fetch_failed")
+                 archives = sorted(source_workspace.glob("*.tgz"))
+                 if len(archives) != 1:
+@@ -939,13 +1002,41 @@
+                 try:
+                     package_file.write_text(json.dumps(safe_package, ensure_ascii=False, indent=2), encoding="utf-8")
+                     workspace_file.write_text(yaml.safe_dump(safe_workspace, allow_unicode=True, sort_keys=False), encoding="utf-8")
+-                    code, install_output = await self._run_package_manager(
+-                        request_id, stage, registry, ["install", "--reporter=append-only"],
++
++                    async def _install_attempt(attempt_registry: str | None) -> tuple[int, str]:
++                        return await self._run_package_manager(
++                            request_id, stage, attempt_registry, ["install", "--reporter=append-only"],
++                        )
++
++                    def _pnpm_succeeded(exit_code: int, output: str) -> bool:
++                        # Ignored-build reports are an approval flow, not a
++                        # registry failure; retrying another registry would hide
++                        # the packages the user must approve.
++                        return exit_code == 0 or (
++                            "ERR_PNPM_IGNORED_BUILDS" in output
++                            and bool(self._blocked_build_packages(output))
++                        )
++
++                    outcome = await run_registry_attempts(
++                        plan, _install_attempt, spec=source, attempt_urls=attempt_urls,
++                        succeeded=_pnpm_succeeded, classify=classify_registry_failure,
++                        cancelled=cancel_event.is_set,
++                        on_attempt=lambda record: operation.update(
++                            dependencyAttempts=[*operation.get("dependencyAttempts", ()), record],
++                        ),
++                        sensitive_paths=(stage, Path.home(), tempfile.gettempdir()),
++                        max_output_chars=1500,
+                     )
++                    operation["dependencyOutcome"] = outcome.to_dict()
+                     if cancel_event.is_set():
+                         raise asyncio.CancelledError
++                    code = outcome.returncode
++                    install_output = outcome.output
+                     blocked = self._blocked_build_packages(install_output)
+-                    if code != 0 and not ("ERR_PNPM_IGNORED_BUILDS" in install_output and blocked):
++                    if not outcome.ok:
++                        operation["failureAttribution"] = outcome.attribution
++                        operation["failureKind"] = outcome.failure_kind
++                        operation["failureSummary"] = outcome.failure_summary
+                         raise RuntimeError("package_manager_failed")
+                     if code == 0 and blocked:
+                         raise RuntimeError("unexpected_blocked_build_report")
+@@ -964,15 +1055,28 @@
+                         operation.update(status="running", phase="approved_build", approvalRequired=[])
+                         safe_workspace["allowBuilds"] = {name: True for name in blocked}
+                         workspace_file.write_text(yaml.safe_dump(safe_workspace, allow_unicode=True, sort_keys=False), encoding="utf-8")
+-                        code, approved_output = await self._run_package_manager(
+-                            request_id, stage, registry, ["install", "--reporter=append-only"],
++
++                        async def _approved_install(attempt_registry: str | None) -> tuple[int, str]:
++                            return await self._run_package_manager(
++                                request_id, stage, attempt_registry, ["install", "--reporter=append-only"],
++                            )
++
++                        approved = await run_registry_attempts(
++                            plan, _approved_install, spec=source, attempt_urls=attempt_urls,
++                            classify=classify_registry_failure, cancelled=cancel_event.is_set,
++                            sensitive_paths=(stage, Path.home(), tempfile.gettempdir()),
++                            max_output_chars=1500,
+                         )
++                        operation["approvedBuildOutcome"] = approved.to_dict()
+                         if cancel_event.is_set():
+                             raise asyncio.CancelledError
+-                        if code != 0:
++                        if not approved.ok:
++                            operation["failureAttribution"] = approved.attribution
++                            operation["failureKind"] = approved.failure_kind
++                            operation["failureSummary"] = approved.failure_summary
+                             raise RuntimeError("approved_build_failed")
+                         operation["executedBuildPackages"] = blocked
+-                        if "ERR_PNPM_IGNORED_BUILDS" in approved_output:
++                        if "ERR_PNPM_IGNORED_BUILDS" in approved.output:
+                             raise RuntimeError("approved_build_failed")
+                 finally:
+                     package_file.write_bytes(original_package)
+--- a/core/atlas/api/plugins_router.py
++++ b/core/atlas/api/plugins_router.py
+@@ -36,6 +36,18 @@
+     return value
+ 
+ 
++def _fallback_registries(req: dict[str, Any]) -> list[str] | None:
++    """Validate the public-registry alternatives an install request may use."""
++    value = req.get("fallbackRegistries")
++    if value is None:
++        return None
++    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
++        raise HTTPException(status_code=422, detail="fallbackRegistries must be a list of registry URLs")
++    if len(value) > 8:
++        raise HTTPException(status_code=422, detail="fallbackRegistries accepts at most 8 entries")
++    return value
++
++
+ 
+ @router.get("/api/plugins")
+ async def list_plugins(
+@@ -155,7 +167,8 @@
+             if not validation["valid"]:
+                 raise HTTPException(status_code=422, detail={"message": "插件清单校验未通过", "validation": validation})
+         return await plugin_runtime.start_install_operation(
+-            source, ref=req.get("ref"), registry=req.get("registry"), request_id=req.get("requestId"),
++            source, ref=req.get("ref"), registry=req.get("registry"),
++            fallback_registries=_fallback_registries(req), request_id=req.get("requestId"),
+             on_complete=_server()._reload_extensions, source_type=source_type,
+         )
+     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+@@ -443,7 +456,8 @@
+         result = await plugin_runtime.start_install_operation(
+             f"marketplace:{name}/{plugin_name}", request_id=req.get("requestId"),
+             source_type="marketplace", marketplace=name, plugin_name=plugin_name,
+-            registry=req.get("registry"), on_complete=_server()._reload_extensions,
++            registry=req.get("registry"), fallback_registries=_fallback_registries(req),
++            on_complete=_server()._reload_extensions,
+         )
+     except KeyError as exc:
+         raise HTTPException(status_code=404, detail=str(exc.args[0] if exc.args else exc)) from exc

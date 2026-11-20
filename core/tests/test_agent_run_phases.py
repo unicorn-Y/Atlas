@@ -69,6 +69,31 @@ def _orchestrator(memory: Any | None = None) -> AgentOrchestrator:
     return AgentOrchestrator(model_mgr, memory or _memory_stub(), MagicMock())
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_legacy_run_adapter_preserves_session_working_directory(tmp_path, monkeypatch):
+    agent = _orchestrator()
+    workspace = tmp_path / "workspace"
+    selected = workspace / "nested"
+    selected.mkdir(parents=True)
+    captured: dict[str, Any] = {}
+
+    def capture_execute(request, callbacks):
+        async def stream():
+            captured["request"] = request
+            yield {"type": "done"}
+        return stream()
+
+    monkeypatch.setattr(agent, "execute", capture_execute)
+    events = [event async for event in agent.run(
+        "cwd propagation", "cwd-session", workspace=str(workspace),
+        working_directory=str(selected), workspace_trusted=True,
+    )]
+    assert events == [{"type": "done"}]
+    assert captured["request"].working_directory == str(selected)
+    assert captured["request"].workspace == str(workspace)
+
+
 # -- H2.2: run() adapter packs RunRequest/RunCallbacks -----------------------
 
 

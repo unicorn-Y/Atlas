@@ -617,6 +617,18 @@ class ExecManager:
             "action": "status", "execution_id": handle.execution_id,
         })
         if result.get("is_error"):
+            data = result.get("data") if isinstance(result.get("data"), dict) else {}
+            if data.get("state") == "unknown" or result.get("outcome") == "unknown":
+                handle.outcome = "unknown"
+                handle.exit_code = data.get("exit_code")
+                handle.job_output.settle()
+                try:
+                    await self._capture(handle)
+                except Exception:
+                    # The remote process has no trustworthy terminal status;
+                    # preserve that unknown outcome instead of restarting it.
+                    pass
+                return self._result(handle)
             return result
         await self._capture(handle)
         data = result.get("data") or {}
@@ -632,6 +644,8 @@ class ExecManager:
                 handle.outcome = "cancelled"
             elif data.get("state") == "failed":
                 handle.outcome = "failed"
+            elif data.get("state") == "unknown":
+                handle.outcome = "unknown"
             else:
                 handle.outcome = "completed" if handle.exit_code == 0 else "failed"
             handle.job_output.settle()

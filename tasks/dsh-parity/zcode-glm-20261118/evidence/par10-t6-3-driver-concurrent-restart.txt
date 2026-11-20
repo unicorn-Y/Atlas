@@ -1,0 +1,35 @@
+SCENARIO concurrent-restart
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 06:13:51 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-par10-mcp-lifecycle-gate\.tmp\par10-t6-3\data\concurrent-restart\config\atlas.toml
+2026-11-19 06:13:51 [info     ] mcp.starting                   count=1 names=['real']
+2026-11-19 06:13:54 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 06:13:54 [info     ] mcp.server_ready               server=real tools=['echo']
+CHECK PASS concurrent restart: connected before :: {'available': True, 'node_required': False, 'blocking_reason': None, 'servers': [{'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}], 'startup_progress': [{'server': 'real', 'state': 'connecting', 'message': '正在连接 MCP 服务', 'transport': 'stdio', 'timestamp': '2026-11-18T22:13:51.813614+00:00'}, {'server': 'real', 'state': 'connecting', 'message': '正在建立传输连接', 'transport': 'stdio', 'timestamp': '2026-11-18T22:13:52.025156+00:00'}, {'server': 'real', 'state': 'initializing', 'message': '连接已建立，正在初始化协议', 'transport': 'stdio', 'timestamp': '2026-11-18T22:13:54.635340+00:00'}, {'server': 'real', 'state': 'discovering_tools', 'message': '正在读取工具目录', 'transport': 'stdio', 'timestamp': '2026-11-18T22:13:54.636435+00:00'}, {'server': 'real', 'state': 'ready', 'message': '已就绪 · 1 个工具', 'transport': 'stdio', 'timestamp': '2026-11-18T22:13:54.637412+00:00'}]}
+2026-11-19 06:13:55 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 06:13:55 [info     ] mcp.server_stopped             server=real
+2026-11-19 06:13:57 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 06:13:57 [info     ] mcp.server_ready               server=real tools=['echo']
+2026-11-19 06:13:57 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 06:13:57 [info     ] mcp.server_stopped             server=real
+2026-11-19 06:13:59 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 06:13:59 [info     ] mcp.server_ready               server=real tools=['echo']
+2026-11-19 06:13:59 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 06:13:59 [info     ] mcp.server_stopped             server=real
+2026-11-19 06:14:00 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 06:14:00 [info     ] mcp.server_ready               server=real tools=['echo']
+2026-11-19 06:14:01 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 06:14:01 [info     ] mcp.server_stopped             server=real
+2026-11-19 06:14:02 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 06:14:02 [info     ] mcp.server_ready               server=real tools=['echo']
+2026-11-19 06:14:02 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 06:14:02 [info     ] mcp.server_stopped             server=real
+2026-11-19 06:14:04 [info     ] mcp.server_initialized         protocol=2025-11-25 server=real server_info="name='par10-real-stdio' title=None version='1.0.0' description=None website_url=None icons=None"
+2026-11-19 06:14:04 [info     ] mcp.server_ready               server=real tools=['echo']
+CHECK PASS concurrent restart: all restarts complete :: []
+CHECK PASS concurrent restart: final status connected :: {'name': 'real', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': True, 'state': 'connected', 'tool_discovery': 'complete', 'tool_count': 1, 'blocking_reason': None}
+CHECK PASS concurrent restart: exactly one new child is current :: {'before': 62092, 'after': 58856}
+CHECK PASS concurrent restart: no leaked sibling children :: {'live': [58856], 'current': 58856}
+2026-11-19 06:14:05 [warning  ] mcp.owner_cancelled            server=real
+2026-11-19 06:14:05 [info     ] mcp.server_stopped             server=real
+CHECK PASS concurrent restart: stop cleans every child :: []
+RESULT concurrent-restart checks=6 failed=0

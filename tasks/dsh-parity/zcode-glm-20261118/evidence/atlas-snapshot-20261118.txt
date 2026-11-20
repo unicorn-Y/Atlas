@@ -1,0 +1,149 @@
+# Atlas snapshot 2026-11-18
+branch: wave3
+HEAD:
+060071ab2ecf86d41cab90e98160183ce126bc69
+
+# git status --porcelain:
+ M backend-adapter/src/types.ts
+ M backend-adapter/tests/client.test.ts
+ M core/atlas/agent/__init__.py
+ M core/atlas/agent/project_instructions.py
+ M core/atlas/agent/run_phases.py
+ M core/atlas/agent/session_queries.py
+ M core/atlas/agent/tool_node.py
+ M core/atlas/api/conversations_router.py
+ M core/atlas/api/deferred_startup.py
+ M core/atlas/api/event_names.py
+ M core/atlas/api/plugins_router.py
+ M core/atlas/api/run_drive.py
+ M core/atlas/api/runtime_ws_router.py
+ M core/atlas/api/service_registry.py
+ M core/atlas/api/tools_router.py
+ M core/atlas/engine/atlas_runtime.py
+ M core/atlas/engine/kernel/edit.py
+ M core/atlas/engine/kernel/exec.py
+ M core/atlas/engine/kernel/inbox.py
+ M core/atlas/engine/kernel/loop.py
+ M core/atlas/engine/kernel/model_call.py
+ M core/atlas/engine/kernel/tools.py
+ M core/atlas/engine/session_sync.py
+ M core/atlas/introspect/providers/services.py
+ M core/atlas/lsp/client.py
+ M core/atlas/lsp/manager.py
+ M core/atlas/lsp/servers.py
+ M core/atlas/models/router.py
+ M core/atlas/plugins/patch_layer.py
+ M core/atlas/plugins/runtime.py
+ M core/atlas/runtime/hooks.py
+ M core/atlas/sandbox.py
+ M core/atlas/server.py
+ M core/atlas/ssh.py
+ M core/atlas/tools/app_server.py
+ M core/atlas/tools/web.py
+ M core/atlas/tools/web_extract.py
+ M core/atlas/tools/workspace_lsp.py
+ M core/atlas/websearch/providers/local.py
+ M core/atlas/websearch/service.py
+ M core/pyproject.toml
+ M core/tests/fakes/fake_llm_provider.py
+ M core/tests/test_app_server_acp.py
+ M core/tests/test_app_server_sdk_lifecycle.py
+ M core/tests/test_atlas_runtime_e2e.py
+ M core/tests/test_backend_parity_wave3.py
+ M core/tests/test_backend_parity_wave5.py
+ M core/tests/test_c1_recovery.py
+ M core/tests/test_c1_review_e2e.py
+ M core/tests/test_c1_websocket_acceptance.py
+ M core/tests/test_dsh_w7_sandbox.py
+ M core/tests/test_kernel_durable_inbox.py
+ M core/tests/test_kernel_session_query_dispatch.py
+ M core/tests/test_lsp_service.py
+ M core/tests/test_projects.py
+ M core/tests/test_service_registry.py
+ M core/tests/test_ssh_execution_world.py
+ M core/tests/test_tools_router_failures.py
+ M core/tests/test_w3_session_compaction.py
+ M core/tests/test_web_tools.py
+ M frontend/src/main/electron.lifecycle.test.ts
+ M frontend/src/main/electron.ts
+ M frontend/src/renderer/App.tsx
+ M frontend/src/renderer/components/RunSetupMenu.tsx
+ M frontend/src/renderer/components/SideChat.tsx
+ M frontend/src/renderer/components/settings/WorkspaceSecurityPanel.tsx
+ M frontend/src/renderer/components/timelineProjection.test.ts
+ M frontend/src/renderer/components/timelineProjection.ts
+ M frontend/src/renderer/pages/ConsolePage.tsx
+ M frontend/src/renderer/services/locales/en-US.ts
+ M frontend/src/renderer/services/runtimeEvents.test.ts
+ M frontend/src/renderer/services/runtimeEvents.ts
+ M frontend/src/types/runtime.ts
+ M sdk/python/atlas_sdk/__init__.py
+ M sdk/python/atlas_sdk/app_server.py
+ M tasks/dsh-parity/BENCH.md
+ M tasks/dsh-parity/COVERAGE-FINAL.md
+?? backend-adapter/tests/backend_websocket_cancellation.integration.test.ts
+?? core/Microsoft/
+?? core/atlas/plugins/compatibility.py
+?? core/scripts/atlas_bench_server.py
+?? core/scripts/dsh_attempt_rollback_ui_probe.py
+?? core/scripts/dsh_capability_audit.py
+?? core/scripts/dsh_electron_attempt_backend.py
+?? core/scripts/dsh_powershell_contracts.ps1
+?? core/scripts/dsh_shell_parse.py
+?? core/scripts/dsh_ts_contracts.cjs
+?? core/scripts/dsh_validation_runner.py
+?? core/scripts/omni_bench.py
+?? core/scripts/omni_multiturn.py
+?? core/tests/test_app_server_sdk_subprocess_attempts.py
+?? core/tests/test_dsh_capability_audit.py
+?? core/tests/test_hook_missing_script.py
+?? core/tests/test_kernel_file_read.py
+?? core/tests/test_kernel_volatile_context_projection.py
+?? core/tests/test_lsp_ssh_transport.py
+?? core/tests/test_lsp_ssh_world.py
+?? core/tests/test_omni_bench.py
+?? core/tests/test_plugin_compatibility.py
+?? core/tests/test_plugin_install_operations.py
+?? core/tests/test_retry_attempt_isolation.py
+?? core/tests/test_retry_decision_persistence.py
+?? core/tests/test_retry_recovery_state.py
+?? docs/glm-hammer/plans/2026-11-17-atlas-dsh-atomic-parity-and-superiority.md
+?? docs/glm-hammer/plans/2026-11-18-zcode-glm-first-dsh-batch.md
+?? docs/glm-hammer/plans/2026-11-18-zcode-glm-full-dsh-atlas.md
+?? frontend/scripts/dsh-electron-attempt-probe.mjs
+?? frontend/scripts/dsh-electron-vite-server.mjs
+?? frontend/src/renderer/pages/ConsolePage.compatibility.test.tsx
+?? sdk/python/tests/
+?? tasks/dsh-parity/BENCH-ANALYSIS.md
+?? tasks/dsh-parity/BEYOND-DSH-ATOMIC-PLAN-RECEIPT.md
+?? tasks/dsh-parity/BEYOND-DSH-CDP-RECEIPT.md
+?? tasks/dsh-parity/BEYOND-DSH-CODEX-MANDATE.md
+?? tasks/dsh-parity/BEYOND-DSH-CONTEXT-ANALYSIS.md
+?? tasks/dsh-parity/BEYOND-DSH-MAP-01.md
+?? tasks/dsh-parity/BEYOND-DSH-MAP-02.md
+?? tasks/dsh-parity/BEYOND-DSH-MAP-03.md
+?? tasks/dsh-parity/BEYOND-DSH-MAP-04.md
+?? tasks/dsh-parity/BEYOND-DSH-MAP-05.md
+?? tasks/dsh-parity/BEYOND-DSH-MAP-06.md
+?? tasks/dsh-parity/BEYOND-DSH-MODEL-AUTH-ANALYSIS.md
+?? tasks/dsh-parity/BEYOND-DSH-PROGRESS.md
+?? tasks/dsh-parity/BEYOND-DSH-REVIEW-01.md
+?? tasks/dsh-parity/BEYOND-DSH-REVIEW-02.md
+?? tasks/dsh-parity/BEYOND-DSH-REVIEW-03.md
+?? tasks/dsh-parity/BEYOND-DSH-REVIEW-04.md
+?? tasks/dsh-parity/BEYOND-DSH-REVIEW-05.md
+?? tasks/dsh-parity/BEYOND-DSH-SHUTDOWN-ANALYSIS.md
+?? tasks/dsh-parity/BEYOND-DSH-VERIFICATION-01.md
+?? tasks/dsh-parity/BEYOND-DSH-VERIFICATION-02.md
+?? tasks/dsh-parity/BEYOND-DSH-VERIFICATION-03.md
+?? tasks/dsh-parity/BEYOND-DSH-VERIFICATION-04.md
+?? tasks/dsh-parity/BEYOND-DSH-VERIFICATION-05.md
+?? tasks/dsh-parity/BEYOND-DSH-VERIFICATION-06.md
+?? tasks/dsh-parity/BEYOND-DSH-VERIFICATION-07.md
+?? tasks/dsh-parity/BEYOND-DSH-VERIFICATION-08.md
+?? tasks/dsh-parity/BEYOND-DSH-VERIFICATION-09.md
+?? tasks/dsh-parity/BEYOND-DSH-VERIFICATION-10.md
+?? tasks/dsh-parity/MULTITURN-WAIT-PROBE.md
+?? tasks/dsh-parity/MULTITURN.md
+?? tasks/dsh-parity/atomic/
+?? tasks/dsh-parity/zcode-glm-20261118/

@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 import structlog
 
 from atlas.config import get_config, load_user_settings, save_user_settings
+from atlas.models.credential_grammar import normalize_api_key
 from atlas.models import catalog as _catalog
 from atlas.models import models_dev as _models_dev
 from atlas.models import reasoning_effort as _reasoning_effort
@@ -213,6 +214,12 @@ class ModelManager:
 
     def update_provider(self, base_url: str, api_key: str | None) -> None:
         project_id = current_project_id()
+        normalized: str | None = None
+        if api_key and str(api_key).strip():
+            verdict = normalize_api_key(api_key)
+            if not verdict.ok:
+                raise ValueError(f"网关密钥无效: {verdict.reason}")
+            normalized = verdict.value
         if project_id:
             from atlas.project_settings import load_project_config, save_project_config
 
@@ -221,18 +228,18 @@ class ModelManager:
             gateway = models.setdefault("gateway", {})
             gateway["base_url"] = base_url.rstrip("/")
             save_project_config(project_id, project_config)
-            if api_key:
-                set_project_gateway_key(project_id, api_key)
+            if normalized:
+                set_project_gateway_key(project_id, normalized)
             return
         if self._api_base != base_url.rstrip("/"):
             for entry in self._providers.values():
                 entry.pop("api_mode_probe", None)
         self._api_base = base_url.rstrip("/")
-        if api_key:
+        if normalized:
             from atlas.config_migrations import GLOBAL_GATEWAY_KEY
 
-            self._credential_store().set(GLOBAL_GATEWAY_KEY, api_key)
-            self._global_api_key = api_key
+            self._credential_store().set(GLOBAL_GATEWAY_KEY, normalized)
+            self._global_api_key = normalized
             for entry in self._providers.values():
                 entry.pop("api_mode_probe", None)
         self._gateway_source = "user-settings"
@@ -670,9 +677,14 @@ class ModelManager:
         try:
             store = self._credential_store()
             if secret and str(secret).strip():
-                store.set(account, str(secret).strip())
+                verdict = normalize_api_key(secret)
+                if not verdict.ok:
+                    raise ValueError(f"自定义模型密钥无效: {verdict.reason}")
+                store.set(account, verdict.value)
             else:
                 store.delete(account)
+        except ValueError:
+            raise
         except Exception as exc:
             raise RuntimeError(f"自定义模型密钥写入系统凭据库失败: {exc}") from exc
 

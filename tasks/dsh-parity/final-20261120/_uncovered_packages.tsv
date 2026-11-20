@@ -1,0 +1,152 @@
+manifest	name	description	parse_error	main	module	private	exports_count	deps_count
+apps/plugin-market-generator/package.json	@deepseek-ai/dsh-plugin-market-generator	Reference generator of plugin market index files from a list of npm packages and Git repositories				True	0	7
+packages/account/deepseek-account/package.json	@deepseek-ai/dsh-deepseek-account	Sign in to DeepSeek and manage account credentials and notifications		lib/index.js		False	8	2
+packages/account/deepseek-auth/package.json	@deepseek-ai/dsh-deepseek-auth	DeepSeek request authentication (ctx.deepseekAuth): choose between the API key and the account sign-in for one DeepSeek API request and release its headers		lib/index.js		False	5	0
+packages/api/remotes/package.json	@deepseek-ai/dsh-api-remotes	Remote BFF assembly for application-selected Host capabilities		lib/index.js		False	6	2
+packages/boot/hmr/package.json	@deepseek-ai/dsh-hmr	Coordinated module and profile configuration hot reload		lib/index.js		False	4	5
+packages/computer-use/computer-use/package.json	@deepseek-ai/dsh-computer-use	Exclusive named computer-use provider registration		lib/index.js		False	5	0
+packages/connector/cli-account/package.json	@deepseek-ai/dsh-cli-account	Host Service of CLI app plugins: each plugin registers its third-party CLI and account, and the Service gives the model the CLI's absolute path, runs one account operation at a time, and shows the account on the Plugins page		lib/index.js		False	5	3
+packages/connector/linear/package.json	@deepseek-ai/dsh-linear	Linear plugin: Linear's hosted MCP server, authorized through the shared MCP manager		lib/index.js		False	5	1
+packages/connector/notion/package.json	@deepseek-ai/dsh-notion	Notion plugin: Notion's hosted MCP server, authorized through the shared MCP manager		lib/index.js		False	5	1
+packages/connector/upstream-skills/package.json	@deepseek-ai/dsh-upstream-skills	Host Service of CLI app plugins: each plugin registers its entry skill and a pinned directory of the vendor's GitHub repository, and the Service downloads that directory into the DSH cache and lists the entry skill over it		lib/index.js		False	5	5
+packages/context/file-reference-local/package.json	@deepseek-ai/dsh-file-reference-local	Local-filesystem ctx.fileReferences provider with bounded fuzzy indexes		lib/index.js		False	4	1
+packages/context/file-reference/package.json	@deepseek-ai/dsh-file-reference	File-reference discovery contract and shared @file grammar		lib/index.js		False	5	0
+packages/context/harness-dev-context/package.json	@deepseek-ai/dsh-harness-dev-context	Model context naming the DeepSeek Harness checkout and Web GUI URL without letting either change the system prompt		lib/index.js		False	4	1
+packages/core/agent-tool-presentation/package.json	@deepseek-ai/dsh-agent-tool-presentation	Deprecated tool presentation selector; use dsh-tool-executor-native or dsh-tool-executor-ptc directly		lib/index.js		False	4	3
+packages/core/scope/package.json	@deepseek-ai/dsh-scope	Scoped-context registration primitive (scope tags, scope-filtered event dispatch) for the DeepSeek Harness		lib/index.js		False	3	0
+packages/credentials/authorization/package.json	@deepseek-ai/dsh-authorization	Authorization seam (ctx.authorization): plugin-owned flows that obtain a credential through a conversation with the human		lib/index.js		False	5	0
+packages/document/tool-office/package.json	@deepseek-ai/dsh-tool-office	Model-facing Office tools for rendering, converting, and recalculating documents		lib/index.js		False	4	2
+packages/experimental/action-cards/package.json	@deepseek-ai/dsh-action-cards	Optional action cards below answers: card state, user actions and status notices		lib/index.js		False	7	2
+packages/experimental/badge-skill-bundle/package.json	@deepseek-ai/dsh-experimental-badge-skill-bundle	Let agents add a “powered by dsh” badge to documents, pull requests, and other outputs.		lib/index.js		False	5	1
+packages/experimental/browser-use-chrome-devtools-mcp/package.json	@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp	Experimental per-Session Chromium browser tools through chrome-devtools-mcp		lib/index.js		False	4	2
+packages/experimental/browser-use-playwright-mcp/package.json	@deepseek-ai/dsh-experimental-browser-use-playwright-mcp	Experimental per-Session Chromium browser tools through @playwright/mcp		lib/index.js		False	4	2
+packages/experimental/browser-use-stagehand-native/package.json	@deepseek-ai/dsh-experimental-browser-use-stagehand-native	Experimental Stagehand browser tools with separately configured native models		lib/index.js		False	5	9
+packages/experimental/client-ui-action-cards/package.json	@deepseek-ai/dsh-client-ui-action-cards	Action cards below completed answers: the shared card frame, kind bodies and the layer that hides the answer blocks offering them		lib/index.js		False	5	0
+packages/experimental/client-ui-claude-code-mods/package.json	@deepseek-ai/dsh-experimental-client-ui-claude-code-mods	Web band above the prompt for Claude Code mods: draws each session's mod tree and sends button presses back to the bridge		lib/index.js		False	5	0
+packages/experimental/client-ui-cot-translation/package.json	@deepseek-ai/dsh-experimental-client-ui-cot-translation	Optional machine translation of expanded reasoning, preserving original Session text		lib/index.js		False	8	3
+packages/experimental/client-ui-creation-recommendations/package.json	@deepseek-ai/dsh-client-ui-creation-recommendations	Body of the personalized page card: location choice, creation progress, Undo and Restore		lib/index.js		False	5	0
+packages/experimental/client-ui-plugin-recommendations/package.json	@deepseek-ai/dsh-client-ui-plugin-recommendations	Official plugin card body with catalog text and enabling		lib/index.js		False	5	0
+packages/experimental/client-ui-stats/package.json	@deepseek-ai/dsh-experimental-client-ui-stats	Per-turn and per-step context, timing, cache, and tool-cost table contributed as an experimental conversation View		lib/index.js		False	5	0
+packages/experimental/computer-use-cua-driver-mcp/package.json	@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp	Experimental computer use through an installed Cua Driver MCP executable		lib/index.js		False	4	3
+packages/experimental/computer-use-cua-driver-native/package.json	@deepseek-ai/dsh-experimental-computer-use-cua-driver-native	Experimental computer-use provider embedding the Cua Driver native npm SDK		lib/index.js		False	4	5
+packages/experimental/cot-translation-bundle/package.json	@deepseek-ai/dsh-experimental-cot-translation-bundle	Experimental machine translation of expanded reasoning		lib/index.js		False	5	2
+packages/experimental/creation-recommendations/package.json	@deepseek-ai/dsh-creation-recommendations	Create persistent removable interface plugins from explicit conversation needs		lib/index.js		False	7	7
+packages/experimental/cua-bundle/package.json	@deepseek-ai/dsh-cua-bundle	Optional Computer Use for macOS and Windows		lib/index.js		False	5	2
+packages/experimental/cua-windows/package.json	@deepseek-ai/dsh-cua-windows	Windows C# computer use through shared application and window objects		lib/index.js		False	4	5
+packages/experimental/forge-bundle/package.json	@deepseek-ai/dsh-experimental-forge-bundle	Experimental change request panel and worktree option for Sessions in Git repositories		lib/index.js		False	5	7
+packages/experimental/forge-session/package.json	@deepseek-ai/dsh-experimental-forge-session	Binds change requests to the Session that created, pushed, or tracked them		lib/index.js		False	5	5
+packages/experimental/inspector-profile/package.json	@deepseek-ai/dsh-experimental-inspector-profile	Optional Web bundle for raw Session logs and Chat node inspection		lib/index.js		False	5	3
+packages/experimental/personalized-recommendations/package.json	@deepseek-ai/dsh-personalized-recommendations	Personalized pages and built-in plugin recommendations offered as cards below answers		lib/index.js		False	5	6
+packages/experimental/plugin-market-bundle/package.json	@deepseek-ai/dsh-experimental-plugin-market-bundle	Experimental custom plugin indexes: a Discover tab that browses and installs bundles from plugin indexes		lib/index.js		False	5	2
+packages/experimental/plugin-recommendations/package.json	@deepseek-ai/dsh-plugin-recommendations	Official plugin suggestions with explicit user activation and persistent conversation decisions		lib/index.js		False	8	4
+packages/experimental/ralph-bundle/package.json	@deepseek-ai/dsh-experimental-ralph-bundle	Run explicitly requested repeated work with fresh agents.		lib/index.js		False	5	2
+packages/experimental/skill-badge/package.json	@deepseek-ai/dsh-skill-badge	Bundled dsh badge skill provider for DeepSeek Harness		lib/index.js		False	3	0
+packages/experimental/speech-to-text-sensevoice/package.json	@deepseek-ai/dsh-experimental-speech-to-text-sensevoice	Local SenseVoice ONNX transcription with a managed sherpa-onnx process		lib/index.js		False	5	4
+packages/experimental/subagent-oar/package.json	@deepseek-ai/dsh-experimental-subagent-oar	Experimental one-shot subagents through OAR runtimes		lib/index.js		False	4	10
+packages/experimental/terminal-bundle/package.json	@deepseek-ai/dsh-experimental-terminal-bundle	Let the agent run long-lived commands in terminals you can watch in the sidebar.		lib/index.js		False	5	3
+packages/experimental/terminal-panel/package.json	@deepseek-ai/dsh-terminal-panel	Persistent Agent terminals shown in the Web sidebar, plus read-only access to the user's terminals		lib/index.js		False	4	1
+packages/experimental/translator/package.json	@deepseek-ai/dsh-experimental-translator	Machine translation with reusable Session results		lib/index.js		False	5	2
+packages/experimental/voice-input-bundle/package.json	@deepseek-ai/dsh-experimental-voice-input-bundle	Experimental voice input with local SenseVoice; downloads its runtime on first use		lib/index.js		False	5	4
+packages/experimental/webworker-packer/package.json	@deepseek-ai/dsh-experimental-webworker-packer	Build-time packer for the browser runtime's base VFS image and ordered data-overlay archives		lib/index.js		False	3	8
+packages/extensions/ui-cordis/package.json	@deepseek-ai/dsh-client-ui-cordis	Cordis dynamic-plugin definition card: the keyed cordis_define tool row with its run/stop switch		lib/index.js		False	5	0
+packages/feedback/message-feedback/package.json	@deepseek-ai/dsh-message-feedback	Canonical Session-log ratings and notes for finalized assistant messages		lib/index.js		False	7	2
+packages/fs/fs-local/package.json	@deepseek-ai/dsh-fs-local	Local-filesystem implementation of the DeepSeek Harness filesystem seam (ctx.fs)		lib/index.js		False	4	5
+packages/fs/fs-observation-policy/package.json	@deepseek-ai/dsh-fs-observation-policy	File-context policy plugin for the DeepSeek Harness — observed-state, read-before-edit, and version-guarded write/edit added over the ctx.fs provider seam through the fs/* event gate (no service API)		lib/index.js		False	4	0
+packages/fs/fs-patch/package.json	@deepseek-ai/dsh-fs-patch	Pure Codex-style patch parser and LF text updater with structured match failures		lib/index.js		False	3	0
+packages/fs/fs-sandbox/package.json	@deepseek-ai/dsh-fs-sandbox	Sandbox-enforcing implementation of the DeepSeek Harness filesystem seam: fences write/edit by the per-call sandbox mode (read-only denies mutation, workspace-write contains it to the workspace + temp roots) while reads pass through		lib/index.js		False	4	0
+packages/fs/fs/package.json	@deepseek-ai/dsh-fs	Abstract filesystem capability seam (ctx.fs) for the DeepSeek Harness — vocabulary types, the FileSystem service (text IO + optional version-guarded atomic mutations), and the fs/* policy event vocabulary		lib/index.js		False	3	1
+packages/goal/command-goal/package.json	@deepseek-ai/dsh-command-goal	Human-facing slash command for persisted same-session goals		lib/index.js		False	4	1
+packages/goal/goal-round-driver/package.json	@deepseek-ai/dsh-goal-round-driver	Race-fenced same-session goal-round driver		lib/index.js		False	4	0
+packages/goal/goal/package.json	@deepseek-ai/dsh-goal	Event-sourced same-session goal state and lifecycle service for the DeepSeek Harness		lib/index.js		False	8	3
+packages/guard/timeout-policy/package.json	@deepseek-ai/dsh-tool-call-timeout-policy	Tool-call timeout policy: a tools/execute wrapper that arms a per-tool deadline on exec.signal and returns TOOL_TIMEOUT when it wins		lib/index.js		False	4	0
+packages/host/authentication-desktop/package.json	@deepseek-ai/dsh-host-authentication-desktop	Desktop private-channel authentication provider		lib/index.js		False	11	0
+packages/host/directory-picker-auto/package.json	@deepseek-ai/dsh-host-directory-picker-auto	Adaptive chooser of the directory-picker seam: resolves the host situation at boot and mounts the native or browse backend for the DeepSeek Harness web GUI host		lib/index.js		False	4	1
+packages/host/directory-picker-browse/package.json	@deepseek-ai/dsh-host-directory-picker-browse	In-app browsing backend of the directory-picker seam (listing/creation primitives over the host filesystem)		lib/index.js		False	4	2
+packages/host/directory-picker-native/package.json	@deepseek-ai/dsh-host-directory-picker-native	Native-OS-chooser backend of the directory-picker seam for the DeepSeek Harness web GUI host		lib/index.js		False	5	3
+packages/host/directory-picker/package.json	@deepseek-ai/dsh-host-directory-picker	Abstract workspace-directory picking seam (ctx.directoryPicker) for the DeepSeek Harness web GUI host		lib/index.js		False	4	0
+packages/host/frontend-static/package.json	@deepseek-ai/dsh-host-frontend-static	SPA dist server for the Web shell: owns the webserver fallback seat, serving explicit index entries and static assets with traversal rejection and 404 misses		lib/index.js		False	4	1
+packages/host/open-in-app/package.json	@deepseek-ai/dsh-host-open-in-app	Host half of open-in-app: resolved application catalog, icons, and the launch endpoint as three webServer routes		lib/index.js		False	5	4
+packages/host/plugin-inventory/package.json	@deepseek-ai/dsh-host-plugin-inventory	Read-only Remote projection of current Cordis Loader plugin state		lib/index.js		False	7	1
+packages/host/product-telemetry-otel/package.json	@deepseek-ai/dsh-host-product-telemetry-otel	Explicit product usage events exported through OpenTelemetry HTTP logs		lib/index.js		False	4	4
+packages/host/webserver/package.json	@deepseek-ai/dsh-host-webserver	Web route-registration plugin: HTTP and upgrade routes, per-Peer index transform taps, and static dist fallback		lib/index.js		False	4	4
+packages/identity/anonymous-user-id/package.json	@deepseek-ai/dsh-anonymous-user-id	Shared anonymous user identity for DeepSeek Harness telemetry and feedback correlation		lib/index.js		False	3	0
+packages/interaction/commands/package.json	@deepseek-ai/dsh-commands	Plugin-owned human command registry for DeepSeek Harness UIs		lib/index.js		False	8	3
+packages/interaction/user-approval/package.json	@deepseek-ai/dsh-user-approval	User-approval seam (ctx.approval) for the DeepSeek Harness: one-shot permission decisions dispatched to composed answerers over the approval/request waterfall, fail-closed by default		lib/index.js		False	5	3
+packages/interaction/user-questions/package.json	@deepseek-ai/dsh-user-questions	Abstract user-questions seam (ctx.userQuestions) for asking the human during agent runs		lib/index.js		False	7	3
+packages/mcp/mcp-account/package.json	@deepseek-ai/dsh-mcp-account	MCP connector accounts on the Plugins page: each connector's OAuth server in the connector account registry, authorized through the MCP manager		lib/index.js		False	5	2
+packages/plan/plan-mode/package.json	@deepseek-ai/dsh-plan-mode	Logged per-agent plan mode with deployment guidance, a direct slash command, and a user-reviewed exit		lib/index.js		False	6	2
+packages/preset/persona/package.json	@deepseek-ai/dsh-persona	Composition-authored deployment persona section for the DeepSeek Harness		lib/index.js		False	4	1
+packages/sandbox/sandbox-local/package.json	@deepseek-ai/dsh-sandbox-local	Local process-sandbox backends for the DeepSeek Harness sandbox seam: bwrap, the npm-distributed landlock-run launcher, macOS Seatbelt, or the Windows ACL restricted-token runner — functionally probed, fail-closed		lib/index.js		False	4	4
+packages/sandbox/sandbox-windows-acl/package.json	@deepseek-ai/dsh-sandbox-windows-acl	Windows ACL write-restriction sandbox backend (restricted-token spawn with capability-SID write allowlist) for the DeepSeek Harness sandbox seam		lib/index.js		False	4	4
+packages/session-query/session-query-sqlite/package.json	@deepseek-ai/dsh-session-query-sqlite	Concrete ctx.sessionQuery backend with SQLite FTS5 search		lib/index.js		False	4	2
+packages/session/message-quotes/package.json	@deepseek-ai/dsh-message-quotes	Selected-text quotation and Markdown blockquote presentation		lib/index.js		False	5	0
+packages/session/session-projection-cache/package.json	@deepseek-ai/dsh-session-projection-cache	Persisted projection cache (ctx.sessionProjectionCache): durable per-session checkpoint records on the session_projcache storage domain (per-record layout), throttled write-behind, and the cached listing read		lib/index.js		False	4	3
+packages/session/session-telemetry-otel/package.json	@deepseek-ai/dsh-session-telemetry-otel	Feedback-authorized Session logs over byte-bounded OpenTelemetry HTTP requests		lib/index.js		False	4	2
+packages/session/session-turn-outline/package.json	@deepseek-ai/dsh-session-turn-outline	Whole-log turn outline projection (turnOutline) for the DeepSeek Harness		lib/index.js		False	6	1
+packages/settings/settings/package.json	@deepseek-ai/dsh-settings	Abstract user-settings seam (ctx.settings) for the DeepSeek Harness		lib/index.js		False	5	5
+packages/shell/bash-local/package.json	@deepseek-ai/dsh-bash-local	Local-subprocess implementation of the DeepSeek Harness bash executor seam		lib/index.js		False	4	1
+packages/shell/pwsh-local/package.json	@deepseek-ai/dsh-pwsh-local	Local PowerShell implementation of the DeepSeek Harness bash executor seam		lib/index.js		False	4	1
+packages/shell/pwsh-sandbox/package.json	@deepseek-ai/dsh-pwsh-sandbox	Sandbox-consuming implementation of the DeepSeek Harness PowerShell executor seam (confines every command via ctx.sandbox, reports denial/enforcement result facts)		lib/index.js		False	4	0
+packages/shell/shell-env/package.json	@deepseek-ai/dsh-shell-env	Tool-independent managed DSH_* shell environment registry		lib/index.js		False	4	1
+packages/shell/shell/package.json	@deepseek-ai/dsh-shell	Abstract bash executor seam (ctx.shell) for the DeepSeek Harness		lib/index.js		False	3	0
+packages/shell/tool-bash-persistent/package.json	@deepseek-ai/dsh-tool-bash-persistent	Model-facing owner-scoped persistent Bash tool backed by the Harness PTY service		lib/index.js		False	3	1
+packages/shell/tool-pwsh-persistent/package.json	@deepseek-ai/dsh-tool-pwsh-persistent	Model-facing owner-scoped persistent PowerShell tool backed by the Harness PTY service		lib/index.js		False	3	1
+packages/shell/tool-pwsh/package.json	@deepseek-ai/dsh-tool-pwsh	Model-facing pwsh tool over the bash executor seam		lib/index.js		False	4	1
+packages/skill/skill-office/package.json	@deepseek-ai/dsh-skill-office	Bundled Word, PowerPoint, and Excel workflows and Office operation guidance		lib/index.js		False	3	2
+packages/skill/tool-workspace-dependencies/package.json	@deepseek-ai/dsh-tool-workspace-dependencies	The load_workspace_dependencies tool: absolute paths into a bundled Python, Node.js, and pnpm payload		lib/index.js		False	3	1
+packages/spill/spill-local/package.json	@deepseek-ai/dsh-spill-local	Local-filesystem implementation of the DeepSeek Harness spill storage seam (private session-scoped files)		lib/index.js		False	4	2
+packages/spill/spill-policy/package.json	@deepseek-ai/dsh-spill-policy	Token-budgeted tool-result retention with recoverable text and image paths		lib/index.js		False	5	1
+packages/spill/spill/package.json	@deepseek-ai/dsh-spill	Abstract spill storage seam (ctx.spillStore) for the DeepSeek Harness — save oversized tool text and return a retrieval locator		lib/index.js		False	3	0
+packages/ssh/fs-ssh/package.json	@deepseek-ai/dsh-fs-ssh	Filesystem provider over the shared POSIX SSH helper		lib/index.js		False	4	2
+packages/ssh/sandbox-ssh/package.json	@deepseek-ai/dsh-sandbox-ssh	Remote POSIX sandbox argv provider over the shared SSH helper		lib/index.js		False	4	2
+packages/ssh/ssh-helper-runtime/package.json	@deepseek-ai/dsh-ssh-helper-runtime	Private executable carrier for the POSIX SSH helper and managed workers		lib/index.js		True	2	31
+packages/ssh/ssh/package.json	@deepseek-ai/dsh-ssh	Shared OpenSSH connection and versioned POSIX remote helper		lib/index.js		False	7	2
+packages/ssh/subprocess-ssh/package.json	@deepseek-ai/dsh-subprocess-ssh	Subprocess and terminal provider over the shared POSIX SSH helper		lib/index.js		False	4	2
+packages/storage/storage-domain/package.json	@deepseek-ai/dsh-storage-domain	Domain data form (ctx.storage.domain): schema-validated, event-emitting KV domains over storage backends for the DeepSeek Harness		lib/index.js		False	4	2
+packages/subagent/subagent-claude-code/package.json	@deepseek-ai/dsh-subagent-claude-code	One-shot Claude Code subagent provider over the official Agent SDK		lib/index.js		False	5	7
+packages/subagent/subagent-codex/package.json	@deepseek-ai/dsh-subagent-codex	One-shot Codex subagent provider over the official app-server protocol		lib/index.js		False	5	5
+packages/subagent/subagent-dsh-sdk/package.json	@deepseek-ai/dsh-subagent-dsh-sdk	Out-of-process SDK subagent backend: drives a child DeepSeek Harness runtime subprocess over stdio JSON-RPC through the TypeScript SDK client		lib/index.js		False	4	2
+packages/subagent/subagent-fork-in-process/package.json	@deepseek-ai/dsh-subagent-fork-in-process	In-process fork subagent backend: runs a child agent seeded with a prefix of the parent's log		lib/index.js		False	4	1
+packages/subagent/subagent-spawn-in-process/package.json	@deepseek-ai/dsh-subagent-spawn-in-process	In-process spawn subagent backend: runs a fresh child agent on ctx.agents		lib/index.js		False	4	1
+packages/subagent/tool-subagent-control/package.json	@deepseek-ai/dsh-tool-subagent-control	Shared messaging, interruption, and child discovery tools for subagents		lib/index.js		False	4	2
+packages/subprocess/win32-process/package.json	@deepseek-ai/dsh-win32-process	Shared low-level Win32 process, stdio, and Job Object primitives		lib/index.js		False	3	2
+packages/team/tool-agent-team/package.json	@deepseek-ai/dsh-tool-agent-team	Scoped model-facing Agent Teams tools over ctx.agentTeams		lib/index.js		False	4	2
+packages/terminal/terminal-bash/package.json	@deepseek-ai/dsh-terminal-bash	Persistent shell PTY backend over the DeepSeek Harness subprocess terminal primitive		lib/index.js		False	4	4
+packages/terminal/terminal/package.json	@deepseek-ai/dsh-terminal	Persistent PTY session seam for the DeepSeek Harness — owner-scoped ids, backend registry, interactive sends, reads, signals, and awaited cleanup		lib/index.js		False	4	1
+packages/test-support/agent-loop-testkit/package.json	@deepseek-ai/dsh-agent-loop-testkit	Prerequisite mounting, production AgentLoop drivers, and Inbox stubs for tests		lib/index.js		False	3	2
+packages/test-support/client-runtime/package.json	@deepseek-ai/dsh-client-test-runtime	Browser test runtimes: a jsdom slot bench with test-owned Session and Workspace doubles, and a whole-client tier that boots the web roster through the production bootClient over an endpoint-named Remote mock		lib/index.js		False	3	3
+packages/test-support/llm-mock-server/package.json	@deepseek-ai/dsh-llm-mock-server	Scriptable Messages HTTP/SSE fault server for LLM recovery tests		lib/index.js		False	3	0
+packages/test-support/llm-replay/package.json	@deepseek-ai/dsh-llm-replay	Replay LLM plugin: short-circuits llm/stream with model chunks reconstructed from a recorded session JSONL (keyless snapshot tests)		lib/index.js		False	3	3
+packages/test-support/loader-smoke/package.json	@deepseek-ai/dsh-loader-smoke	Shared subprocess and direct-agent harness for keyless real-Loader example smoke tests		lib/index.js		False	3	2
+packages/test-support/remote-mock/package.json	@deepseek-ai/dsh-remote-mock	Endpoint-named mock for Typert Remote traffic: unary answers and stream scripts per <namespace>/<method>, live stream control, a log, and the Connection carrier face whole-client specs install		lib/index.js		False	3	1
+packages/test-support/session-snapshot/package.json	@deepseek-ai/dsh-session-snapshot	Session-log snapshot core with an ACP protocol adapter, expected-output normalization, and fixture invariants		lib/index.js		False	3	7
+packages/test-support/tool-testkit/package.json	@deepseek-ai/dsh-tool-testkit	Tool definition and execution fixtures for tests and benchmarks		lib/index.js		False	3	0
+packages/todo/tool-todo/package.json	@deepseek-ai/dsh-tool-todo	Model-facing todo_write tool over the DeepSeek Harness event-sourced session log		lib/index.js		False	5	2
+packages/typert/generator/package.json	@deepseek-ai/dsh-typert-generator	TypeScript project analyzer and model-driven Typert artifact generator		lib/index.js		False	4	2
+packages/typert/loader/package.json	@deepseek-ai/dsh-typert-loader	Loader integration for generated Typert package contributions		lib/index.js		False	4	1
+packages/typert/protocol/package.json	@deepseek-ai/dsh-typert-protocol	Compiler-independent Remote metadata and Typert provider protocols		lib/index.js		False	5	2
+packages/typert/registry/package.json	@deepseek-ai/dsh-typert-registry	Runtime registry for generated package reflection and Zod schemas		lib/index.js		False	6	1
+packages/util/atomic-write/package.json	@deepseek-ai/dsh-atomic-write	Atomic file replacement: exclusive-create random-suffix temp + rename carrying the caller-stated permissions (writeFileAtomic)		lib/index.js		False	3	0
+packages/util/brand/package.json	@deepseek-ai/dsh-brand	Stateless branded primitive types for the DeepSeek Harness		lib/index.js		False	3	0
+packages/util/chunked-list/package.json	@deepseek-ai/dsh-chunked-list	Persistent append-only chunked lists with bounded copying and JSON checkpoint validation		lib/index.js		False	3	1
+packages/util/code-language/package.json	@deepseek-ai/dsh-util-code-language	Single file-extension to syntax-highlighting language table shared by Client code surfaces and the Host read card		lib/index.js		False	3	0
+packages/util/crypto/package.json	@deepseek-ai/dsh-util-crypto	Zero-dependency browser-safe UUID and byte-encoding helpers		lib/index.js		False	3	0
+packages/util/deque/package.json	@deepseek-ai/dsh-deque	Zero-dependency circular deque with amortized constant-time end operations and bounded vacant storage		lib/index.js		False	3	0
+packages/util/error/package.json	@deepseek-ai/dsh-error	Dependency-free HarnessError base class with a stable machine-routable code for the DeepSeek Harness		lib/index.js		False	3	0
+packages/util/file-drag/package.json	@deepseek-ai/dsh-util-file-drag	Shared file drag names and native transfer requests		lib/index.js		False	3	1
+packages/util/home-paths/package.json	@deepseek-ai/dsh-home-paths	Shared filesystem path helpers for the DeepSeek Harness		lib/index.js		False	3	0
+packages/util/http-proxy/package.json	@deepseek-ai/dsh-http-proxy	Process-wide outbound HTTP proxy policy for DeepSeek Harness: resolve it from the launch environment and install it as undici's global dispatcher		lib/index.js		False	3	1
+packages/util/launch-environment/package.json	@deepseek-ai/dsh-launch-environment	Immutable DeepSeek Harness launch environment that records which layer supplied each value		lib/index.js		False	3	0
+packages/util/lazy-require/package.json	@deepseek-ai/dsh-lazy-require	Caller-relative, success-cached lazy loading for CommonJS-compatible Host dependencies		lib/index.js		False	3	0
+packages/util/native-command/package.json	@deepseek-ai/dsh-native-command	Host-native command and path-opening utilities with shell-free execution, cancellation, desktop detection, and WSL handoff		lib/index.js		False	4	0
+packages/util/output-retention/package.json	@deepseek-ai/dsh-output-retention	Zero-dependency bounded-retention primitive: ItemRetainer/TextRetainer + neutral notice helpers (what did we keep, what did we omit)		lib/index.js		False	3	0
+packages/util/package-manifest/package.json	@deepseek-ai/dsh-package-manifest	Shared type declarations for package.json.dsh configuration fields		lib/index.js		False	3	0
+packages/util/plugin-detail/package.json	@deepseek-ai/dsh-plugin-detail	Plugin detail documents: meta.detail or README selection, image paths, and local and npm CDN file sources		lib/index.js		False	4	0
+packages/util/plugin-market-index/package.json	@deepseek-ai/dsh-plugin-market-index	Plugin market index format 1: JSON validation, relative icon resolution, and pinned install arguments		lib/index.js		False	4	2
+packages/util/time/package.json	@deepseek-ai/dsh-util-time	Strict instant and IANA zone parsing, millisecond spans, and bounded Cron/RRULE recurrence arithmetic		lib/index.js		False	3	2
+packages/util/timeout/package.json	@deepseek-ai/dsh-timeout	Zero-dependency timeout/deadline primitive: clampTimeout, deadline, timeoutOf, TimeoutReason (timing + classification only, no termination)		lib/index.js		False	3	0
+packages/util/values/package.json	@deepseek-ai/dsh-util-values	Duplicate-install-safe value primitives for the DeepSeek Harness		lib/index.js		False	3	0
+packages/util/workspace-path/package.json	@deepseek-ai/dsh-util-workspace-path	Browser-safe Workspace path and display helpers		lib/index.js		False	3	0
+packages/web/web-deepseek-api/package.json	@deepseek-ai/dsh-web-deepseek-api	DeepSeek Search and Fetch API providers for the DeepSeek Harness web capability seam (ctx.web)		lib/index.js		False	4	1
+packages/web/web-search-deepseek/package.json	@deepseek-ai/dsh-web-search-deepseek	DeepSeek-backed search provider (native web_search via the Anthropic-compatible API) for the DeepSeek Harness web capability seam (ctx.web)		lib/index.js		False	4	1
+packages/workflow/tool-workflow/package.json	@deepseek-ai/dsh-tool-workflow	Model-facing workflow tool: run a JavaScript orchestration script over ctx.workflowEngine		lib/index.js		False	5	1

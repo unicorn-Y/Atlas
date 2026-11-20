@@ -1,0 +1,35 @@
+2026-11-18 23:40:07 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-mh42bx6m\atlas\config\atlas.toml
+........                                                                 [100%]
+============================== warnings summary ===============================
+tests/test_engine_worktree_pinned_revision.py::test_worktree_create_from_pinned_sha_checks_out_that_revision
+  D:\Atlas\.worktrees\zcode-exec06-worktree-api\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_engine_worktree_pinned_revision.py::test_worktree_create_from_pinned_sha_checks_out_that_revision
+  D:\Atlas\.worktrees\zcode-exec06-worktree-api\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_engine_worktree_pinned_revision.py::test_worktree_create_from_pinned_sha_checks_out_that_revision
+  D:\Atlas\.worktrees\zcode-exec06-worktree-api\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_engine_worktree_pinned_revision.py::test_worktree_create_from_pinned_sha_checks_out_that_revision
+  D:\Atlas\.worktrees\zcode-exec06-worktree-api\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_engine_worktree_pinned_revision.py::test_worktree_create_from_pinned_sha_checks_out_that_revision
+  D:\Atlas\.worktrees\zcode-exec06-worktree-api\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 5 warnings in 7.56s

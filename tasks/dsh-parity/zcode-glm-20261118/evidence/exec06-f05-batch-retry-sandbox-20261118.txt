@@ -1,0 +1,129 @@
+EXEC-06 · F05 行级对照:batch 调度 / llm-retry durable / bash-sandbox 底座
+日期: 2026-11-18;DSH rc.4 3f321d32;Atlas wave3@060071ab + 在途
+说明: 本批为只读对照+落盘;相关 Atlas 文件(loop.py/model_call.py/sandbox.py)仍在途,
+实施登记 blocked-on-author,不并写。
+
+================================================================================
+A. B-F05-BATCH-01 · 一步内工具调用调度
+================================================================================
+DSH(packages/core/tools/src/batch.ts:1-240,SRC-11745):
+- 入口 executeToolBatch:解析参数(空→{},坏 JSON 保留原文),exclusive 调用成 barrier,
+  parallel 调用用有界滚动池;每轮先 commit 再重新分类,registry 变化影响未启动调用。
+- runGroup:slot 按 model order;committed 只在连续区间推进;prepare→dispatch 可重叠;
+  `pipeline.executionMode(nextCall)` 在启动前重分类,exclusive 重分类要等当前池排干;
+  abort 停止补位、排干已启动、为跳过调用合成结果;scheduler failure 停止补位、
+  排干已启动,再以 ToolBatchExecutionError(已提交结果+context)抛出,由 step 记录恢复结果。
+- BatchSettlement:start 时 append `tool/call`(保留 seq),commit 时 append `tool/result`;
+  结果/上下文按 model order 提交。
+Atlas(core/atlas/engine/kernel/tools.py,当前树):
+- `supports_parallel:687-703`:写/终端/execute_code/computer/browser 强制 exclusive;
+  local_file 读动作并行;read_only 分类器可覆盖;未知工具 exclusive。
+- `_safe_to_overlap_now:704-718`:dispatch 前重问分类器,异常一律 serialize。
+- `_execute_parallel:892-933`:再分 safe/unsafe;unsafe 在 safe 组结束后串行执行;
+  `_gather_parallel:935-975`:外部 CancelledError 时取消未完成任务,已启动调用保留
+  terminal receipt,未启动补 `_cancelled_result(started=False)`。
+- `run:977-1035`:按顺序遍历;parallel 调用累积到 max_concurrency 后 flush;exclusive
+  先 flush 再单独执行(天然 barrier);`_batch_lock` 串行化整个 batch;
+  取消后仍为每个 model 调用生成 terminal receipt;`_apply_batch_verdict` 统一终态。
+等价关系:
+- exclusive barrier ≈ Atlas 的非并行分支先 flush 再串行执行(后续调用等它完成);
+- 有界并行池 ≈ Semaphore(max_concurrency)+flush;dispatch 前重分类 ≈ _safe_to_overlap_now;
+- model-order 提交 ≈ results_by_index/ordered;abort 合成结果 ≈ _cancelled_result;
+- **差异**:scheduler failure 在 Atlas 被 `_failed_result` 降为单调用 failed receipt,
+  DSH 则 drain 后向 step 抛出以便整步记录保守恢复结果;Atlas 以 batch 级锁串行化
+  所有 batch(跨 agent 不重叠),DSH 在单 pipeline 内滚动。
+状态: 保持对齐已验(核心调度语义等价),gap 收窄为上述两点。
+
+================================================================================
+B. B-F06-RETRY-DURABLE-01 / B-F06-LLM-RETRY-01 · 重试调度
+================================================================================
+DSH(packages/llm/llm-retry/src/index.ts:83-230,types.ts;SRC-15410/15411):
+- provider 级 retryPolicy(mode normal|always、retryableCodes、initialDelayMs、
+  maxDelayMs、jitterRatio、maxRetries);normal 超限或不可重试码→next()。
+- 每次调度先 append 持久 `llm/retry`(retryId,turn,step,provider,mode,policyKey,
+  retry,maxRetries?,delayMs,failure),投影 llmRetry 记录 (provider,policyKey)→retry/retryId;
+  cancellableDelay 成功后 append `llm/retry-started`(retryId,turn,step,retry)。
+- providerRetryAfterMs 受 maxDelayMs 约束;always 模式先问下游决策。
+Atlas(core/atlas/engine/kernel/model_call.py + loop.py + session_sync.py,当前树):
+- `model_call.py:1192-1360`:classify_error→retryable/status;will_retry 综合
+  stream_options 兼容、upstream 一次、auth rotation、connection 无界、watchdog 429/529、
+  retry_after、server x-should-retry、预算(attempts/wait)等;计算 retry_kind/retry_number/
+  retry_delay_s/budget;发布 `attempt_discarded`(含 retry=true 与上述字段)后再等待;
+- `loop.py:2618-2685`:把 started/committed/discarded 写成 durable `model/attempt`
+  (run_id,attempt_id,attempt,status,model;discarded 追加 category/retry/retry_kind/
+  retry_number/retry_delay_s/retry_denied_reason/budget/partial_text),写失败→
+  run.recovery.notice + 不可重试 attempt_audit 错误;
+- `session_sync.py:675-735`:恢复时读 `model/attempt`;最后 started→outcome_unknown;
+  cancelled→outcome_unknown(cancelled_locally);discarded+retry=true→
+  retry_scheduled_not_started;`app_server.py:1165-1180` 把该状态映射为
+  explicit_resume_required。
+等价关系:
+- durable 调度在等待前落盘 ≈ llm/retry;等待后下一次 attempt_started 落盘 ≈
+  llm/retry-started 的可观察效果;崩溃恢复能区分“已调度未开始”。
+- **差异**:Atlas 只有一个 `model/attempt` 事件族(status 区分),没有独立
+  `llm/retry-started`;没有跨尝试稳定的 retryId;durable payload 不含 provider/mode/
+  policyKey/maxRetries/failure 对象(只有 retry_kind/预算),不能离线重建策略;
+  Atlas 重试策略是全局/任务预算+看门狗,DSH 是 provider 配置的 normal/always 策略。
+状态: RETRY-DURABLE-01=部分(durable 能力已有,契约不同);LLM-RETRY-01 保持对齐已验
+(策略能力等价),gap 收窄为字段/语义映射。
+
+================================================================================
+C. B-F08-SHELL-01 / B-F05-SANDBOX-01 · bash-sandbox 底座
+================================================================================
+DSH(packages/shell/bash-sandbox/src/index.ts,SRC-16717;sandbox/sandbox-policy):
+- SandboxBashExecutor 继承 LocalBashExecutor,inject subprocess/sandbox/sandboxPolicy;
+  每次 spec 盖 per-call policy(会话解析 mode+workspaceRoot);
+  danger-full-access 直接本地执行并报 sandbox{mode,denied:false};
+  其他模式经 ctx.sandbox.confine 得到 ConfinedArgv(enforcement/denialSignatures/
+  runnerFailureRules/runnerProgram),执行后:
+  - runner failure 优先于 denial → SandboxUnavailableError(SANDBOX_UNAVAILABLE);
+  - 正常结果报 sandbox{mode,denied,enforcement};后台进程记 runnerFailed;
+  - spawn 失败且 argv[0] 是 runner → SandboxUnavailable;上游 abort 保持取消。
+- 工具层只管审批并传完整 per-call policy;runner 选择是 ctx.sandbox provider 配置。
+Atlas(core/atlas/sandbox.py,当前树;server.py 注入 sandbox_manager):
+- 每 run 一个 Docker 容器:`start` 挂载 workspace 到 /workspace、默认 --network none、
+  sleep 容器;无容器时 Windows Job Object 逐调用兜底。
+- `call_tool:165-270`:仅 local_shell/local_exec/local_git;cwd 必须在 workspace 内;
+  read-only→一次性容器 + 只读 bind mount + --network none;
+  workspace-write→docker exec 进 rw 容器;danger-full-access→**显式拒绝**
+  (“Docker 沙箱不能安全授予”);返回 data{sandbox_permissions,sandbox_enforced,
+  sandbox_backend}。
+- 未启用 run.sandbox 时走本地执行,不经 sandbox.py(等价于 unconfined,但不是 per-call
+  mode 语义)。
+- Windows Job fallback:read-only 无 ACL 可执行→拒绝并报 sandbox_enforced=false;
+  其余 mode 用 Job Object,报 backend=win32job;ssh 用 bwrap(ssh.py:1677-1870)。
+等价关系:
+- read-only/workspace-write 两档有真实隔离与结果上报;workspace 边界与命令白名单更严。
+- **差异**:无 per-call danger-full-access(沙箱内拒绝,只能整体不开沙箱);
+  无 denial-signature/runner-failure 分类,无 background runnerFailed;
+  沙箱能力绑定 Docker/Job/bwrap 实现,不是可插拔 provider;
+  sandbox 结果字段是 backend/enforced,不是 enforcement/denied。
+状态: B-F05-SANDBOX-01 由对齐已验→**部分**(两档对齐、第三档与失败分类缺失);
+B-F08-SHELL-01 保持部分, gap 以本节替换“待对照”。
+
+================================================================================
+D. 验收标准(后续实施,blocked-on-author)
+================================================================================
+Batch:
+A-1 模拟 pipeline 抛 scheduler failure:step 收到 ToolBatchExecutionError(含已提交结果),
+    未启动调用有合成结果;与 DSH batch 测试同断言。
+A-2 并行池启动前重分类:同组 later call 变 exclusive 时等池排干并成下一 barrier。
+Retry:
+A-3 durable 事件补齐 retryId(跨尝试稳定)+独立 retry-started;或明确以
+    model/attempt(status=started)为等价并写契约测试。
+A-4 durable payload 能重建策略:provider/mode/policyKey/maxRetries/failure;
+    恢复时区分 scheduled-not-started / started-outcome-unknown(现有状态保留)。
+Sandbox:
+A-5 三档 per-call:read-only/workspace-write 现有;danger-full-access 在显式审批下
+    可执行并报 sandbox_enforced=false/backend=host,或文档化为不可用并保持拒绝。
+A-6 denial/runner failure 分类:命令被沙箱拒绝 vs runner 不存在必须可区分,
+    分别映射 denied / SANDBOX_UNAVAILABLE;后台进程同样上报。
+A-7 复验:pytest(沙箱三档/拒绝分类/runner 缺失)+ 真实临时工作区命令。
+
+================================================================================
+E. 结论
+================================================================================
+- batch:核心语义等价,差异只在 scheduler failure 与 batch 锁粒度;状态对齐已验可保留。
+- retry-durable:Atlas 已有 durable attempt 审计与恢复状态,原“缺 llm/retry”表述过强;
+  真实差距是事件契约(retryId/retry-started/策略元数据),状态部分。
+- sandbox:两档真实隔离且更严,danger-full-access 与失败分类缺失 → 部分。

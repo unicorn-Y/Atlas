@@ -1,0 +1,116 @@
+{
+  "module": "D:\\Atlas\\.worktrees\\zcode-par10-version-facts\\core\\atlas\\plugins\\version_facts.py",
+  "packages_checked": 374,
+  "ok": true,
+  "failures": [],
+  "sample": [
+    {
+      "path": "packages/acp/acp/package.json",
+      "name": "@deepseek-ai/dsh-acp",
+      "ok": true,
+      "facts": {
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "workspace:~",
+          "@deepseek-ai/dsh-agent": "workspace:*",
+          "@deepseek-ai/dsh-attachment": "workspace:*",
+          "@deepseek-ai/dsh-llm": "workspace:*",
+          "@deepseek-ai/dsh-mcp-client": "workspace:*",
+          "@deepseek-ai/dsh-session": "workspace:*",
+          "@deepseek-ai/dsh-session-persistence": "workspace:*",
+          "@deepseek-ai/dsh-token-meter": "workspace:*",
+          "@deepseek-ai/dsh-user-approval": "workspace:*"
+        },
+        "deprecated": false,
+        "dsh": {}
+      }
+    },
+    {
+      "path": "packages/api/gateway/package.json",
+      "name": "@deepseek-ai/dsh-api-gateway",
+      "ok": true,
+      "facts": {
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "workspace:~"
+        },
+        "deprecated": false,
+        "dsh": {
+          "client": {
+            "inject": [
+              "@deepseek-ai/dsh-typert-registry",
+              "@deepseek-ai/dsh-client-connection"
+            ],
+            "platform": "web",
+            "immediately": true
+          }
+        }
+      }
+    },
+    {
+      "path": "packages/api/job-controller/package.json",
+      "name": "@deepseek-ai/dsh-api-job-controller",
+      "ok": true,
+      "facts": {
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "workspace:~"
+        },
+        "deprecated": false,
+        "dsh": {
+          "client": {
+            "external": [
+              "@deepseek-ai/dsh-api-gateway/client"
+            ],
+            "inject": [
+              "@deepseek-ai/dsh-api-gateway",
+              "@deepseek-ai/dsh-client-connection"
+            ],
+            "platform": "web"
+          }
+        }
+      }
+    },
+    {
+      "path": "packages/api/remote-access/package.json",
+      "name": "@deepseek-ai/dsh-api-remote-access",
+      "ok": true,
+      "facts": {
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "workspace:~"
+        },
+        "deprecated": false,
+        "dsh": {
+          "client": {
+            "external": [
+              "@deepseek-ai/dsh-api-gateway/client"
+            ],
+            "inject": [
+              "@deepseek-ai/dsh-api-gateway",
+              "@deepseek-ai/dsh-client-ui-renderer"
+            ],
+            "platform": "web"
+          }
+        }
+      }
+    },
+    {
+      "path": "packages/api/remotes/package.json",
+      "name": "@deepseek-ai/dsh-api-remotes",
+      "ok": true,
+      "facts": {
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "workspace:~",
+          "@deepseek-ai/dsh-scope": "workspace:*"
+        },
+        "deprecated": false,
+        "dsh": {
+          "client": {
+            "inject": [
+              "@deepseek-ai/dsh-api-gateway"
+            ],
+            "platform": "web",
+            "immediately": true
+          }
+        }
+      }
+    }
+  ]
+}

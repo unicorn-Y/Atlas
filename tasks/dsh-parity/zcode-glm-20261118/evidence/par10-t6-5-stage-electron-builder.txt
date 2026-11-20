@@ -1,0 +1,32 @@
+PAR-10-T6-5 stage: electron-builder (NSIS)
+2026-11-18T22:35:17Z
+CMD: npx electron-builder --win nsis --x64 --publish never
+-----
+npm notice run atlas@0.1.0 npx
+npm notice run electron-builder --win nsis --x64 --publish never
+  • electron-builder  version=26.15.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • packageManager not detected by file, falling back to environment detection  resolvedPackageManager=npm detected=D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend
+  • detected workspace root for project using lock file  pm=npm config=undefined resolved=D:\Atlas\.worktrees\zcode-par10-win-release-repro projectDir=D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend
+  • executing @electron/rebuild  electronVersion=44.7.0 arch=x64 buildFromSource=false workspaceRoot=D:\Atlas\.worktrees\zcode-par10-win-release-repro projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=44.7.0 appOutDir=windows-release\win-unpacked
+  • using custom unpacked Electron distribution  electronDist=electron-runtime
+  • copying unpacked Electron  source=D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\electron-runtime destination=D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\windows-release\win-unpacked
+  • searching for node modules  pm=npm searchDir=D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend
+  • no node modules found in collection, trying next search directory  searchDir=D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend attempt=0
+  • searching for node modules  pm=npm searchDir=D:\Atlas\.worktrees\zcode-par10-win-release-repro
+  • searching for node modules  pm=traversal searchDir=D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend
+  • using manual traversal of node_modules to build dependency tree
+  • missing optional dependencies  dependencies=["@anthropic-ai/claude-agent-sdk-linux-x64@0.3.293","@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.293","@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.293","@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.293","@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.293","@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.293","@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.293","@openai/codex-linux-x64@npm:@openai/codex@0.160.1-linux-x64","@openai/codex-linux-arm64@npm:@openai/codex@0.160.1-linux-arm64","@openai/codex-darwin-x64@npm:@openai/codex@0.160.1-darwin-x64","@openai/codex-darwin-arm64@npm:@openai/codex@0.160.1-darwin-arm64","@openai/codex-win32-arm64@npm:@openai/codex@0.160.1-win32-arm64","@ast-grep/cli-win32-arm64-msvc@0.50.0","@ast-grep/cli-win32-ia32-msvc@0.50.0","@ast-grep/cli-darwin-arm64@0.50.0","@ast-grep/cli-darwin-x64@0.50.0","@ast-grep/cli-linux-arm64-gnu@0.50.0","@ast-grep/cli-linux-x64-gnu@0.50.0","@mariozechner/clipboard-darwin-arm64@0.3.9","@mariozechner/clipboard-darwin-universal@0.3.9","@mariozechner/clipboard-darwin-x64@0.3.9","@mariozechner/clipboard-linux-arm64-gnu@0.3.9","@mariozechner/clipboard-linux-arm64-musl@0.3.9","@mariozechner/clipboard-linux-riscv64-gnu@0.3.9","@mariozechner/clipboard-linux-x64-gnu@0.3.9","@mariozechner/clipboard-linux-x64-musl@0.3.9","@mariozechner/clipboard-win32-arm64-msvc@0.3.9","@tailwindcss/oxide-darwin-arm64@4.3.3","@tailwindcss/oxide-linux-arm64-musl@4.3.3","@tailwindcss/oxide-linux-arm64-gnu@4.3.3","@tailwindcss/oxide-linux-x64-musl@4.3.3","@tailwindcss/oxide-linux-x64-gnu@4.3.3","@tailwindcss/oxide-wasm32-wasi@4.3.3","@tailwindcss/oxide-freebsd-x64@4.3.3","@tailwindcss/oxide-win32-arm64-msvc@4.3.3","@tailwindcss/oxide-linux-arm-gnueabihf@4.3.3","@tailwindcss/oxide-darwin-x64@4.3.3","@tailwindcss/oxide-android-arm64@4.3.3","lightningcss-darwin-x64@1.32.0","lightningcss-linux-x64-gnu@1.32.0","lightningcss-win32-arm64-msvc@1.32.0","lightningcss-darwin-arm64@1.32.0","lightningcss-linux-arm64-gnu@1.32.0","lightningcss-linux-arm-gnueabihf@1.32.0","lightningcss-linux-arm64-musl@1.32.0","lightningcss-linux-x64-musl@1.32.0","lightningcss-freebsd-x64@1.32.0","lightningcss-android-arm64@1.32.0"]
+  • updating asar integrity executable resource  executablePath=windows-release\win-unpacked\Atlas.exe
+  • embedded Atlas icon into Atlas.exe (7 sizes)
+  • wrote runtime release manifest: D:\Atlas\.worktrees\zcode-par10-win-release-repro\frontend\windows-release\win-unpacked\resources\atlas\release-manifest.json
+  • executable resource editing and code signing skipped — signAndEditExecutable is false. To skip only code signing while keeping icon and metadata applied, use signExecutable: false instead.  exe=windows-release\win-unpacked\Atlas.exe
+  • building        target=nsis file=windows-release\Atlas-0.1.1-Setup.exe archs=x64 oneClick=false perMachine=false
+  • signing with signtool.exe  path=windows-release\Atlas-0.1.1-Setup.__uninstaller.exe
+  • signing with signtool.exe  path=windows-release\Atlas-0.1.1-Setup.exe
+  • building block map  blockMapFile=windows-release\Atlas-0.1.1-Setup.exe.blockmap
+EXIT=0
+2026-11-18T22:44:01Z

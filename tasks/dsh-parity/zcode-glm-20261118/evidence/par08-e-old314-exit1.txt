@@ -1,0 +1,115 @@
+== old tree (zcode-par07-sdk-cancel, HEAD 060071ab+old patch) on Python 3.14 ==
+COMMAND: pytest tests/test_app_server_user_question_cancel.py::test_real_sdk_subprocess_cancel_notification_and_late_answer
+
+2026-11-19 03:56:23 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-ghvbdcqk\atlas\config\atlas.toml
+F                                                                        [100%]
+================================== FAILURES ===================================
+________ test_real_sdk_subprocess_cancel_notification_and_late_answer _________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par08-sdk-port/.tmp/pytest-old314/test_real_sdk_subprocess_cance0')
+
+    def test_real_sdk_subprocess_cancel_notification_and_late_answer(tmp_path):
+        with FakeLLMServer([
+            ToolCall("ask_user", {"question": "Continue?", "options": ["yes", "no"]}),
+            Text("must not run after cancellation"),
+        ]) as fake:
+            env = _isolated_app_server_env(tmp_path, fake)
+            workspace = tmp_path / "workspace"
+            workspace.mkdir()
+            server = AppServer(
+                [sys.executable, "-m", "atlas.cli"], workspace=workspace, env=env,
+            ).start()
+            process = server._process
+            try:
+                session = server.new_session()
+                inputs: list[dict] = []
+                cancellations: list[dict] = []
+    
+                def answer(params: dict) -> None:
+                    inputs.append(params)
+                    server.cancel_session(session.session_id)
+                    return None
+    
+                result = server.prompt(
+                    session.session_id, "ask and cancel",
+                    answer=answer, on_input_cancelled=cancellations.append,
+                )
+                assert result.status == "cancelled"
+                assert len(inputs) == 1
+                request_id = str(inputs[0]["request_id"])
+                assert request_id
+                assert cancellations == [{
+                    "requestId": request_id, "sessionId": session.session_id,
+                }], "the SDK must receive exactly one cancellation notification"
+    
+                with pytest.raises(AppServerError) as raised:
+                    server.respond_input(request_id, "late answer")
+                assert raised.value.code == -32602
+            finally:
+                server.close()
+            assert process is not None
+>           assert process.wait(timeout=0) == 0
+E           AssertionError: assert 1 == 0
+E            +  where 1 = wait(timeout=0)
+E            +    where wait = <Popen: returncode: 1 args: ['D:\\Atlas\\core\\.venv\\Scripts\\python.exe', ...>.wait
+
+tests\test_app_server_user_question_cancel.py:523: AssertionError
+============================== warnings summary ===============================
+tests/test_app_server_user_question_cancel.py::test_real_sdk_subprocess_cancel_notification_and_late_answer
+  D:\Atlas\.worktrees\zcode-par07-sdk-cancel\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_app_server_user_question_cancel.py::test_real_sdk_subprocess_cancel_notification_and_late_answer
+  D:\Atlas\.worktrees\zcode-par07-sdk-cancel\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_app_server_user_question_cancel.py::test_real_sdk_subprocess_cancel_notification_and_late_answer
+  D:\Atlas\.worktrees\zcode-par07-sdk-cancel\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_app_server_user_question_cancel.py::test_real_sdk_subprocess_cancel_notification_and_late_answer
+  D:\Atlas\.worktrees\zcode-par07-sdk-cancel\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_app_server_user_question_cancel.py::test_real_sdk_subprocess_cancel_notification_and_late_answer
+  D:\Atlas\.worktrees\zcode-par07-sdk-cancel\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_app_server_user_question_cancel.py::test_real_sdk_subprocess_cancel_notification_and_late_answer
+1 failed, 5 warnings in 14.88s
+
+== standalone probe WITHOUT embedding isolation (old tree) ==
+prompt_result AppServerResult(session_id='bb79205f-a5d5-4297-a94a-7140283c5b00', text='', status='cancelled')
+cancellations [{'requestId': '7a2db638-dbc9-4687-975f-401d16f6d16f', 'sessionId': 'bb79205f-a5d5-4297-a94a-7140283c5b00'}]
+close_elapsed_s 5.0
+returncode 1
+stderr 2026-11-19 04:28:12 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\probe-old314-na9awy40\atlas\config\atlas.toml
+2026-11-19 04:28:12 [info     ] memory.init                    db=C:\Users\25011\AppData\Local\Temp\probe-old314-na9awy40\atlas\data\atlas.db
+2026-11-19 04:28:12 [info     ] model_manager.init             api_base=http://127.0.0.1:23886/v1 default=fake-model source=atlas.toml
+2026-11-19 04:28:12 [info     ] agent.run                      conv=f968864b-a3fe-4947-9639-ae94863171c9 model=openai/fake-model msg_len=14
+[32m2026-11-19 04:28:15.683[0m | [31m[1mERROR   [0m | [36mfastembed.common.model_management[0m:[36mdownload_model[0m:[36m712[0m - [31m[1mCould not download model from HuggingFace: [WinError 10061] 由于目标计算机积极拒绝，无法连接。 Falling back to other sources.[0m
+[32m2026-11-19 04:28:15.683[0m | [31m[1mERROR   [0m | [36mfastembed.common.model_management[0m:[36mdownload_model[0m:[36m746[0m - [31m[1mCould not download model from either source, sleeping for 3.0 seconds, 2 retries left.[0m
+
+
+== standalone probe WITH ATLAS_TEST_DISABLE_MEMORY_EMBEDDINGS=1 HF_HUB_OFFLINE=1 (old tree) ==
+prompt_result AppServerResult(session_id='55f0c219-f31f-45f1-9a63-75142d94cfde', text='', status='cancelled')
+cancellations [{'requestId': 'cb935c0a-fbd7-4c7d-928a-07d308e6280e', 'sessionId': '55f0c219-f31f-45f1-9a63-75142d94cfde'}]
+close_elapsed_s 0.08
+returncode 0
+stderr 2026-11-19 04:28:24 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\probe-old314-50_29o7s\atlas\config\atlas.toml
+2026-11-19 04:28:24 [info     ] memory.init                    db=C:\Users\25011\AppData\Local\Temp\probe-old314-50_29o7s\atlas\data\atlas.db
+2026-11-19 04:28:24 [info     ] model_manager.init             api_base=http://127.0.0.1:43165/v1 default=fake-model source=atlas.toml
+2026-11-19 04:28:25 [info     ] agent.run                      conv=9ca49d77-9912-42ce-ac3d-d65b8c91b6b9 model=openai/fake-model msg_len=14
+

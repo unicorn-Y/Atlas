@@ -1,0 +1,73 @@
+EXEC-06 · B-F02-INPUT-03(快捷键设备持久化)Atlas 对照 — 最后一个待核行
+日期: 2026-11-18;DSH rc.4 3f321d32;Atlas wave3@060071ab + 在途
+
+================================================================================
+A. DSH(源码行见 BEHAVIORS 行)
+================================================================================
+- apps/desktop/src/keybindings.ts:15-27
+  desktopKeybindings(userData, platform, publish) → ShortcutPersistence:
+  read userData/keybindings.json(ENOENT→null,其余错误抛出);写 writeFileAtomic
+  mode 0600 / dir 0700;实例 'desktop';allowPaste…=false;publish 回调重建绑定集
+  并触发菜单/广播。
+- apps/desktop/src/keyboard.ts:72,119-124
+  attach 关闭窗口时 setDefinitions(null) 复位。
+- 语义:设备级配置跨启动;单写者事务协调(client-shortcuts protocol)+ revision 乐观锁;
+  写冲突/失败沿 persistence 事务错误返回编辑 UI。
+
+================================================================================
+B. Atlas 实际实现
+================================================================================
+后端(文件真源):
+- core/atlas/api/u6_router.py:108-119 GET /api/u6/keybindings
+  - 读 DATA_ROOT/data/keybindings.json;不存在→{bindings:{}, updated_at:-1};
+  - 校验 dict[str, list[str]];返回 mtime_ns 作为 updated_at;格式错误→422。
+- core/atlas/api/u6_router.py:121-130 PUT /api/u6/keybindings
+  - 校验同形状;`path.write_text(...)` 直接覆盖;无期望版本/无 CAS/非原子写;
+  - 返回新 mtime_ns。
+渲染层:
+- frontend/src/renderer/services/shortcuts.ts:65-99
+  - localStorage 'atlas.shortcuts' 保存用户改绑(每机器);`applyFileBindings` 把文件
+    bindings 写回 localStorage 并派发 'atlas:shortcuts';旧单字符串格式兼容。
+- frontend/src/renderer/App.tsx:558-573
+  - 每 3s 轮询 GET;`updated_at < 0` 或与上次相同则跳过;失败 toast
+    “keybindings.json 无法读取”。
+- frontend/src/renderer/pages/ShortcutsPanel.tsx:27-38
+  - 编辑后 setBindings+saveBindings(localStorage);无写文件调用(PUT 路由存在但 UI
+    未使用)。
+- 原生全局快捷键:frontend/src/main/electron.ts:52-55(默认状态)、650-667(启动注册)、
+  827-841(截图/语音改绑)、910-918(显示/聚焦改绑);preferences 经
+  savePlatformPreferences 持久化(与 keybindings.json 分离)。
+
+================================================================================
+C. 差距(相对 DSH)
+================================================================================
+G1 无 revision 乐观锁:GET 返回 mtime,但 PUT 不接受 expected revision;
+   两个窗口并发保存 = 后写覆盖,无 409。
+G2 非原子写:PUT 直接 write_text;进程崩溃/磁盘满可能留下截断 JSON,
+   下次 GET 422,用户丢失全部改绑(DSH 是 writeFileAtomic)。
+G3 无跨窗口/跨进程广播:渲染层 3s 轮询 mtime;另一窗口改绑最多延迟 3s,
+   且可能被本窗口下一次保存覆盖。
+G4 渲染层 UI 保存只写 localStorage,不 PUT 到 keybindings.json;
+   文件真源只能被外部写入后轮询应用(单向),编辑与文件持久化未闭环。
+G5 无 DSH 的录制态/allowPaste 策略/单写者事务错误回编辑 UI 的契约。
+
+================================================================================
+D. 验收标准(二值)
+================================================================================
+A-1 PUT 接受 `expected_updated_at`;与当前 mtime_ns 不一致 → 409 且不写文件;
+    一致 → 原子写(temp+os.replace,文件 0600/目录 0700)并返回新 updated_at。
+A-2 GET/PUT 并发测试:两个写者同一基线,第一个成功、第二个 409;
+    409 后文件内容仍是第一个写者的完整值(无截断)。
+A-3 崩溃/中断测试:在临时目录模拟写一半,恢复后 JSON 可解析(原子写保证)。
+A-4 UI 保存路径:ShortcutsPanel 改为 PUT(带 expected_updated_at);409 时显示冲突
+    并允许重载/覆盖;成功后其他窗口 ≤1s 内应用(广播或短轮询)。
+A-5 复验:pytest 路由测试(GET/PUT/409/422/原子性)+ vitest ShortcutsPanel 冲突路径;
+    真机两窗同时改绑一次。
+
+================================================================================
+E. 结论
+================================================================================
+Atlas 已有设备级持久化(localStorage+keybindings.json+原生 preferences),但缺
+revision CAS、原子写和闭环 UI 写入 → 状态:部分(非缺失)。
+实施落 F02-impl 或独立小批(仅 u6_router.py + ShortcutsPanel,均非在途文件;
+electron.ts 在途部分不涉及本项)。

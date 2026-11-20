@@ -1,0 +1,10 @@
+{
+  "duration_seconds": 271.0789999999979,
+  "leftover_processes": [],
+  "returncode": 0,
+  "signals": [],
+  "status": "PASS",
+  "stderr_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-CLI-ARGS-SEMANTICS-084-scan\\stderr.log",
+  "stdout_path": "D:\\Atlas\\tasks\\dsh-parity\\atomic\\runs\\T1-CLI-ARGS-SEMANTICS-084-scan\\stdout.log",
+  "timed_out": false
+}

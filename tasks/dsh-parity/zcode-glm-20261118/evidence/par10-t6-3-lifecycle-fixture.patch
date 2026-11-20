@@ -1,0 +1,91 @@
+diff --git a/core/tests/test_mcp_lifecycle_shutdown.py b/core/tests/test_mcp_lifecycle_shutdown.py
+index c6738d5a..dec4b5da 100644
+--- a/core/tests/test_mcp_lifecycle_shutdown.py
++++ b/core/tests/test_mcp_lifecycle_shutdown.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ import asyncio
+ import sys
+ import time
++from collections.abc import Callable
+ from contextlib import asynccontextmanager
+ from pathlib import Path
+ from unittest.mock import patch
+@@ -28,6 +29,30 @@ def _matching_children(script_path: Path) -> list[psutil.Process]:
+     return found
+ 
+ 
++async def _wait_until(
++    predicate: Callable[[], bool],
++    *,
++    timeout: float = 10.0,
++    describe: str = "",
++) -> None:
++    """Poll a real lifecycle observation; never a fixed-duration sleep."""
++    deadline = time.monotonic() + timeout
++    while time.monotonic() < deadline:
++        if predicate():
++            return
++        await asyncio.sleep(0.02)
++    raise AssertionError(describe or "condition was not observed before timeout")
++
++
++def _connected_names(client: MCPClient) -> set[str]:
++    servers = client.get_runtime_status().get("servers") or []
++    return {
++        str(item.get("name"))
++        for item in servers
++        if item.get("state") == "connected"
++    }
++
++
+ def _write_fake_server(tmp_path: Path) -> Path:
+     server_script = tmp_path / "fake_mcp_server.py"
+     server_script.write_text(
+@@ -90,6 +115,13 @@ async def test_stdio_session_shutdown_exits_its_real_child(tmp_path: Path) -> No
+             patch("atlas.tools.mcp_client.stdio_client", side_effect=record_stdio_owner),
+         ):
+             await client.start()
++            # MCPClient.start() schedules each handshake in the background and
++            # returns before it completes. Wait for the observable connected
++            # state instead of assuming "start() returned" means "ready".
++            await _wait_until(
++                lambda: _connected_names(client) == {"lifecycle-test"},
++                describe=f"server never reached connected: {client.get_runtime_status()}",
++            )
+             assert client.get_server_names() == ["lifecycle-test"], client.get_runtime_status()
+             assert _matching_children(server_script)
+ 
+@@ -132,10 +164,18 @@ async def test_cancelled_mcp_discovery_stops_its_real_stdio_child(tmp_path: Path
+         ):
+             start_task = asyncio.create_task(client.start())
+             await asyncio.wait_for(discovery_started.wait(), timeout=5)
++            # ``start()`` returns once each per-server handshake is scheduled in
++            # the background; the task that owns the transport and is blocked in
++            # discovery is that per-server startup task. Cancelling ``start()``
++            # itself can no longer be in flight at this point.
++            await start_task
++            startup_tasks = [task for task in client._startup_tasks if not task.done()]
++            assert startup_tasks, "MCP startup task already finished before cancellation"
++            startup_task = startup_tasks[0]
+             assert _matching_children(server_script)
+-            start_task.cancel()
++            startup_task.cancel()
+             with pytest.raises(asyncio.CancelledError):
+-                await start_task
++                await startup_task
+ 
+         deadline = time.monotonic() + 3
+         while time.monotonic() < deadline and _matching_children(server_script):
+@@ -172,6 +212,12 @@ async def test_cancelled_owner_does_not_skip_other_server_cleanup(tmp_path: Path
+     try:
+         with patch("atlas.tools.mcp_client._parse_server_configs", return_value=configs):
+             await client.start()
++            # Both handshakes are background tasks; wait until the runtime
++            # statuses report connected, then check the two real children.
++            await _wait_until(
++                lambda: _connected_names(client) == {"first", "second"},
++                describe=f"servers never reached connected: {client.get_runtime_status()}",
++            )
+         assert len(_matching_children(first_script)) >= 1
+         assert len(_matching_children(second_script)) >= 1
+ 

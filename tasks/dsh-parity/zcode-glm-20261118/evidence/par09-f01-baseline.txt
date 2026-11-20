@@ -1,0 +1,16 @@
+# PAR-09-F01 baseline
+UTC: 2026-11-18T21:03:27Z
+worktree: D:/Atlas/.worktrees/zcode-par09-release-integrity
+HEAD: 060071ab2ecf86d41cab90e98160183ce126bc69
+branch: zcode/par09-release-integrity
+node: v24.18.1
+npm: 12.0.2
+vitest: vitest/5.0.4 win32-x64 node-v24.18.1
+typescript: Version 7.0.2
+--- git status --short ---
+?? frontend/src/main/releaseIntegrity.test.ts
+?? frontend/src/main/releaseIntegrity.ts
+--- new files ---
+  702 D:/Atlas/.worktrees/zcode-par09-release-integrity/frontend/src/main/releaseIntegrity.ts
+  449 D:/Atlas/.worktrees/zcode-par09-release-integrity/frontend/src/main/releaseIntegrity.test.ts
+ 1151 total

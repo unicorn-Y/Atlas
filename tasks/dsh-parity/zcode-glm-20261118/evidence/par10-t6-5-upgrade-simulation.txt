@@ -1,0 +1,57 @@
+PAR-10-T6-5 upgrade simulation on isolated installer-produced 0.1.0 tree (file-level overlay; no real installer/uninstaller)
+2026-11-18T23:19:28Z
+isolated tree=/d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/install-0.1.0-upgrade
+
+== pre-overlay: module check on installed 0.1.0 tree ==
+{
+  "ok": false,
+  "manifest_has_installer": null,
+  "verifiedArtifacts": [],
+  "issues": [
+    {
+      "code": "manifest_missing",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro\\.par10-t6-5-sandbox\\install-0.1.0-upgrade"
+    }
+  ]
+}
+PRE_EXIT=1
+
+== overlay of freshly built win-unpacked payload (installer-equivalent file replacement) ==
+
+real	0m31.481s
+user	0m0.515s
+sys	0m25.249s
+OVERLAY_EXIT=0
+
+== post-overlay identity ==
+version marker: 44.7.0embedded manifest app_version: 0.1.1
+92d002d1119fc12227953991b4e8368b46ae5391493cc52fd054636ef951e90f */d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/install-0.1.0-upgrade/Atlas.exe
+13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76 */d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/install-0.1.0-upgrade/resources/atlas/backend/atlas_backend.exe
+5ca6a16bdd2c5a5037b1e3a942d9ac1c66efe2def902b202d44774680a8a4656 */d/Atlas/.worktrees/zcode-par10-win-release-repro/.par10-t6-5-sandbox/install-0.1.0-upgrade/resources/atlas/backend/_internal/sqlite3.dll
+
+== post-overlay: module check ==
+{
+  "ok": true,
+  "manifestPath": "D:\\Atlas\\.worktrees\\zcode-par10-win-release-repro\\.par10-t6-5-sandbox\\install-0.1.0-upgrade\\resources\\atlas\\release-manifest.json",
+  "manifest_app_version": "0.1.1",
+  "manifest_has_installer": false,
+  "verifiedArtifacts": [
+    {
+      "field": "unpacked_executable_sha256",
+      "path": "Atlas.exe",
+      "sha256": "92d002d1119fc12227953991b4e8368b46ae5391493cc52fd054636ef951e90f"
+    },
+    {
+      "field": "backend_build.executable_sha256",
+      "path": "resources/atlas/backend/atlas_backend.exe",
+      "sha256": "13d8511ead43e6ba58bb8f1aa9d7423387162ba2c5f07edb21a09e3367cf6d76"
+    },
+    {
+      "field": "sqlite_runtime.dll_sha256",
+      "path": "resources/atlas/backend/_internal/sqlite3.dll",
+      "sha256": "5ca6a16bdd2c5a5037b1e3a942d9ac1c66efe2def902b202d44774680a8a4656"
+    }
+  ],
+  "issues": []
+}
+POST_EXIT=0

@@ -1,0 +1,18 @@
+SCENARIO disabled
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 05:09:17 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-exec05-mcp\.tmp\par09-mcp-real\data\disabled\config\atlas.toml
+2026-11-19 05:09:17 [info     ] mcp.no_servers_configured
+PHASE disabled {"available": true, "blocking_reason": null, "servers": [{"name": "off", "enabled": false, "connected": false, "state": "disabled", "tool_discovery": "not_started", "tool_count": 0, "blocking_reason": "server is disabled"}]}
+CHECK PASS disabled: server stays disabled :: {'name': 'off', 'configured': True, 'enabled': False, 'transport': 'stdio', 'connected': False, 'state': 'disabled', 'tool_discovery': 'not_started', 'tool_count': 0, 'blocking_reason': 'server is disabled'}
+CHECK PASS disabled: runtime not blocked :: {'available': True, 'blocking_reason': None, 'servers': [{'name': 'off', 'enabled': False, 'connected': False, 'state': 'disabled', 'tool_discovery': 'not_started', 'tool_count': 0, 'blocking_reason': 'server is disabled'}]}
+CHECK PASS disabled: no child process spawned :: []
+RESULT disabled checks=3 failed=0
+SCENARIO unconfigured
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 05:09:19 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-exec05-mcp\.tmp\par09-mcp-real\data\unconfigured\config\atlas.toml
+2026-11-19 05:09:19 [info     ] mcp.no_servers_configured
+PHASE unconfigured {"available": true, "blocking_reason": null, "servers": []}
+CHECK PASS unconfigured: no servers reported :: []
+CHECK PASS unconfigured: runtime available :: True
+CHECK PASS unconfigured: no blocker :: None
+RESULT unconfigured checks=3 failed=0

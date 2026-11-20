@@ -1,0 +1,39 @@
+PAR-10-T2 baseline 2026-11-18T21:47:05Z
+worktree: /d/Atlas/.worktrees/zcode-par10-release-startup
+branch: zcode/par10-release-startup
+HEAD: 060071ab2ecf86d41cab90e98160183ce126bc69
+
+=== source (par09 tree) ===
+02db0ff1b194363f56fcd8a3bbca70c62ac57f213e1b67fd425c7b72669a72b8 */d/Atlas/.worktrees/zcode-par09-release-integrity/frontend/src/main/releaseIntegrity.ts
+2fa53025f5f9365cc43aac2c88ea019ab7b3fa113a717633e60098ca57ac783d */d/Atlas/.worktrees/zcode-par09-release-integrity/frontend/src/main/releaseIntegrity.test.ts
+
+=== copied into candidate (before adaptation) ===
+02db0ff1b194363f56fcd8a3bbca70c62ac57f213e1b67fd425c7b72669a72b8  releaseIntegrity.ts (as copied)
+2fa53025f5f9365cc43aac2c88ea019ab7b3fa113a717633e60098ca57ac783d  releaseIntegrity.test.ts (as copied)
+
+=== candidate worktree status ===
+ M frontend/package.json
+ M frontend/scripts/write-release-manifest.mjs
+ M frontend/src/main/electron.ts
+?? frontend/scripts/after-pack-release-manifest.cjs
+?? frontend/scripts/after-pack.cjs
+?? frontend/src/main/releaseIntegrity.test.ts
+?? frontend/src/main/releaseIntegrity.ts
+
+=== toolchain ===
+v24.18.1
+12.0.2
+npm notice run atlas@0.1.0 npx
+npm notice run tsc --version
+Version 7.0.2
+npm notice run atlas@0.1.0 npx
+npm notice run vitest --version
+vitest/5.0.4 win32-x64 node-v24.18.1
+
+=== installed package versions ===
+frontend 0.1.1 electron 44.7.0 electron-builder ^26.15.3 typescript ^7.0.2 vitest ^5.0.4
+
+=== staged real artifacts (not source) ===
+backend bundle copied from D:\Atlas\frontend\backend-release\atlas_backend (real 0.1.0 PyInstaller payload)
+electron runtime copied from D:\Atlas\node_modules\electron\dist (official 44.7.0)
+node runtime packaged by npm run package:node from official nodejs.org v24.21.0 archive

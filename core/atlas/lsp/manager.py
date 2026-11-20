@@ -363,6 +363,11 @@ class LSPService:
         ``root`` was untrusted keeps its own client after ``root`` becomes trusted, so it is found and
         released rather than orphaned."""
         own = (srv.server_id, root)
+        # Remote roots carry the resolved authority identity in their key.  They must
+        # never collapse into the process-wide multi-root/trust bucket used for local
+        # paths, even when two hosts expose the same POSIX path.
+        if root.startswith("ssh://"):
+            return own
         return own if own in self._clients or own in self._spawning else _client_key(srv, root, self._trusted(root))
 
     def _untrusted_denied(self, srv: ServerDef, root: str, file_path: str, trusted: bool) -> bool:
@@ -564,6 +569,7 @@ class LSPService:
 
     async def _open_and_wait_async(
         self, file_path: str, *, snapshot: bool = False, budget: Optional[float] = None,
+        remote_world: Any = None,
     ) -> Optional[_Diags]:
         """Open + wait for FRESH diagnostics: ``[]`` = checked clean, ``None`` = no verdict in budget.
 
@@ -571,7 +577,11 @@ class LSPService:
         skips didSave; both modes wait at most ``budget`` (``lsp.wait_timeout`` unless the caller
         computed a cold-root warm-up budget via :meth:`_wait_budget`).
         """
-        client = await self._get_or_spawn(file_path)
+        if remote_world is not None:
+            _, file_path = remote_world.workspace_file(file_path)
+            client = await self._get_or_spawn(file_path, remote_world=remote_world)
+        else:
+            client = await self._get_or_spawn(file_path)
         if client is None:
             return None
         try:
@@ -606,30 +616,50 @@ class LSPService:
             client = self._clients.get(self._live_key(srv, root))
         return list(client.diagnostics_for(file_path, fresh_only=True)) if client else []
 
-    async def _get_or_spawn(self, file_path: str) -> Optional[LSPClient]:
+    async def _get_or_spawn(self, file_path: str, *, remote_world: Any = None) -> Optional[LSPClient]:
         srv = self._server_for(file_path)
         if srv is None:
             return None
         if srv.server_id in self._disabled_servers:
             eventlog.log_disabled(srv.server_id, file_path, "disabled in config")
             return None
-        ws_root, gated = resolve_workspace_for_file(file_path)
-        if not (ws_root and gated):
-            eventlog.log_no_project_root(srv.server_id, file_path)
-            return None
-        root = srv.resolve_root(file_path, ws_root)
+        if remote_world is not None:
+            try:
+                ws_root, file_path = remote_world.workspace_file(file_path)
+                root = await remote_world.resolve_root(srv, file_path, ws_root)
+            except (OSError, PermissionError, ValueError):
+                eventlog.log_no_project_root(srv.server_id, file_path)
+                return None
+            if not remote_world.trusted and srv.server_id not in UNTRUSTED_SAFE_SERVERS:
+                eventlog.log_untrusted_skipped(srv.server_id, ws_root, file_path)
+                return None
+            root_key = remote_world.cache_key(root) if root else ""
+            gated = bool(root) and not (
+                self._exclude_roots is not None and self._root_excluded(root_key)
+            )
+        else:
+            ws_root, gated = resolve_workspace_for_file(file_path)
+            if not (ws_root and gated):
+                eventlog.log_no_project_root(srv.server_id, file_path)
+                return None
+            root = srv.resolve_root(file_path, ws_root)
+            root_key = root
         if root is None:
             eventlog.log_disabled(srv.server_id, file_path, "exclude marker hit (server gated off)")
             return None
-        if self._untrusted_denied(srv, root, file_path, self._trusted(root)):
+        trusted = remote_world.trusted if remote_world is not None else self._trusted(root)
+        if remote_world is None and self._untrusted_denied(srv, root, file_path, trusted):
             return None
-        if self._is_broken((srv.server_id, root)):
+        if not gated:
+            eventlog.log_no_project_root(srv.server_id, file_path)
+            return None
+        if self._is_broken((srv.server_id, root_key)):
             return None
         with self._state_lock:
-            key = self._live_key(srv, root)
+            key = self._live_key(srv, root_key)
             # Derived with the key: trust only grows, so one read before the lock could store an
             # untrusted spawn under the shared multi-root key every trusted root then attaches to.
-            trusted = key[1] == "" or self._trusted(root)
+            trusted = trusted if remote_world is not None else (key[1] == "" or self._trusted(root))
             client = self._clients.get(key)
             if client is not None and client.is_running:
                 self._last_used[key] = time.time()
@@ -649,12 +679,13 @@ class LSPService:
                 return None
             return await self._attach_root(srv, client, root) if client is not None else None
         try:
-            client = await self._spawn_client(srv, root, trusted)
+            client = await self._spawn_client(srv, root, trusted, remote_world=remote_world,
+                                              cache_root=root_key)
             if client is None:
                 # Atlas: a pair whose binary is missing is recorded in _missing, never the broken
                 # set — installing the binary must be enough.  Any other failure marks it broken.
-                if (srv.server_id, root) not in self._missing:
-                    self._mark_broken((srv.server_id, root))
+                if (srv.server_id, root_key) not in self._missing:
+                    self._mark_broken((srv.server_id, root_key))
             else:
                 with self._state_lock:
                     self._clients[key] = client
@@ -673,9 +704,10 @@ class LSPService:
             await client.add_workspace_folder(root)
         return client
 
-    async def _spawn_client(self, srv: ServerDef, root: str, trusted: bool) -> Optional[LSPClient]:
+    async def _spawn_client(self, srv: ServerDef, root: str, trusted: bool, *,
+                            remote_world: Any = None, cache_root: str | None = None) -> Optional[LSPClient]:
         """Resolve the binary and start a client; ``None`` (after logging) when either fails."""
-        key = (srv.server_id, root)
+        key = (srv.server_id, cache_root or root)
         if key in self._missing:
             # Missing-binary probe throttle: build_spawn → find_binary is skipped entirely for a
             # pair probed and found absent within _MISSING_PROBE_INTERVAL (Atlas: no auto-install).
@@ -687,6 +719,8 @@ class LSPService:
             workspace_root=root, install_strategy=self._install_strategy, binary_overrides=self._binary_overrides,
             env_overrides=self._env_overrides, init_overrides=self._init_overrides,
             trusted=trusted,
+            remote=remote_world is not None,
+            remote_binary_resolver=remote_world.resolve_binary if remote_world is not None else None,
         )
         spec = srv.build_spawn(root, ctx)
         if spec is None:
@@ -697,11 +731,25 @@ class LSPService:
             eventlog.log_server_unavailable(srv.server_id, srv.server_id)
             return None
         self._missing.discard(key)
-        client = LSPClient(
-            server_id=srv.server_id, workspace_root=spec.workspace_root, command=spec.command, env=spec.env,
-            cwd=spec.cwd, initialization_options=spec.initialization_options,
-            seed_diagnostics_on_first_push=spec.seed_diagnostics_on_first_push or srv.seed_first_push,
-        )
+        client_kwargs = {
+            "server_id": srv.server_id, "workspace_root": spec.workspace_root,
+            "command": spec.command, "env": spec.env, "cwd": spec.cwd,
+            "initialization_options": spec.initialization_options,
+            "seed_diagnostics_on_first_push": spec.seed_diagnostics_on_first_push or srv.seed_first_push,
+        }
+        if remote_world is not None:
+            client_kwargs.update({
+                "process_factory": remote_world.process_factory,
+                "uri_for_path": remote_world.uri_for_path,
+                "path_from_uri": remote_world.path_from_uri,
+                "normalize_path": remote_world.normalize_path,
+                "read_document": remote_world.read_document,
+                "process_id": None,
+            })
+        client = LSPClient(**client_kwargs)
+        if remote_world is not None:
+            client.remote_workspace_uri = remote_world.workspace
+            client.remote_authority_key = remote_world.authority_key
         try:
             await client.start()
         except Exception as e:  # noqa: BLE001
@@ -743,7 +791,7 @@ class LSPService:
             await asyncio.gather(*(client.shutdown() for client in clients), return_exceptions=True)
         # Externally deleted project roots (rm -rf, a worktree removed by another process) never go
         # idle from the server's point of view — tsserver keeps its multi-GiB heap for a tree that is gone.
-        await self._detach_roots(lambda folder: not os.path.isdir(folder), reason="workspace root deleted")
+        await self._detach_roots(lambda folder: not os.path.isdir(folder), reason="workspace root deleted", skip_remote=True)
 
     def release_workspace(self, workspace_root: str) -> int:
         """Shut down the clients serving ``workspace_root`` or any root beneath it; returns how many.
@@ -754,6 +802,12 @@ class LSPService:
         """
         if not self._enabled:
             return 0
+        if workspace_root.startswith("ssh://"):
+            try:
+                return self._loop.run(self._release_remote_async(workspace_root), timeout=15.0)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("LSP release of remote workspace %s failed: %s", workspace_root, e)
+                return 0
         root = os.path.abspath(workspace_root)
         try:
             return self._loop.run(self._release_async(root), timeout=15.0)
@@ -778,11 +832,65 @@ class LSPService:
                 del self._delta_baseline[path]
         if pending:
             await asyncio.wait(pending, timeout=10.0)
-        released = await self._detach_roots(_under, reason="workspace released")
+        released = await self._detach_roots(_under, reason="workspace released", skip_remote=True)
         clear_cache()
         return released
 
-    async def _detach_roots(self, is_gone: Callable[[str], bool], *, reason: str) -> int:
+    async def _release_remote_async(self, workspace_uri: str) -> int:
+        """Release one remote authority/root and its state without crossing authority aliases."""
+        from urllib.parse import quote, unquote, urlsplit
+        import posixpath
+        from atlas.ssh import ssh_workspaces
+
+        requested = urlsplit(workspace_uri)
+        if requested.scheme != "ssh" or not requested.netloc:
+            return 0
+        authority = await ssh_workspaces.resolve_authority(requested.netloc)
+        authority_prefix = f"ssh://{quote(authority.id, safe='')}@{requested.netloc}"
+        root = posixpath.normpath(unquote(requested.path))
+
+        def _in_scope(remote_key: str) -> bool:
+            if not remote_key.casefold().startswith(authority_prefix.casefold()):
+                return False
+            candidate = posixpath.normpath(remote_key[len(authority_prefix):])
+            try:
+                return posixpath.commonpath((root, candidate)) == root
+            except ValueError:
+                return False
+
+        with self._state_lock:
+            pending = [future for key, future in self._spawning.items() if _in_scope(key[1]) and not future.done()]
+        if pending:
+            _done, pending = await asyncio.wait(pending, timeout=10.0)
+            if pending:
+                logger.warning("LSP remote workspace release timed out waiting for spawn: %s", workspace_uri)
+                return 0
+
+        with self._state_lock:
+            keys = {key for key in set(self._clients) | set(self._broken) | self._missing
+                    | set(self._missing_checked_at) | set(self._spawning)
+                    if _in_scope(key[1])}
+            clients = []
+            for key, client in list(self._clients.items()):
+                if (key in keys and getattr(client, "remote_authority_key", "").casefold()
+                        == authority_prefix.casefold()):
+                    clients.append(client)
+                    self._clients.pop(key, None)
+            for key in keys:
+                # Only clear state for the current authority.  Alias reuse after a
+                # config change must not erase another authority's retry history.
+                if key[1].casefold().startswith(authority_prefix.casefold()):
+                    self._last_used.pop(key, None)
+                    self._broken.pop(key, None)
+                    self._missing.discard(key)
+                    self._missing_checked_at.pop(key, None)
+                    self._spawning.pop(key, None)
+        if clients:
+            await asyncio.gather(*(client.shutdown() for client in clients), return_exceptions=True)
+        return len(clients)
+
+    async def _detach_roots(self, is_gone: Callable[[str], bool], *, reason: str,
+                            skip_remote: bool = False) -> int:
         """Shared teardown primitive for :meth:`release_workspace` and the reaper.
 
         Clients whose every workspace folder ``is_gone`` are detached under ``_state_lock`` and shut down;
@@ -790,11 +898,17 @@ class LSPService:
         clients shut down.
         """
         with self._state_lock:
-            dead_keys = [key for key, c in self._clients.items() if all(map(is_gone, c.workspace_folders))]
+            dead_keys = [key for key, c in self._clients.items()
+                         if not (skip_remote and getattr(c, "remote_workspace_uri", None))
+                         and all(map(is_gone, c.workspace_folders))]
             clients = [self._clients.pop(key) for key in dead_keys]
             for key in dead_keys:
                 self._last_used.pop(key, None)
-            trims = [(c, [f for f in c.workspace_folders if is_gone(f)]) for c in self._clients.values()]
+            trims = [
+                (c, [f for f in c.workspace_folders if is_gone(f)])
+                for c in self._clients.values()
+                if not (skip_remote and getattr(c, "remote_workspace_uri", None))
+            ]
         for client, folders in trims:
             for folder in folders:
                 try:

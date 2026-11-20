@@ -208,7 +208,9 @@ export interface ProjectSource {
 }
 export interface ProjectSources { instructions: string; sources: ProjectSource[] }
 
-export interface SandboxSettings { type: 'docker'; image?: string; network?: boolean }
+export type SandboxSettings =
+  | { type: 'docker'; image?: string; network?: boolean }
+  | { type: 'ssh-bwrap'; network?: boolean };
 export interface ExternalAgentInfo { id: string; name: string; available: boolean; version: string | null; detail: string }
 export interface SandboxStatus { docker: { available: boolean; version: string | null; detail: string } }
 export interface WorkspaceVersion {

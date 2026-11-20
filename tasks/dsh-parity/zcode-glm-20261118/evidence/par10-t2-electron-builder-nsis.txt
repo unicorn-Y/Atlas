@@ -1,0 +1,13 @@
+PAR-10-T2 electron-builder NSIS from prepackaged payload 2026-11-18T21:48:21Z
+$ npx electron-builder --win nsis --x64 --prepackaged windows-release/win-unpacked --publish never   (cwd frontend)
+npm notice run atlas@0.1.0 npx
+npm notice run electron-builder --win nsis --x64 --prepackaged windows-release/win-unpacked --publish never
+  • electron-builder  version=26.15.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • packageManager not detected by file, falling back to environment detection  resolvedPackageManager=npm detected=D:\Atlas\.worktrees\zcode-par10-release-startup\frontend
+  • detected workspace root for project using lock file  pm=npm config=undefined resolved=D:\Atlas\.worktrees\zcode-par10-release-startup projectDir=D:\Atlas\.worktrees\zcode-par10-release-startup\frontend
+  • building        target=nsis file=windows-release\Atlas-0.1.1-Setup.exe archs=x64 oneClick=false perMachine=false
+  • signing with signtool.exe  path=windows-release\Atlas-0.1.1-Setup.__uninstaller.exe
+  • signing with signtool.exe  path=windows-release\Atlas-0.1.1-Setup.exe
+  • building block map  blockMapFile=windows-release\Atlas-0.1.1-Setup.exe.blockmap
+EXIT=0

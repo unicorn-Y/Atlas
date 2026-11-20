@@ -1,0 +1,16 @@
+date: 2026-11-19T03:32:02+08:00
+worktree: D:/Atlas/.worktrees/zcode-exec06-keybindings-cas
+branch: zcode/exec06-keybindings-cas
+head: 060071ab2ecf86d41cab90e98160183ce126bc69
+panel_sha256: d829fc4bc26bc604a58b57360d63f0760e281baec3c006313f77d210e63f28e4
+service_sha256: 960348afbf4a4d4b5f0f4d7862ae68573f7bfc7e4cfdd496ac3ab9cb79d20e76
+bundle_sha256: 6f572384b8c56d9542b025ee6bf308cc6308cdd480d357b8343ed4ee276114df
+backend: uvicorn host app with atlas.api.u6_router, ATLAS_DATA_DIR=D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par08b-run/data-root
+port: 8814
+electron: 
+v44.7.0
+window1 argv: --user-data-dir=D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par08b-run/userdata-window1 driver.cjs --role=window1 --url=http://127.0.0.1:8814/ --out=D:/Atlas/tasks/dsh-parity/zcode-glm-20261118/evidence --run=D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par08b-run
+window2 argv: --user-data-dir=D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par08b-run/userdata-window2 driver.cjs --role=window2 --url=http://127.0.0.1:8814/ --out=D:/Atlas/tasks/dsh-parity/zcode-glm-20261118/evidence --run=D:/Atlas/.worktrees/zcode-exec06-keybindings-cas/.tmp/par08b-run
+window1 exit: 0
+window2 exit: 0
+summary exit: 0

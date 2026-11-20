@@ -1,0 +1,48 @@
+2026-11-18 08:35:23 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-4pgj5bfs\atlas\config\atlas.toml
+................F......FF.............................                   [100%]
+================================== FAILURES ===================================
+E   ValueError: Cannot fork a session through an open turn
+D:\Atlas\.worktrees\zcode-exec04-preview\core\atlas\engine\session_sync.py:1215: ValueError: Cannot fork a session through an open turn
+E   ValueError: Cannot fork a session through an open turn
+D:\Atlas\.worktrees\zcode-exec04-preview\core\atlas\engine\session_sync.py:1215: ValueError: Cannot fork a session through an open turn
+E   KeyError: 'missing_in_hermes'
+---------------------------- Captured stdout call -----------------------------
+2026-11-18 08:35:25 [info     ] memory.init                    db=D:\ENGINE-V3-UPSTREAM-20261118\tmp\pytest-pair2-clean\test_history_mutations_keep_do0\data\atlas.db
+D:\Atlas\.worktrees\zcode-exec04-preview\core\tests\test_atlas_session_sync.py:245: KeyError: 'missing_in_hermes'
+============================== warnings summary ===============================
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\.worktrees\zcode-exec04-preview\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\.worktrees\zcode-exec04-preview\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\.worktrees\zcode-exec04-preview\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\.worktrees\zcode-exec04-preview\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_app_server_sdk_lifecycle.py::test_session_wait_unknown_session_is_rejected
+  D:\Atlas\.worktrees\zcode-exec04-preview\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_atlas_session_sync.py::test_fork_copies_selected_turn_and_delete_removes_atlas_history
+FAILED tests/test_atlas_session_sync.py::test_fork_session_through_turn_direct_cuts_from_sessiondb_transcript
+FAILED tests/test_atlas_session_sync.py::test_history_mutations_keep_doctor_sessions_consistent
+3 failed, 51 passed, 5 warnings in 11.76s

@@ -1,0 +1,7 @@
+list workspace=A -> [('arxiv', 'atlas'), ('blocked-page-recovery', 'atlas'), ('coding-discipline', 'atlas'), ('comfyui', 'atlas'), ('competitor-news-monitor', 'atlas'), ('github-code-review', 'atlas'), ('github-issues', 'atlas'), ('github-pr-workflow', 'atlas'), ('only-a', 'project-dsh'), ('pdf', 'atlas'), ('shared', 'project-dsh'), ('systematic-debugging', 'atlas'), ('telegram-integration', 'atlas'), ('verify', 'atlas')]
+activate shared workspace=A -> A SHARED BODY
+list workspace=B -> [('arxiv', 'atlas'), ('blocked-page-recovery', 'atlas'), ('coding-discipline', 'atlas'), ('comfyui', 'atlas'), ('competitor-news-monitor', 'atlas'), ('github-code-review', 'atlas'), ('github-issues', 'atlas'), ('github-pr-workflow', 'atlas'), ('only-b', 'project-agents'), ('pdf', 'atlas'), ('shared', 'project-dsh'), ('systematic-debugging', 'atlas'), ('telegram-integration', 'atlas'), ('verify', 'atlas')]
+activate shared workspace=B -> B SHARED BODY
+list no-workspace -> [('arxiv', 'atlas'), ('blocked-page-recovery', 'atlas'), ('coding-discipline', 'atlas'), ('comfyui', 'atlas'), ('competitor-news-monitor', 'atlas'), ('github-code-review', 'atlas'), ('github-issues', 'atlas'), ('github-pr-workflow', 'atlas'), ('pdf', 'atlas'), ('systematic-debugging', 'atlas'), ('telegram-integration', 'atlas'), ('verify', 'atlas')]
+detail only-a workspace=B -> 404 Skill not found: only-a
+PROBE_EXIT:0

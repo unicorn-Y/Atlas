@@ -16,6 +16,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import posixpath
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -54,6 +55,7 @@ STDERR_TAIL_LINES = 30
 # sides of the pipe until the idle reaper kills the whole client (#62950).  64 covers an active
 # edit loop's working set; evicted files are didClose'd and re-didOpen'ed on their next touch.
 MAX_TRACKED_FILES = 64
+_DEFAULT_PROCESS_ID = object()
 
 _WRITE_ERRORS = (BrokenPipeError, ConnectionResetError, OSError)
 _LIVE_STATES = {"starting", "running"}
@@ -85,11 +87,6 @@ def file_uri(path: str) -> str:
         abs_path = abs_path.replace("\\", "/")
         abs_path = abs_path if abs_path.startswith("/") else "/" + abs_path
     return "file://" + quote(abs_path, safe="/:")
-
-
-def _folder(root: str) -> Dict[str, str]:
-    """Build an LSP ``WorkspaceFolder`` for ``root``."""
-    return {"name": os.path.basename(root.rstrip(os.sep)) or root, "uri": file_uri(root)}
 
 
 def uri_to_path(uri: str) -> str:
@@ -145,7 +142,13 @@ class LSPClient:
     def __init__(self, *, server_id: str, workspace_root: str, command: List[str],
                  env: Optional[Dict[str, str]] = None, cwd: Optional[str] = None,
                  initialization_options: Optional[Dict[str, Any]] = None,
-                 seed_diagnostics_on_first_push: bool = False) -> None:
+                 seed_diagnostics_on_first_push: bool = False,
+                 process_factory: Callable[[List[str], str, Dict[str, str]], Awaitable[Any]] | None = None,
+                 uri_for_path: Callable[[str], str] | None = None,
+                 path_from_uri: Callable[[str], str] | None = None,
+                 normalize_path: Callable[[str], str] | None = None,
+                 read_document: Callable[[str], Any] | None = None,
+                 process_id: int | None | object = _DEFAULT_PROCESS_ID) -> None:
         self.server_id = server_id
         self.workspace_root = workspace_root
         # Roots this server serves.  Single-root servers only ever hold ``workspace_root``;
@@ -156,6 +159,14 @@ class LSPClient:
         self._cwd = cwd or workspace_root
         self._init_options = initialization_options or {}
         self._seed_first_push = seed_diagnostics_on_first_push
+        self._process_factory = process_factory
+        self.remote_workspace_uri: str | None = None
+        self.remote_authority_key: str | None = None
+        self._uri_for_path = uri_for_path or file_uri
+        self._path_from_uri = path_from_uri or uri_to_path
+        self._normalize_path = normalize_path or os.path.abspath
+        self._read_document = read_document
+        self._process_id = os.getpid() if process_id is _DEFAULT_PROCESS_ID else process_id
 
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._stderr_task: Optional[asyncio.Task] = None
@@ -251,6 +262,11 @@ class LSPClient:
 
     async def _spawn(self) -> None:
         cmd = self._command
+        if self._process_factory is not None:
+            self._proc = await self._process_factory(cmd, self._cwd, dict(self._env or {}))
+            self._stderr_task = asyncio.create_task(self._drain_stderr())
+            self._reader_task = asyncio.create_task(self._reader_loop())
+            return
         if sys.platform == "win32" and cmd[0].lower().endswith((".cmd", ".bat")):
             cmd = ["cmd.exe", "/c", *cmd]  # CreateProcess can't run .cmd/.bat shims directly
         try:
@@ -355,7 +371,10 @@ class LSPClient:
                 await self._cleanup_process()
 
     def _workspace_folders(self) -> List[Dict[str, str]]:
-        return [_folder(r) for r in self.workspace_folders]
+        return [{
+            "name": posixpath.basename(root.rstrip("/\\")) or root,
+            "uri": self._uri_for_path(root),
+        } for root in self.workspace_folders]
 
     async def add_workspace_folder(self, root: str) -> None:
         """Attach another root to a running multi-root server.  Idempotent; the folder is recorded
@@ -364,7 +383,7 @@ class LSPClient:
             return
         self.workspace_folders.append(root)
         await self._send_notification(
-            "workspace/didChangeWorkspaceFolders", {"event": {"added": [_folder(root)], "removed": []}},
+            "workspace/didChangeWorkspaceFolders", {"event": {"added": self._workspace_folders()[-1:], "removed": []}},
         )
 
     async def remove_workspace_folder(self, root: str) -> None:
@@ -374,12 +393,16 @@ class LSPClient:
             return
         self.workspace_folders.remove(root)
         await self._send_notification(
-            "workspace/didChangeWorkspaceFolders", {"event": {"added": [], "removed": [_folder(root)]}},
+            "workspace/didChangeWorkspaceFolders", {"event": {"added": [], "removed": [{
+                "name": posixpath.basename(root.rstrip("/\\")) or root,
+                "uri": self._uri_for_path(root),
+            }]}},
         )
 
     async def _initialize(self) -> None:
         params = {
-            "rootUri": file_uri(self.workspace_root), "rootPath": self.workspace_root, "processId": os.getpid(),
+            "rootUri": self._uri_for_path(self.workspace_root), "rootPath": self.workspace_root,
+            "processId": self._process_id,
             "workspaceFolders": self._workspace_folders(),
             "initializationOptions": self._init_options, "capabilities": _CLIENT_CAPABILITIES,
         }
@@ -396,6 +419,7 @@ class LSPClient:
         """Best-effort graceful shutdown: ``shutdown`` + ``exit``, wait ``SHUTDOWN_GRACE`` for the
         server to honour ``exit``, then SIGTERM/SIGKILL.  Idempotent."""
         if self._stopping:
+            await self._cleanup_process()
             return
         self._stopping = True
         try:
@@ -421,7 +445,7 @@ class LSPClient:
         async with self._cleanup_lock:
             tasks = [self._reader_task, self._stderr_task]
             self._reader_task = self._stderr_task = None
-            proc, self._proc = self._proc, None
+            proc = self._proc
             live = [t for t in tasks if t is not None and not t.done() and t is not asyncio.current_task()]
             for t in live:
                 t.cancel()
@@ -431,6 +455,7 @@ class LSPClient:
             if proc.returncode is not None:
                 if self._exit_code is None:
                     self._exit_code = proc.returncode
+                self._proc = None
                 return
             try:
                 # ``shutdown`` has already given the protocol a grace period.  Hard-kill
@@ -438,14 +463,24 @@ class LSPClient:
                 # after SIGTERM can let an ignoring descendant become reparented and escape.
                 # Windows maps this to a synchronous taskkill /T /F (up to 15s), so the
                 # kill runs off the event loop.  Atlas: kill_process_tree comes from atlas.lsp._proc.
-                if not await asyncio.to_thread(kill_process_tree, proc.pid):
-                    proc.kill()
-                with contextlib.suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(proc.wait(), timeout=SHUTDOWN_GRACE)
+                if getattr(proc, "remote", False):
+                    result = proc.kill()
+                    if hasattr(result, "__await__"):
+                        await result
+                else:
+                    if not await asyncio.to_thread(kill_process_tree, proc.pid):
+                        proc.kill()
+                    with contextlib.suppress(asyncio.TimeoutError):
+                        await asyncio.wait_for(proc.wait(), timeout=SHUTDOWN_GRACE)
             except ProcessLookupError:
                 pass
             if self._exit_code is None and proc.returncode is not None:
                 self._exit_code = proc.returncode
+            # A remote adapter only releases its lease after channel closure is
+            # confirmed.  Preserve it after timeout/error so cleanup remains retryable.
+            if (not getattr(proc, "remote", False) or proc.returncode is not None
+                    or getattr(proc, "transport_closed", False)):
+                self._proc = None
 
     # ---- request / notification plumbing ----
 
@@ -562,7 +597,7 @@ class LSPClient:
             return
         diagnostics = params.get("diagnostics") or []
         version = params.get("version")
-        doc = self._docs.setdefault(uri_to_path(params["uri"]), _DocState(version=-1))
+        doc = self._docs.setdefault(self._path_from_uri(params["uri"]), _DocState(version=-1))
         is_seed = self._seed_first_push and not doc.seed_seen
         doc.seed_seen = True
         doc.push = diagnostics if isinstance(diagnostics, list) else []
@@ -585,12 +620,17 @@ class LSPClient:
         """Send didOpen (first time) or didChange (subsequent); return the new document version."""
         if not self.is_running:
             raise LSPProtocolError("client not running")
-        abs_path = os.path.abspath(path)
+        abs_path = self._normalize_path(path)
         try:
-            text = Path(abs_path).read_text(encoding="utf-8-sig", errors="replace")
+            if self._read_document is None:
+                text = Path(abs_path).read_text(encoding="utf-8-sig", errors="replace")
+            else:
+                text = self._read_document(abs_path)
+                if hasattr(text, "__await__"):
+                    text = await text
         except OSError as e:
             raise LSPProtocolError(f"cannot read {abs_path}: {e}") from e
-        uri = file_uri(abs_path)
+        uri = self._uri_for_path(abs_path)
         doc = self._docs.get(abs_path)
         if doc is not None and doc.version < 0:
             doc = None  # never opened (relatedDocuments spillover): treat as new
@@ -633,13 +673,13 @@ class LSPClient:
             old_path, old = next(iter(self._docs.items()))
             del self._docs[old_path]
             if old.version >= 0:
-                await self._send_notification("textDocument/didClose", {"textDocument": {"uri": file_uri(old_path)}})
+                await self._send_notification("textDocument/didClose", {"textDocument": {"uri": self._uri_for_path(old_path)}})
 
     async def save_file(self, path: str) -> None:
         """Send didSave for ``path``.  Some linters re-scan only on save."""
         if self.is_running:
             await self._send_notification(
-                "textDocument/didSave", {"textDocument": {"uri": file_uri(os.path.abspath(path))}}
+                "textDocument/didSave", {"textDocument": {"uri": self._uri_for_path(self._normalize_path(path))}}
             )
 
     # ---- diagnostics: pull + wait ----
@@ -648,12 +688,12 @@ class LSPClient:
         """Send ``textDocument/diagnostic`` for one file into the pull store.  Results are tagged with the
         version captured at send time, so a didChange racing past the request makes them stale
         automatically.  Silently no-ops on errors (server may not support pull)."""
-        abs_path = os.path.abspath(path)
+        abs_path = self._normalize_path(path)
         doc = self._docs.get(abs_path)
         sent_version = doc.version if doc else -1
         try:
             result = await self._send_request_with_retry(
-                "textDocument/diagnostic", {"textDocument": {"uri": file_uri(abs_path)}},
+                "textDocument/diagnostic", {"textDocument": {"uri": self._uri_for_path(abs_path)}},
                 timeout=DIAGNOSTICS_REQUEST_TIMEOUT,
             )
         except (LSPRequestError, LSPProtocolError, asyncio.TimeoutError) as e:
@@ -665,7 +705,7 @@ class LSPClient:
         reports = [(abs_path, result, sent_version)]
         if isinstance(related, dict):
             # Related docs get the same send-anchored tagging: fresh only if unchanged since.
-            reports += [(uri_to_path(uri), sub, None) for uri, sub in related.items()]
+            reports += [(self._path_from_uri(uri), sub, None) for uri, sub in related.items()]
         for doc_path, report, tag in reports:
             items = report.get("items") if isinstance(report, dict) else None
             if isinstance(items, list):
@@ -687,7 +727,7 @@ class LSPClient:
         # both call sites are inside coroutines so a running loop is guaranteed.
         now = asyncio.get_running_loop().time
         deadline = now() + timeout
-        abs_path = os.path.abspath(path)
+        abs_path = self._normalize_path(path)
         while True:
             if not self._connection_is_open():
                 raise LSPProtocolError("server connection closed while waiting for diagnostics")
@@ -746,7 +786,7 @@ class LSPClient:
         """Merged + deduped push/pull diagnostics for one file.  With ``fresh_only=True`` a store only
         contributes once its version tag has caught up to the document's — report paths must use this
         so "stale" and "clean" aren't conflated."""
-        doc = self._docs.get(os.path.abspath(path))
+        doc = self._docs.get(self._normalize_path(path))
         if doc is None:
             return []
         push = doc.push if not fresh_only or doc.fresh_push() else []

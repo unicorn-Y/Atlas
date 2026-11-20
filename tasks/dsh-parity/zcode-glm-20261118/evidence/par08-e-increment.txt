@@ -1,0 +1,42 @@
+== increment vs main in-flight baseline (app_server) ==
+ .../core}/atlas/tools/app_server.py                | 340 +++++++++++++++++----
+ 1 file changed, 284 insertions(+), 56 deletions(-)
+
+== increment vs main in-flight baseline (SDK) ==
+ .../sdk}/python/atlas_sdk/app_server.py            | 34 ++++++++++++++++++++--
+ 1 file changed, 31 insertions(+), 3 deletions(-)
+
+== increment vs main in-flight baseline (docs) ==
+ .../zcode-par08-sdk-port/docs}/app-server-protocol.md | 19 ++++++++++++++-----
+ 1 file changed, 14 insertions(+), 5 deletions(-)
+
+== full worktree diffstat vs HEAD 060071ab (baseline + increment) ==
+ core/atlas/agent/__init__.py                       |   63 +-
+ core/atlas/agent/project_instructions.py           |  123 ++
+ core/atlas/agent/run_phases.py                     |   65 +-
+ core/atlas/agent/session_queries.py                |  144 +-
+ core/atlas/agent/tool_catalog.py                   |   13 +
+ core/atlas/agent/tool_node.py                      |  200 ++-
+ core/atlas/engine/kernel/edit.py                   |   24 +
+ core/atlas/engine/kernel/exec.py                   |   14 +
+ core/atlas/engine/kernel/inbox.py                  |  227 ++-
+ core/atlas/engine/kernel/loop.py                   |  533 ++++++-
+ core/atlas/engine/kernel/model_call.py             |  142 +-
+ core/atlas/engine/kernel/tools.py                  |   10 +
+ core/atlas/engine/session_sync.py                  |  146 +-
+ core/atlas/engine/state/atlas_state_portability.py |  179 +++
+ core/atlas/engine/state/atlas_state_repair.py      |   13 +-
+ core/atlas/models/router.py                        |  139 +-
+ core/atlas/ssh.py                                  | 1637 +++++++++++++++++++-
+ core/atlas/tools/app_server.py                     | 1199 +++++++++++++-
+ core/atlas/tools/local_execution.py                |  213 ++-
+ core/tests/fakes/fake_llm_provider.py              |   15 +
+ core/tests/test_app_server_acp.py                  |  506 +++++-
+ core/tests/test_app_server_sdk_lifecycle.py        |   64 +-
+ docs/app-server-protocol.md                        |   19 +-
+ sdk/python/atlas_sdk/app_server.py                 |  631 +++++++-
+ 24 files changed, 5941 insertions(+), 378 deletions(-)
+
+== untracked test files ==
+f61bc8a7ae9a0b54f02614c6900d0f9d2b5f0415609284c6149561c720a89e9b *.worktrees/zcode-par08-sdk-port/core/tests/test_app_server_user_question_cancel.py
+916bf3e493fd933e1e6ba820ece08756ab5d2bae0e7b588b73df0666c1d8a87b *.worktrees/zcode-par08-sdk-port/core/tests/test_app_server_sdk_subprocess_attempts.py

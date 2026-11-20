@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import tempfile
 import time
@@ -54,6 +55,7 @@ _MAX_READ_PAGE_BYTES = 1024 * 1024
 _MAX_READ_LINES = 2000
 _MAX_BATCH_READ = 20
 MAX_PROCESS_LOG_BYTES = 5 * 1024 * 1024 * 1024
+MAX_TERMINAL_LOG_BYTES = 4 * 1024 * 1024
 _LOG_TRUNCATION_MARKER = b"\n... process output truncated: disk limit reached ...\n"
 # An interpreter invoked with inline code: python -c, py -3 -c, node -e/-p, ruby -e ...
 _INLINE_CODE = re.compile(
@@ -687,6 +689,31 @@ LOCAL_TOOLS = [
     ),
 ]
 
+TERMINAL_TOOLS = [
+    _tool("terminal_open", "Open an owner-scoped PowerShell terminal in the selected local workspace.", {
+        "type": {"type": "string", "enum": ["powershell"]},
+        "cwd": {"type": "string"},
+        "name": {"type": "string", "maxLength": 80},
+    }, ["type", "cwd"]),
+    _tool("terminal_send", "Send text to an owned terminal session and wait briefly for output.", {
+        "sessionId": {"type": "string"}, "text": {"type": "string", "maxLength": 16000},
+        "submit": {"type": "boolean", "default": True},
+        "timeout": {"type": "number", "minimum": 0.1, "maximum": 10},
+    }, ["sessionId", "text"]),
+    _tool("terminal_read", "Read bounded output from an owned terminal session.", {
+        "sessionId": {"type": "string"}, "offset": {"type": "integer", "minimum": 0},
+        "count": {"type": "integer", "minimum": 1, "maximum": 65536},
+    }, ["sessionId"]),
+    _tool("terminal_signal", "Interrupt an owned terminal session with Ctrl+C.", {
+        "sessionId": {"type": "string"},
+        "signal": {"type": "string", "enum": ["interrupt"]},
+    }, ["sessionId", "signal"]),
+    _tool("terminal_close", "Close an owned terminal session and reap its process tree.", {
+        "sessionId": {"type": "string"},
+    }, ["sessionId"]),
+    _tool("terminal_list", "List terminal sessions owned by the current conversation agent.", {}, []),
+]
+
 
 class _PtyReader:
     def __init__(self, process: Any) -> None:
@@ -695,7 +722,9 @@ class _PtyReader:
     async def read(self, size: int) -> bytes:
         try:
             value = await asyncio.to_thread(self.process.read, size)
-        except EOFError:
+        except (EOFError, OSError, ValueError):
+            if self.process.isalive():
+                raise
             return b""
         return value.encode("utf-8")
 
@@ -772,6 +801,7 @@ class LocalProcess:
     output_bytes_dropped: int = 0
     output_truncated: bool = False
     log_bytes_stored: int = 0
+    max_log_bytes: int = MAX_PROCESS_LOG_BYTES
     truncation_marker_written: bool = False
     cancel_note: str = ""
     pump_tasks: list[asyncio.Task[None]] = field(default_factory=list)
@@ -780,6 +810,8 @@ class LocalProcess:
     handoff_note: str = ""
     notification_callback: Any = None
     conversation_id: str = ""
+    terminal_owner_id: str | None = None
+    terminal_session_id: str | None = None
     notification_task: asyncio.Task[None] | None = None
     notification_sequence: int = 0
     notify_on_complete: bool = False
@@ -813,6 +845,8 @@ class LocalProcess:
 
 def _process_owner_allowed(record: LocalProcess, run_id: str | None) -> bool:
     """Unowned/handoff processes are shared; a live run owns its own handles."""
+    if record.terminal_owner_id is not None:
+        return False
     owner = record.owner_run_id
     return owner is None or (run_id is not None and owner == run_id)
 
@@ -833,6 +867,7 @@ class LocalExecutionRuntime:
         self.permission_mode = get_config().local_execution_permission_mode
         self.output_callback = output_callback
         self._processes: dict[str, LocalProcess] = {}
+        self._terminal_sessions: dict[str, str] = {}
         self._closed = False
         self._session_reads: dict[tuple[str, str], dict[str, Any]] = {}
 
@@ -891,6 +926,13 @@ class LocalExecutionRuntime:
 
     def get_tools_for_llm(self) -> list[dict[str, Any]]:
         tools = copy.deepcopy(LOCAL_TOOLS)
+        if os.name == "nt":
+            try:
+                import winpty  # noqa: F401
+            except ImportError:
+                pass
+            else:
+                tools.extend(copy.deepcopy(TERMINAL_TOOLS))
         try:
             shell_name, shell_path = _shell_identity()
         except (OSError, RuntimeError, ValueError):
@@ -950,6 +992,7 @@ class LocalExecutionRuntime:
         output_callback: OutputCallback | None = None,
         event_callback: Any = None,
         cancel_event: Any = None,
+        terminal_owner_id: str | None = None,
     ) -> dict[str, Any]:
         from atlas import secrets_store
         args = dict(arguments or {})
@@ -984,7 +1027,8 @@ class LocalExecutionRuntime:
                 return await original_callback(*items, **kwargs)
             output_callback = safe_output
         result = await self._call_tool_unredacted(name, args, run_id=run_id, output_callback=output_callback,
-            event_callback=event_callback, cancel_event=cancel_event)
+            event_callback=event_callback, cancel_event=cancel_event,
+            terminal_owner_id=terminal_owner_id)
         if sandbox_request is not None and isinstance(result.get("data"), dict):
             result["data"]["sandbox_permissions"] = sandbox_request["sandbox_permissions"]
             result["data"]["sandbox_enforced"] = True
@@ -999,6 +1043,7 @@ class LocalExecutionRuntime:
         output_callback: OutputCallback | None = None,
         event_callback: Any = None,
         cancel_event: Any = None,
+        terminal_owner_id: str | None = None,
     ) -> dict[str, Any]:
         args = dict(arguments or {})
         output_callback = output_callback or self.output_callback
@@ -1009,6 +1054,16 @@ class LocalExecutionRuntime:
         if self._closed:
             return self._error("Local execution runtime is shutting down.")
         try:
+            if name.startswith("terminal_"):
+                if os.name != "nt":
+                    return self._error("Atlas local terminals require Windows PTY support.")
+                try:
+                    import winpty  # noqa: F401
+                except ImportError:
+                    return self._error("Atlas local terminals require pywinpty.")
+                return await self._terminal_operation(
+                    name, args, terminal_owner_id=terminal_owner_id,
+                )
             # Match CLI agents: use the session's declared workspace when one
             # exists, otherwise use Atlas's configured/launch working directory.
             # A desktop backend launched in the user's home is not a project
@@ -1085,6 +1140,131 @@ class LocalExecutionRuntime:
         except Exception as exc:
             log.warning("local_execution.tool_failed", tool=name, error=str(exc))
             return self._error(f"{type(exc).__name__}: {exc}")
+
+    async def _terminal_operation(
+        self, name: str, args: dict[str, Any], *, terminal_owner_id: str | None,
+    ) -> dict[str, Any]:
+        if not terminal_owner_id:
+            raise PermissionError("Terminal tools require a trusted conversation owner.")
+        if name == "terminal_list":
+            sessions = [
+                self._terminal_summary(record)
+                for record in self._processes.values()
+                if record.terminal_owner_id == terminal_owner_id
+            ]
+            return self._terminal_result({"sessions": sessions})
+        if name == "terminal_open":
+            if args.get("type") != "powershell":
+                raise ValueError("Only the PowerShell terminal type is supported on this host.")
+            raw_cwd = args.get("cwd")
+            if not isinstance(raw_cwd, str) or not raw_cwd.strip() or raw_cwd.startswith("ssh://"):
+                raise ValueError("terminal_open requires an existing local workspace directory.")
+            cwd = Path(os.path.expandvars(os.path.expanduser(raw_cwd))).resolve()
+            if not cwd.is_dir():
+                raise NotADirectoryError(f"Terminal workspace does not exist: {cwd}")
+            executable = shutil.which("pwsh.exe") or shutil.which("powershell.exe") or "powershell.exe"
+            session_id = f"pty-{uuid.uuid4().hex}"
+            spawn = asyncio.create_task(self._spawn(
+                [executable, "-NoLogo", "-NoProfile", "-NoExit"], cwd, None, None,
+                True, None, None, keep_stdin=True, pty=True,
+                max_log_bytes=MAX_TERMINAL_LOG_BYTES,
+                terminal_owner_id=terminal_owner_id,
+                terminal_session_id=session_id,
+            ))
+            try:
+                record = await asyncio.shield(spawn)
+            except asyncio.CancelledError:
+                try:
+                    record = await asyncio.wait_for(asyncio.shield(spawn), timeout=5)
+                except TimeoutError:
+                    def reap_late(task: asyncio.Task[LocalProcess]) -> None:
+                        if task.cancelled():
+                            return
+                        try:
+                            late_record = task.result()
+                        except Exception:
+                            return
+                        asyncio.create_task(self._cancel_process(late_record))
+                    spawn.add_done_callback(reap_late)
+                    raise
+                await self._cancel_process(record)
+                raise
+            self._terminal_sessions[session_id] = record.execution_id
+            return self._terminal_result(self._terminal_summary(record))
+
+        session_id = str(args.get("sessionId") or "")
+        execution_id = self._terminal_sessions.get(session_id)
+        record = self._processes.get(execution_id or "")
+        if record is None or record.terminal_session_id != session_id:
+            raise ValueError("Unknown terminal session.")
+        if record.terminal_owner_id != terminal_owner_id:
+            raise PermissionError("This terminal session belongs to a different agent.")
+        if name == "terminal_read":
+            offset = max(0, int(args.get("offset", 0)))
+            count = max(1, min(int(args.get("count", 65536)), 65536))
+            output = self._read_log(record, "stdout", offset, count)
+            return self._terminal_result({
+                "sessionId": session_id, "state": record.state,
+                "offset": offset, "nextOffset": output["next_offset"],
+                "text": output["text"], "truncated": record.output_truncated,
+            })
+        if name == "terminal_send":
+            if record.state != "running":
+                raise ValueError("Terminal session has exited.")
+            text = args.get("text")
+            if not isinstance(text, str) or len(text) > 16000:
+                raise ValueError("terminal_send text must be at most 16000 characters.")
+            before = record.stdout_size
+            action = "submit_stdin" if args.get("submit", True) else "write_stdin"
+            await self._write_process_stdin(record, action, text)
+            try:
+                timeout = float(args.get("timeout", 4))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("terminal_send timeout must be between 0.1 and 10 seconds.") from exc
+            if not 0.1 <= timeout <= 10:
+                raise ValueError("terminal_send timeout must be between 0.1 and 10 seconds.")
+            deadline = time.monotonic() + timeout
+            while record.stdout_size <= before and record.state == "running":
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                await asyncio.sleep(min(0.05, remaining))
+            output = self._read_log(record, "stdout", before, 65536)
+            return self._terminal_result({
+                "sessionId": session_id, "state": record.state,
+                "offset": before, "nextOffset": output["next_offset"],
+                "text": output["text"], "waitReason": (
+                    "output" if output["next_offset"] > before else
+                    "session_exit" if record.state != "running" else "timeout"
+                ),
+            })
+        if name == "terminal_signal":
+            if args.get("signal") != "interrupt":
+                raise ValueError("Only the interrupt signal is supported.")
+            if record.state == "running":
+                record.process.send_signal(signal.CTRL_BREAK_EVENT)
+            return self._terminal_result({"sessionId": session_id, "state": record.state})
+        if name == "terminal_close":
+            await self._cancel_process(record)
+            return self._terminal_result({
+                "sessionId": session_id, "state": record.state,
+                "closed": record.state != "running",
+            })
+        raise ValueError(f"Unknown terminal tool: {name}")
+
+    @staticmethod
+    def _terminal_summary(record: LocalProcess) -> dict[str, Any]:
+        return {
+            "sessionId": record.terminal_session_id,
+            "name": "PowerShell",
+            "cwd": record.cwd,
+            "state": record.state,
+            "startedAt": record.started_at,
+        }
+
+    @staticmethod
+    def _terminal_result(data: dict[str, Any]) -> dict[str, Any]:
+        return {"data": data, "content": [{"type": "text", "text": str(data)}], "is_error": False}
 
     @staticmethod
     def _validate_execution_args(name: str, args: dict[str, Any]) -> None:
@@ -1769,6 +1949,9 @@ class LocalExecutionRuntime:
         keep_stdin: bool = False,
         pty: bool = False,
         clear_env_prefixes: tuple[str, ...] = (),
+        max_log_bytes: int = MAX_PROCESS_LOG_BYTES,
+        terminal_owner_id: str | None = None,
+        terminal_session_id: str | None = None,
     ) -> LocalProcess:
         # Resolve the effective directory once, immediately before process
         # creation. This makes relative paths, environment variables, and `~`
@@ -1827,6 +2010,9 @@ class LocalExecutionRuntime:
             owner_run_id=run_id,
             detached=detached,
             pty=pty,
+            max_log_bytes=max(0, int(max_log_bytes)),
+            terminal_owner_id=terminal_owner_id,
+            terminal_session_id=terminal_session_id,
             last_output_monotonic=time.monotonic(),
             stdout_path=stdout_path,
             stderr_path=stderr_path,
@@ -1879,7 +2065,7 @@ class LocalExecutionRuntime:
             record.output_bytes_total += len(chunk)
             text = redactor.feed(decoder.decode(chunk))
             safe_chunk = text.encode("utf-8")
-            remaining = max(0, MAX_PROCESS_LOG_BYTES - record.log_bytes_stored)
+            remaining = max(0, record.max_log_bytes - record.log_bytes_stored)
             stored = safe_chunk[:remaining]
             dropped = len(safe_chunk) - len(stored)
             if stored:
@@ -1893,7 +2079,7 @@ class LocalExecutionRuntime:
             if dropped:
                 record.output_bytes_dropped += dropped
                 record.output_truncated = True
-                marker_room = MAX_PROCESS_LOG_BYTES - record.log_bytes_stored
+                marker_room = record.max_log_bytes - record.log_bytes_stored
                 if not record.truncation_marker_written and marker_room:
                     marker = _LOG_TRUNCATION_MARKER[:marker_room]
                     with path.open("ab") as stream:
@@ -1923,7 +2109,7 @@ class LocalExecutionRuntime:
         remainder = redactor.feed(decoder.decode(b"", final=True), final=True)
         if remainder:
             safe_remainder = remainder.encode("utf-8")
-            remaining = max(0, MAX_PROCESS_LOG_BYTES - record.log_bytes_stored)
+            remaining = max(0, record.max_log_bytes - record.log_bytes_stored)
             stored = safe_remainder[:remaining]
             if stored:
                 with path.open("ab") as stream: stream.write(stored)
@@ -1943,10 +2129,23 @@ class LocalExecutionRuntime:
     async def _watch(self, record: LocalProcess) -> None:
         try:
             record.exit_code = await record.process.wait()
-            await asyncio.gather(*record.pump_tasks)
             native_pty = getattr(record.process, "_pty", None)
             if native_pty is not None:
+                await asyncio.wait(record.pump_tasks, timeout=0.5)
+                for socket_name in ("fileobj", "_server"):
+                    pty_socket = getattr(native_pty, socket_name, None)
+                    if pty_socket is None:
+                        continue
+                    try:
+                        pty_socket.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+                    try:
+                        pty_socket.close()
+                    except OSError:
+                        pass
                 await asyncio.to_thread(native_pty.close)
+            await asyncio.gather(*record.pump_tasks)
             if record.cancelled:
                 record.state = "cancelled"
             elif record.exit_code == 0:
@@ -2091,6 +2290,8 @@ class LocalExecutionRuntime:
                 "processes": [
                     item.summary() for item in self._processes.values()
                     if item.state == "running" and (
+                        item.terminal_owner_id is None
+                    ) and (
                         item.owner_run_id is None or item.owner_run_id == run_id
                     )
                 ]

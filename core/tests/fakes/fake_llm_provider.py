@@ -92,6 +92,7 @@ class DropMidStream:
 
     text: str = "partial answer that never finishes"
     after_chars: int = 12
+    partial_tool_calls: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -102,6 +103,7 @@ class StallMidStream:
     text: str = "partial answer that stalls"
     after_chars: int = 8
     seconds: float = 3600.0
+    text_chunk_sent: threading.Event | None = None
 
 
 @dataclass
@@ -389,6 +391,8 @@ def _handler_for(server: FakeLLMServer) -> type[BaseHTTPRequestHandler]:
                 self._start_sse()
                 self._sse(_chunk({"role": "assistant", "content": ""}))
                 self._sse(_chunk({"content": resp.text[: resp.after_chars]}))
+                if resp.text_chunk_sent is not None:
+                    resp.text_chunk_sent.set()
                 server._stop.wait(resp.seconds)
                 self.close_connection = True
                 return
@@ -396,6 +400,17 @@ def _handler_for(server: FakeLLMServer) -> type[BaseHTTPRequestHandler]:
                 self._start_sse()
                 self._sse(_chunk({"role": "assistant", "content": ""}))
                 self._sse(_chunk({"content": resp.text[: resp.after_chars]}))
+                for index, call in enumerate(resp.partial_tool_calls):
+                    self._sse(_chunk({"tool_calls": [{
+                        "index": index,
+                        "id": str(call.get("id") or f"partial-{index}"),
+                        "type": "function",
+                        "function": {"name": str(call.get("name") or ""), "arguments": ""},
+                    }]}))
+                    self._sse(_chunk({"tool_calls": [{
+                        "index": index,
+                        "function": {"arguments": str(call.get("arguments") or "")},
+                    }]}))
                 self.wfile.flush()
                 self.close_connection = True
                 return

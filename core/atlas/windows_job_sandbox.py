@@ -29,6 +29,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from atlas.safety.sandbox_policy import SANDBOX_MODES, is_execution_world_path
+
 __all__ = [
     "JobSandboxUnavailable",
     "JobSandboxResult",
@@ -39,7 +41,7 @@ __all__ = [
 
 #: The closed set of per-call modes. `custom` exists so a mismatched
 #: (sandbox, approval) pair is representable instead of silently coerced.
-MODES = ("read-only", "workspace-write", "danger-full-access")
+MODES = SANDBOX_MODES
 
 #: Wall-clock ceiling for a sandboxed command; a runaway child must not outlive
 #: the tool call that started it.
@@ -136,6 +138,13 @@ async def run_in_job(
     """
     if mode not in MODES:
         raise ValueError(f"unknown sandbox mode: {mode!r}")
+    if cwd is not None:
+        cwd_path = os.fspath(cwd)
+        if not is_execution_world_path(cwd_path):
+            raise ValueError(
+                "sandbox cwd must be an absolute execution-world path "
+                "without NUL bytes"
+            )
 
     started = time.monotonic()
 

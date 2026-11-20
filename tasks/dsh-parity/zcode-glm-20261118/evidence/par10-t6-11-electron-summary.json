@@ -1,0 +1,200 @@
+{
+  "result": "PASS",
+  "electron": "44.7.0",
+  "chrome": "152.0.7977.130",
+  "url": "http://127.0.0.1:62855/",
+  "userData": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-run\\userdata",
+  "openedByRealInput": true,
+  "steps": [
+    {
+      "stage": "00-initial",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-00-initial.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-00-initial.png"
+    },
+    {
+      "stage": "01-real-key-open",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-01-real-key-open.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-01-real-key-open.png"
+    },
+    {
+      "stage": "02-overlay-blocks-app-shortcut",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-02-overlay-blocks-app-shortcut.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-02-overlay-blocks-app-shortcut.png"
+    },
+    {
+      "stage": "03-toggle-close",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-03-toggle-close.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-03-toggle-close.png"
+    },
+    {
+      "stage": "04-settings-open",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-04-settings-open.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-04-settings-open.png"
+    },
+    {
+      "stage": "05-embedded-open",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-05-embedded-open.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-05-embedded-open.png"
+    },
+    {
+      "stage": "06-search-diff",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-06-search-diff.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-06-search-diff.png"
+    },
+    {
+      "stage": "07-overlay-recorded",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-07-overlay-recorded.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-07-overlay-recorded.png"
+    },
+    {
+      "stage": "08-reference-closed",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-08-reference-closed.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-08-reference-closed.png"
+    },
+    {
+      "stage": "09-recording-suppressed",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-09-recording-suppressed.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-09-recording-suppressed.png"
+    },
+    {
+      "stage": "10-settings-closed",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-10-settings-closed.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-10-settings-closed.png"
+    },
+    {
+      "stage": "11-blocked-modal",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-11-blocked-modal.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-11-blocked-modal.png"
+    },
+    {
+      "stage": "12-overlay-blocks-settings-key",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-12-overlay-blocks-settings-key.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-12-overlay-blocks-settings-key.png"
+    },
+    {
+      "stage": "13-final-tasks-closed",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-13-final-tasks-closed.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-13-final-tasks-closed.png"
+    },
+    {
+      "stage": "14-anchor-disconnect",
+      "path": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-14-anchor-disconnect.json",
+      "screenshot": "D:\\Atlas\\.worktrees\\zcode-par10-shortcut-reference\\.tmp\\par10-t6-11\\electron-evidence\\par10-t6-11-electron-14-anchor-disconnect.png"
+    }
+  ],
+  "finalServer": {
+    "bindings": {
+      "palette": [
+        "Ctrl+Alt+U"
+      ],
+      "newTask": [
+        "Ctrl+N"
+      ],
+      "temporaryChat": [
+        "Ctrl+Shift+Y"
+      ],
+      "settings": [
+        "Ctrl+,"
+      ],
+      "nextTab": [
+        "Ctrl+Tab"
+      ],
+      "prevTab": [
+        "Ctrl+Shift+Tab"
+      ],
+      "closeTab": [
+        "Ctrl+W"
+      ],
+      "closeWindow": [
+        "Ctrl+Shift+W"
+      ],
+      "tab1": [
+        "Ctrl+1"
+      ],
+      "tab2": [
+        "Ctrl+2"
+      ],
+      "tab3": [
+        "Ctrl+3"
+      ],
+      "tab4": [
+        "Ctrl+4"
+      ],
+      "tab5": [
+        "Ctrl+5"
+      ],
+      "tab6": [
+        "Ctrl+6"
+      ],
+      "tab7": [
+        "Ctrl+7"
+      ],
+      "tab8": [
+        "Ctrl+8"
+      ],
+      "tab9": [
+        "Ctrl+9"
+      ],
+      "toggleSidebar": [
+        "Ctrl+B"
+      ],
+      "toggleInspector": [
+        "Ctrl+."
+      ],
+      "focusComposer": [
+        "Ctrl+L"
+      ],
+      "toggleFocus": [
+        "Ctrl+Shift+O"
+      ],
+      "stopRun": [
+        "Ctrl+Shift+Backspace"
+      ],
+      "sendNow": [
+        "Ctrl+Enter"
+      ],
+      "stashInput": [
+        "Ctrl+Shift+S"
+      ],
+      "sidebarSearch": [
+        "Ctrl+Shift+F"
+      ],
+      "sidebarProjectPicker": [
+        "Ctrl+Alt+P"
+      ],
+      "sidebarNextGroup": [
+        "Ctrl+Alt+J"
+      ],
+      "sidebarPreviousGroup": [
+        "Ctrl+Alt+K"
+      ],
+      "focusNextPane": [
+        "Ctrl+Alt+ArrowRight"
+      ],
+      "focusPreviousPane": [
+        "Ctrl+Alt+ArrowLeft"
+      ],
+      "openSideChat": [
+        "Ctrl+;"
+      ],
+      "openDiff": [
+        "Ctrl+Alt+D"
+      ],
+      "diffPreviousHunk": [
+        "Ctrl+Alt+ArrowUp"
+      ],
+      "diffNextHunk": [
+        "Ctrl+Alt+ArrowDown"
+      ],
+      "diffCollapseHunks": [
+        "Ctrl+Alt+["
+      ],
+      "diffExpandHunks": [
+        "Ctrl+Alt+]"
+      ]
+    },
+    "updated_at": 1795047414406009900,
+    "revision": "b0124b826c92ace623ae221c125f6abbd3d332078c1a9a8cf497a44b8e9b3feb"
+  },
+  "problems": []
+}

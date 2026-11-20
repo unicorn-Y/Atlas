@@ -20,6 +20,7 @@ export default function RunSetupMenu({ conversation, workspace, onChange, onPick
   const remote = workspace.startsWith('ssh://');
   const executor = conversation.executor || 'atlas';
   const container = conversation.sandbox?.type === 'docker' ? conversation.sandbox : null;
+  const remoteSandbox = conversation.sandbox?.type === 'ssh-bwrap' ? conversation.sandbox : null;
   const allowed = conversation.allowed_paths ?? [];
   const restricted = allowed.length > 0;
   const fullAccess = (conversation.permission_mode ?? 'full_access') === 'full_access';
@@ -39,14 +40,14 @@ export default function RunSetupMenu({ conversation, workspace, onChange, onPick
     if (picked && !allowed.includes(picked)) onChange({ allowed_paths: [...(allowed.length ? allowed : [workspace]), picked] });
   };
 
-  const label = [executor !== 'atlas' ? agentName : '', container ? '容器' : '', extraRoots.length ? `+${extraRoots.length} 目录` : '', restricted ? '限目录' : ''].filter(Boolean).join(' · ');
+  const label = [executor !== 'atlas' ? agentName : '', container ? '容器' : remoteSandbox ? 'SSH 隔离' : '', extraRoots.length ? `+${extraRoots.length} 目录` : '', restricted ? '限目录' : ''].filter(Boolean).join(' · ');
   const agentBlocked = remote ? '远程目录暂不支持外部 Agent' : !fullAccess ? '外部 Agent 的操作不经过 Atlas 确认，只能在「完全访问」下用' : '';
   const dockerBlocked = remote ? '远程目录不能用容器' : executor !== 'atlas' ? '容器只支持 Atlas 自己执行' : sandbox && !sandbox.docker.available ? sandbox.docker.detail : '';
 
   return <Menu onOpenChange={(open) => { if (open) load(); }}>
     <Tip label="运行方式：谁来做、命令在哪跑、能碰哪些目录"><MenuTrigger asChild>
       <button type="button" aria-label="运行方式" className={cn('inline-flex h-8 items-center gap-1.5 rounded-[9px] px-2 text-[12.5px] hover:bg-hover', label ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
-        {container ? <Box size={15} /> : executor !== 'atlas' ? <Bot size={15} /> : restricted ? <FolderLock size={15} /> : <Laptop size={15} />}{label && <span className="max-w-[140px] truncate">{label}</span>}
+        {container || remoteSandbox ? <Box size={15} /> : executor !== 'atlas' ? <Bot size={15} /> : restricted ? <FolderLock size={15} /> : <Laptop size={15} />}{label && <span className="max-w-[140px] truncate">{label}</span>}
       </button>
     </MenuTrigger></Tip>
     <MenuContent side="top" className="max-h-[min(560px,80vh)] w-[340px]">
@@ -64,12 +65,18 @@ export default function RunSetupMenu({ conversation, workspace, onChange, onPick
       </p>}
       <MenuSeparator />
       <MenuLabel>命令在哪里跑</MenuLabel>
-      <MenuItem checked={!container} onSelect={() => onChange({ sandbox: null })}><Option title="这台电脑" hint="直接在工作目录里运行（默认）" /></MenuItem>
-      <MenuItem checked={Boolean(container)} disabled={Boolean(dockerBlocked) || !sandbox} onSelect={() => onChange({ sandbox: { type: 'docker', network: false } })}>
+      <MenuItem checked={!container && !remoteSandbox} onSelect={() => onChange({ sandbox: null })}><Option title={remote ? 'SSH 目标（无命令隔离）' : '这台电脑'} hint="直接在工作目录里运行（默认）" /></MenuItem>
+      {!remote && <MenuItem checked={Boolean(container)} disabled={Boolean(dockerBlocked) || !sandbox} onSelect={() => onChange({ sandbox: { type: 'docker', network: false } })}>
         <Option title="Docker 容器" hint={dockerBlocked || (sandbox ? `工作目录挂进容器，命令的副作用关在里面；默认不联网 · Docker ${sandbox.docker.version ?? ''}` : '正在检查 Docker…')} />
-      </MenuItem>
+      </MenuItem>}
       {container && <MenuItem checked={Boolean(container.network)} onSelect={(event) => { event.preventDefault(); onChange({ sandbox: { ...container, network: !container.network } }); }}>
         <Globe /><Option title="容器可以联网" hint="装依赖、拉代码时需要" />
+      </MenuItem>}
+      {remote && executor === 'atlas' && <MenuItem checked={Boolean(remoteSandbox)} onSelect={() => onChange({ sandbox: remoteSandbox ? null : { type: 'ssh-bwrap', network: false } })}>
+        <Option title="Linux bubblewrap（SSH）" hint="仅 Linux 且目标安装 bwrap 时可用；默认断网，工作区内写入；不支持时拒绝运行" />
+      </MenuItem>}
+      {remoteSandbox && <MenuItem checked={Boolean(remoteSandbox.network)} onSelect={(event) => { event.preventDefault(); onChange({ sandbox: { ...remoteSandbox, network: !remoteSandbox.network } }); }}>
+        <Globe /><Option title="隔离命令允许联网" hint="保留目标网络命名空间；需联网安装依赖时开启" />
       </MenuItem>}
       <MenuSeparator />
       <MenuLabel>附加目录（同时处理几个文件夹）</MenuLabel>

@@ -1,0 +1,49 @@
+PAR-10-T6-5 isolated install of existing 0.1.0 (upgrade baseline)
+2026-11-18T22:59:15Z
+installer=D:\Atlas\frontend\windows-release\Atlas-0.1.0-Setup.exe
+args=/S /no-desktop-shortcut /D=D:\Atlas\.worktrees\zcode-par10-win-release-repro\.par10-t6-5-sandbox\install-0.1.0-upgrade
+TMP/TEMP redirected to D: sandbox
+-----
+INSTALLER_EXIT=0
+-----
+install dir:
+total 327114
+drwxr-xr-x 1 25011 197609         0 Nov 19 07:02 .
+drwxr-xr-x 1 25011 197609         0 Nov 19 06:59 ..
+-rwxr-xr-x 1 25011 197609 246093824 Oct  6 02:41 Atlas.exe
+-rw-r--r-- 1 25011 197609      1096 Oct  6 02:41 LICENSE.electron.txt
+-rw-r--r-- 1 25011 197609  20472830 Oct  6 02:41 LICENSES.chromium.html
+-rwxr-xr-x 1 25011 197609    254746 Oct  6 02:42 Uninstall Atlas.exe
+-rw-r--r-- 1 25011 197609    719654 Oct  6 02:41 chrome_100_percent.pak
+-rw-r--r-- 1 25011 197609   1269017 Oct  6 02:41 chrome_200_percent.pak
+-rwxr-xr-x 1 25011 197609   4741488 Oct  6 02:41 d3dcompiler_47.dll
+-rwxr-xr-x 1 25011 197609  25745408 Oct  6 02:41 dxcompiler.dll
+-rwxr-xr-x 1 25011 197609   1509760 Oct  6 02:41 dxil.dll
+-rwxr-xr-x 1 25011 197609   3113472 Oct  6 02:41 ffmpeg.dll
+-rw-r--r-- 1 25011 197609  10876560 Oct  6 02:41 icudtl.dat
+drwxr-xr-x 1 25011 197609         0 Nov 19 06:59 locales
+drwxr-xr-x 1 25011 197609         0 Nov 19 06:59 resources
+-rw-r--r-- 1 25011 197609  12435875 Oct  6 02:41 resources.pak
+-rw-r--r-- 1 25011 197609    368768 Oct  6 02:41 snapshot_blob.bin
+-rw-r--r-- 1 25011 197609     97316 Oct  6 02:03 uninstallerIcon.ico
+-rw-r--r-- 1 25011 197609    742200 Oct  6 02:41 v8_context_snapshot.bin
+
+version marker: 44.4.5
+manifest present? NO
+backend exe: 86839849
+
+registry after install:
+
+
+DisplayName     : Atlas 0.1.0
+DisplayVersion  : 0.1.0
+InstallLocation : 
+PSChildName     : dd62424e-5550-5390-963e-ac6097f725e5
+
+
+
+
+shortcuts after install:
+/c/Users/25011/Desktop/Atlas.lnk: -rwxr-xr-x 1 25011 197609 1119 Oct 11 01:19 /c/Users/25011/Desktop/Atlas.lnk
+/c/Users/25011/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Atlas.lnk: -rwxr-xr-x 1 25011 197609 1641 Nov 19 07:02 /c/Users/25011/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Atlas.lnk
+/c/Users/25011/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Atlas/Atlas.lnk: ABSENT

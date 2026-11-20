@@ -509,9 +509,22 @@ async def _publish(
 ) -> None:
     if callback is None:
         return
-    published = callback(event)
-    if asyncio.iscoroutine(published):
-        await published
+    await _invoke_consumer_callback(callback, event)
+
+
+async def _invoke_consumer_callback(callback: Callable[..., Any], *args: Any) -> None:
+    try:
+        published = callback(*args)
+        if asyncio.iscoroutine(published):
+            await published
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        raise ModelCallError(
+            "Model stream consumer callback failed",
+            category="consumer_callback",
+            retryable=False,
+        ) from exc
 
 
 def _choice_auxiliary_delta(chunk: Any) -> tuple[str, str]:
@@ -766,9 +779,6 @@ async def complete_stream(
             overloaded_retry_base_delay_s,
         )
     )
-    combined_text = ""
-    combined_reasoning = ""
-    combined_refusal = ""
     try:
         request_messages = normalize_tool_results(messages)
     except ValueError as exc:
@@ -793,10 +803,12 @@ async def complete_stream(
     fast_downgrade_notified = False
 
     for candidate_index, candidate in enumerate(candidates):
+        if last_error is not None and last_error.category == "consumer_callback":
+            break
         if candidate_index and is_cooling(candidate):
             continue
         if candidate_index and last_error is not None and on_attempt is not None:
-            published = on_attempt({
+            await _invoke_consumer_callback(on_attempt, {
                 "ok": False, "fallback": True,
                 "from_model": candidates[candidate_index - 1],
                 "model": candidate,
@@ -804,8 +816,6 @@ async def complete_stream(
                 "status": last_error.status,
                 "detail": str(last_error),
             })
-            if asyncio.iscoroutine(published):
-                await published
         try:
             route = await router.resolve(candidate, "conversation")
         except Exception as exc:
@@ -847,10 +857,21 @@ async def complete_stream(
                     "本次任务的 Token 或费用预算已达上限；下一次模型请求未发送。调整运行上限后可以继续。",
                     category="budget",
                 )
+            await _publish(on_event, {
+                "type": "attempt_started", "attempt": total_attempts,
+                "attempt_id": request_id,
+                "model": route.model_id or candidate, "provider": route.provider,
+            })
             stream = None
             attempt_text = ""
             attempt_reasoning = ""
             attempt_refusal = ""
+            # Keep overlap handling within this transport attempt. A partial
+            # answer from a failed stream is audit-only and must never prefix
+            # the next retry/fallback result.
+            combined_text = ""
+            combined_reasoning = ""
+            combined_refusal = ""
             attempt_tools: dict[int, _ToolDelta] = {}
             attempt_usage: dict[str, Any] = {}
             attempt_reasoning_details: list[dict[str, Any]] = []
@@ -908,7 +929,9 @@ async def complete_stream(
                 except Exception:
                     logging.getLogger(__name__).debug("model request trace write failed", exc_info=True)
                 stream = await asyncio.to_thread(
-                    router.stream, route, wire_messages, **kwargs,
+                    router.stream, route, wire_messages,
+                    _atlas_allow_transport_retries=usage_budget is None,
+                    **kwargs,
                 )
                 if hasattr(stream, "choices"):
                     chunks = iter((stream,))
@@ -928,7 +951,8 @@ async def complete_stream(
                         waiters, timeout=limit, return_when=asyncio.FIRST_COMPLETED,
                     )
                     if cancel_task is not None and cancel_task in done and cancel_event.is_set():
-                        close = getattr(stream, "close", None)
+                        abort = getattr(stream, "abort", None)
+                        close = abort if callable(abort) else getattr(stream, "close", None)
                         if callable(close):
                             await asyncio.to_thread(close)
                         next_task.cancel()
@@ -975,11 +999,10 @@ async def complete_stream(
                             delta = merged[len(combined_text):]
                             combined_text = merged
                             if on_text is not None:
-                                published = on_text(delta)
-                                if asyncio.iscoroutine(published):
-                                    await published
+                                await _invoke_consumer_callback(on_text, delta)
                             await _publish(on_event, {
                                 "type": "text_delta", "delta": delta, "attempt": total_attempts,
+                                "attempt_id": request_id,
                             })
                     if reasoning_delta:
                         attempt_reasoning += reasoning_delta
@@ -989,6 +1012,7 @@ async def complete_stream(
                             combined_reasoning = merged
                             await _publish(on_event, {
                                 "type": "reasoning_delta", "delta": delta, "attempt": total_attempts,
+                                "attempt_id": request_id,
                             })
                     if refusal_delta:
                         attempt_refusal += refusal_delta
@@ -998,6 +1022,7 @@ async def complete_stream(
                             combined_refusal = merged
                             await _publish(on_event, {
                                 "type": "refusal_delta", "delta": delta, "attempt": total_attempts,
+                                "attempt_id": request_id,
                             })
                     if isinstance(tool_deltas, list):
                         for delta in tool_deltas:
@@ -1027,6 +1052,7 @@ async def complete_stream(
                             if call_id or name or arguments:
                                 await _publish(on_event, {
                                     "type": "tool_call_delta", "attempt": total_attempts,
+                                    "attempt_id": request_id,
                                     "index": index,
                                     **({"id": call_id} if call_id else {}),
                                     **({"name": name} if name else {}),
@@ -1041,6 +1067,11 @@ async def complete_stream(
                     raise ModelCallError(
                         "Model stream ended before a completion marker",
                         category="connection", retryable=True,
+                    )
+                if not combined_text.strip() and not attempt_tools and not combined_refusal.strip():
+                    raise ModelCallError(
+                        "Model completed without assistant text, refusal, or tool call",
+                        category="empty_response", retryable=True,
                     )
                 record_success(route.model_id or candidate)
                 last_usage = attempt_usage or last_usage
@@ -1110,9 +1141,12 @@ async def complete_stream(
                              "first_token_ms": first_token_ms,
                              "reasoning_chars": len(attempt_reasoning),
                              "usage": result_usage}
-                    published = on_attempt(event)
-                    if asyncio.iscoroutine(published):
-                        await published
+                    await _invoke_consumer_callback(on_attempt, event)
+                await _publish(on_event, {
+                    "type": "attempt_committed", "attempt": total_attempts,
+                    "attempt_id": request_id,
+                    "model": route.model_id or candidate,
+                })
                 return result
             except asyncio.CancelledError:
                 try:
@@ -1122,8 +1156,33 @@ async def complete_stream(
                     logging.getLogger(__name__).debug("model request trace update failed", exc_info=True)
                 if usage_budget is not None:
                     usage_budget.release(request_id)
+                await _publish(on_event, {
+                    "type": "attempt_discarded", "attempt": total_attempts,
+                    "attempt_id": request_id, "category": "cancelled", "retry": False,
+                    "retry_denied_reason": "cancelled", "partial_text": attempt_text,
+                })
                 raise
             except BaseException as exc:
+                if cancel_event is not None and cancel_event.is_set():
+                    try:
+                        from atlas.diagnostic_store import finish_model_request
+                        finish_model_request(
+                            request_id,
+                            duration_ms=int((time.monotonic() - attempt_started) * 1000),
+                            status="cancelled",
+                        )
+                    except Exception:
+                        logging.getLogger(__name__).debug(
+                            "model request trace update failed", exc_info=True,
+                        )
+                    if usage_budget is not None:
+                        usage_budget.release(request_id)
+                    await _publish(on_event, {
+                        "type": "attempt_discarded", "attempt": total_attempts,
+                        "attempt_id": request_id, "category": "cancelled", "retry": False,
+                        "retry_denied_reason": "cancelled", "partial_text": attempt_text,
+                    })
+                    raise asyncio.CancelledError from None
                 if usage_budget is not None:
                     usage_budget.record({
                         "request_id": request_id, "purpose": "conversation",
@@ -1151,6 +1210,14 @@ async def complete_stream(
                         "requested": "priority", "used": "default",
                     })
                     continue
+                stream_options_compat_retry = bool(
+                    kwargs.get("stream_options") and error.status in {400, 422}
+                    and "stream_options" in unsupported_tier_text
+                    and any(marker in unsupported_tier_text for marker in (
+                        "unexpected extra field", "unknown field", "not supported",
+                        "unsupported field",
+                    ))
+                )
                 last_error = error
                 host = urlsplit(str(route.base_url or "")).hostname or ""
                 error.service = host or route.provider
@@ -1201,7 +1268,7 @@ async def complete_stream(
                 persistent_retry = (unattended_retry and error.retryable and not is_529
                                     and error.category != "upstream_rejection")
                 upstream_retry = error.category == "upstream_rejection" and retry_index == 0
-                will_retry = upstream_retry or auth_rotation or connection_retry or watchdog_capacity_retry or retry_529 or persistent_retry or bool(
+                will_retry = stream_options_compat_retry or upstream_retry or auth_rotation or connection_retry or watchdog_capacity_retry or retry_529 or persistent_retry or bool(
                     error.retryable and retry_index < max_retries and not is_529
                 )
                 if server_retry_override and not server_no_retry and not is_529:
@@ -1212,7 +1279,11 @@ async def complete_stream(
                     # Exactly one immediate retry on this same route, then let
                     # the outer candidate loop advance to the configured fallback.
                     will_retry = upstream_retry
+                retry_policy_candidate = will_retry
+                retry_denied_reason = None
                 if task_retry_count >= retry_budget_attempts:
+                    if retry_policy_candidate:
+                        retry_denied_reason = "attempt_budget_exhausted"
                     will_retry = False
                 if watchdog_capacity_retry and retry_watchdog_max_wait_s is not None:
                     remaining_wait = retry_watchdog_max_wait_s - watchdog_capacity_wait_s
@@ -1236,9 +1307,16 @@ async def complete_stream(
                     remaining_task_wait = retry_budget_wait_s - task_retry_wait_s
                     if remaining_task_wait <= 0:
                         will_retry = False
+                        retry_denied_reason = "wait_budget_exhausted"
                     else:
                         delay = min(delay if delay is not None else 0.0, remaining_task_wait)
+                if not will_retry and retry_denied_reason is None:
+                    retry_denied_reason = "retry_policy_denied"
+                attempts_used_after_decision = task_retry_count + int(will_retry)
+                reserved_wait = (delay or 0.0) if will_retry else 0.0
+                wait_used_after_decision = task_retry_wait_s + reserved_wait
                 retry_kind = (
+                    "stream_options_compat" if stream_options_compat_retry and will_retry else
                     "upstream_rejection" if upstream_retry and will_retry else
                     "auth_rotation" if auth_rotation else
                     "persistent" if persistent_retry and not retry_529 and not connection_retry else
@@ -1253,6 +1331,26 @@ async def complete_stream(
                     overloaded_retry_count + 1 if status == 529 or error.category == "overloaded" else
                     retry_index + 1
                 )
+                await _publish(on_event, {
+                    "type": "attempt_discarded", "attempt": total_attempts,
+                    "attempt_id": request_id,
+                    "category": error.category, "retry": will_retry,
+                    "retry_kind": retry_kind,
+                    "retry_number": retry_number if will_retry else None,
+                    "retry_delay_s": delay if will_retry else None,
+                    "retry_denied_reason": retry_denied_reason,
+                    "retry_budget_attempt_limit": retry_budget_attempts,
+                    "retry_budget_attempts_used_after_decision": attempts_used_after_decision,
+                    "retry_budget_attempts_remaining": max(
+                        0, retry_budget_attempts - attempts_used_after_decision,
+                    ),
+                    "retry_budget_wait_s_limit": retry_budget_wait_s,
+                    "retry_budget_wait_s_used_after_decision": wait_used_after_decision,
+                    "retry_budget_wait_s_remaining": max(
+                        0.0, retry_budget_wait_s - wait_used_after_decision,
+                    ),
+                    "partial_text": attempt_text,
+                })
                 if on_attempt is not None:
                     event = {"ok": False, "attempt": total_attempts,
                              "model": route.model_id or candidate,
@@ -1264,11 +1362,11 @@ async def complete_stream(
                              "retry_number": retry_number if will_retry else None,
                              "retry_delay_s": delay,
                              "retry_after_s": retry_after}
-                    published = on_attempt(event)
-                    if asyncio.iscoroutine(published):
-                        await published
+                    await _invoke_consumer_callback(on_attempt, event)
                 if not will_retry:
                     break
+                if stream_options_compat_retry:
+                    kwargs.pop("stream_options", None)
                 if error.category == "content_filter" and not content_filter_guidance_added:
                     # Expert mode hands back "reissue it and continue"; the stock
                     # Atlas path keeps its original wording.
@@ -1314,6 +1412,8 @@ async def complete_stream(
                         except Exception:
                             pass
         if last_error and last_error.status not in {429, 529} and candidate_index + 1 >= len(candidates):
+            break
+        if last_error and last_error.category == "consumer_callback":
             break
 
     if last_error is not None:

@@ -1,0 +1,10 @@
+PAR-10-T2 development-mode launch (app.isPackaged=false, no manifest in tree) 2026-11-18T21:48:21Z
+command: electron.exe . from frontend worktree; ATLAS_BACKEND_EXECUTABLE=cmd.exe to avoid spawning Python; ATLAS_PORT=18768
+precheck: no frontend/release-manifest.json and no frontend/resources/atlas/release-manifest.json
+
+PID=59936
+ALIVE_AFTER_10s=True
+MAIN_WINDOW_TITLE=ÐÂÈÎÎñ ¡ª Atlas
+CHILDREN=electron.exe,electron.exe,electron.exe
+GRACEFUL_EXIT=false
+EXIT_CODE=-1

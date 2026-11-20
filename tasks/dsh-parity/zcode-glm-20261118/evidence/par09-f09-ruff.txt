@@ -1,0 +1,6 @@
+$ python -m ruff check atlas/plugins/registry_plan.py tests/test_plugin_registry_plan.py
+All checks passed!
+RUFF_EXIT=0
+
+$ python -m py_compile atlas/plugins/registry_plan.py tests/test_plugin_registry_plan.py
+PY_COMPILE_EXIT=0

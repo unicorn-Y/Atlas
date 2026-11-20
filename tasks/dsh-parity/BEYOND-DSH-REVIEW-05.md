@@ -1,0 +1,23 @@
+# X30 LSP raw bridge：启动交接与清理边界窄审
+
+2026-11-16。原桌面GPT-6 Luna高施工期间的独立只读3文件审查：ssh.py、lsp/client.py、test_lsp_ssh_transport.py。两条纯内存确定复现；无服务/网络/模型/子进程/实际配置data或生产修改。不是终稿缺陷宣告，稳定后复核。
+
+1. **跨loop spawn交付取消丢失所有权**。实际make_lsp_process_factory在create_process返回后登记adapter，但结果交付客户端前取消；通用_owner_call只cancel future，客户端未取得_proc而无法cleanup。确定时序：fake create_process返回前向客户端loop排入取消再返回handle，client_received_adapter=False,tracked_adapters=1,lease=1,terminate_called=False。需要spawn专用所有权交接及取消后的迟到handle有界回收，不能仅复用reader调用取消语义。现有bridge测试从已创建adapter开始，不覆盖factory窗口。
+
+2. **终止确认失败后清理引用与lease残留**。实际LSPClient._cleanup_process在确认终止前清空_proc；bridge最终wait_closed超时/报错使_finish_owner未执行，重复client cleanup无引用，manager.close吞kill异常并关闭transport后仍保留adapter/lease。确定性wait_closed抛TimeoutError复现：client._proc=None,transport_closed=True,active_leases=1,manager_retained_adapters=1,adapter_closed=False。需要保留可重试的待清理所有权，transport确认关闭后幂等释放本地登记/lease；远端退出未确认保持unknown，不把本地释放等同远端成功退出。
+
+快照：ssh.py SHA256 f31d8afc9b64e13e74a68c65d6cc6f7f425bedb820f0de4f4076214fe8f855a8，client.py SHA256 32c54751fa3ce211838fb311638f2cba9739f7c0efe1a5720e4b622b06131ac8。施工中新workspace桥使行号移动，目标依方法名定位：_ssh_owner_call、make_lsp_process_factory、_SSHBridgeProcess._kill_owner、SSHWorkspaceManager.close、LSPClient._spawn/_cleanup_process。内存实验最终pending tasks0；writer背压/同步EOF及普通owner loop转发未发现额外确定major。输出争用未复现候选不在本审查重新判bug。
+
+已反馈原Luna在本批整链接线同时修复并补两条unit回归。主控首块10项11.88s通过只覆盖正常路径，不能覆盖上述取消/失败窗口；证据记VERIFICATION-08。没有新确定安全问题。
+
+## 第一轮修订后原两项复核
+
+第二条已修：实际client cleanup遇TimeoutError保留_proc；随后实际manager.close确认transport关闭后registered=0、lease=0，exit_confirmed=False、returncode=None，没有将本地回收伪装成远端退出成功。新增unit只覆盖client重试，manager-close收敛由此次确定性纯内存复现补证。
+
+第一条仍未修完整：owner concurrent future已经完成、adapter已登记、客户端结果尚未交付时发生取消，add_done_callback会在注册它的client线程立即执行；_dispose_late直接owner_loop.create_task触发跨线程访问。开启asyncio debug确定复现Non-thread-safe operation invoked on an event loop other than the current one，并遗留registered=1、lease=1、terminated=False及未await警告。现新增:190测试在create_process仍被Event阻塞时取消，client与owner同loop，不覆盖原交付窗口。最小修正为owner_loop.call_soon_threadsafe将创建cleanup task/登记/完成回调整体投回owner；需真正双loop、future已完成未交付的unit。
+
+复核快照ssh.py SHA256前缀5cbdad6fe69020fb，client.py be8aa35fae65e5c4；只检查原两项，无服务/网络/文件修改。主控4项PASS不能关闭第一条，已反馈原Luna。
+
+## 双loop调度修订后最终窄复核
+
+原第一条已修，可关闭原发现：_dispose_late仅通过owner_loop.call_soon_threadsafe(_start_cleanup)投递，创建task/登记/完成回调均在owner loop执行。新增test_completed_spawn_cancelled_before_client_delivery_schedules_cleanup_on_owner_loop明确阻止客户端结果交付，等待owner future完成且lease已登记后才在另一loop取消；有界断言terminate已执行、lease0、adapter集合空，owner debug开启。此轮静态复核未重跑测试，主控独立transport+world两文件8项9.82s通过另见VERIFICATION-08。第二条维持此前已修，不扩大为任意异常transport或真实网络已验。原两条窄审结束，不重复扩审正常stream。

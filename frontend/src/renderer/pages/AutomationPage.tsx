@@ -8,6 +8,7 @@ import { relativeTime } from '../services/api';
 import type { AutomationDeleteImpact, AutomationInboxRun, AutomationRecord } from '../services/persistentApi';
 import { automationsApi } from '../services/persistentApi';
 import GoalsPanel from './GoalsPanel';
+import DateTimePicker from '../components/DateTimePicker';
 import { describeAutomation, describeTrigger } from './automations/describe';
 import { AUTOMATION_TEMPLATES, AUTOMATION_TEMPLATE_CATALOG_VERSION, materializeAutomationTemplate } from './automations/templateCatalog';
 import StandingOrdersPanel from './StandingOrdersPanel';
@@ -339,7 +340,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast, onOpenC
         <div className="two">
           {form.kind === 'cron' && <label>cron 表达式<input required value={form.cron} onChange={(event) => setForm({ ...form, cron: event.target.value })} placeholder="0 9 * * *" /></label>}
           {form.kind === 'interval' && <label>间隔（小时）<input type="number" min={1} step="0.5" value={form.everyHours} onChange={(event) => setForm({ ...form, everyHours: event.target.value })} /></label>}
-          {form.kind === 'date' && <label>时刻<input type="datetime-local" required value={form.at} onChange={(event) => setForm({ ...form, at: event.target.value })} /></label>}
+          {form.kind === 'date' && <DateTimePicker label="时刻" value={form.at} required onChange={(at) => setForm({ ...form, at })} />}
           {form.kind === 'event' && <>
             <label>监视的文件夹<input required value={form.path} onChange={(event) => setForm({ ...form, path: event.target.value })} placeholder="D:\项目\docs" /></label>
             <label>只看这些文件（可选）<input value={form.glob} onChange={(event) => setForm({ ...form, glob: event.target.value })} placeholder="*.md" /></label>

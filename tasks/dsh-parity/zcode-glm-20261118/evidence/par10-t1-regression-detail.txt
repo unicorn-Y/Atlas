@@ -1,0 +1,191 @@
+2026-11-19 05:43:15 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-imlrfshm\atlas\config\atlas.toml
+.F.                                                                      [100%]
+================================== FAILURES ===================================
+_ test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle[marketplace] _
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/zcode-par10-registry-runtime/.tmp/par10-t1/regression-basetemp-2/test_git_and_marketplace_sourc1')
+source_type = 'marketplace'
+
+    @pytest.mark.parametrize("source_type", ["git", "marketplace"])
+    def test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle(
+        tmp_path: Path, source_type: str,
+    ) -> None:
+        import subprocess
+    
+        async def scenario() -> None:
+            source = tmp_path / "approval-source"
+            source.mkdir()
+            (source / "plugin.json").write_text(json.dumps({"name": "approval-plugin", "version": "1.0.0"}), encoding="utf-8")
+            (source / "package.json").write_text(json.dumps({
+                "name": "approval-plugin", "version": "1.0.0", "dependencies": {"direct-dep": "1.0.0"},
+            }), encoding="utf-8")
+            subprocess.run(["git", "init", "-b", "main", str(source)], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.email", "atlas-test@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.name", "Atlas test"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], check=True, capture_output=True)
+            runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+            if source_type == "marketplace":
+                market = tmp_path / "market"
+                market.mkdir()
+                (market / "marketplace.json").write_text(json.dumps({"plugins": [{
+                    "name": "approval-plugin", "source": {"source": "url", "url": str(source), "ref": "main"},
+                }]}), encoding="utf-8")
+                runtime.add_marketplace(market, name="approval-market")
+            calls = 0
+    
+            async def pnpm(_request_id: str, _cwd: Path, _registry: str | None, _args: list[str]):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    return 1, "ERR_PNPM_IGNORED_BUILDS\nIgnored build scripts: @fixture/approved-build@1.0.0"
+                return 0, "approved build completed"
+    
+            runtime._run_package_manager = pnpm
+            if source_type == "marketplace":
+                started = await runtime.start_install_operation(
+                    "marketplace:approval-market/approval-plugin", source_type="marketplace",
+                    marketplace="approval-market", plugin_name="approval-plugin",
+                )
+            else:
+                started = await runtime.start_install_operation(str(source), source_type="git", ref="main")
+            deadline = asyncio.get_running_loop().time() + 10
+            pending = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+            while pending["status"] not in {"awaiting_approval", "failed", "completed"}:
+                assert asyncio.get_running_loop().time() < deadline, pending
+                await asyncio.sleep(0.02)
+                pending = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+            assert pending["status"] == "awaiting_approval", pending
+            assert pending["approvalRequired"] == ["@fixture/approved-build"]
+            assert calls == 1
+            runtime.grant_script_approval(
+                "@fixture/approved-build", request_id=started["requestId"],
+                expires_at="2099-01-01T00:00:00Z",
+            )
+            deadline = asyncio.get_running_loop().time() + 10
+            completed = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+            while completed["status"] not in {"completed", "failed", "cancelled"}:
+                assert asyncio.get_running_loop().time() < deadline, completed
+                await asyncio.sleep(0.02)
+                completed = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+            assert completed["status"] == "completed", json.dumps(completed, ensure_ascii=False, default=str)
+            assert calls == 2
+            installed_name = "approval-plugin" if source_type == "marketplace" else "approval-source"
+            assert (tmp_path / "installed" / installed_name / "plugin.json").is_file()
+            assert completed["executedBuildPackages"] == ["@fixture/approved-build"]
+            await runtime.close_install_operations()
+    
+>       asyncio.run(scenario())
+
+tests\test_plugin_install_operations.py:389: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\25011\AppData\Local\hermes\hermes-agent\.hermes-runtime\python\cpython-3.11-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    async def scenario() -> None:
+        source = tmp_path / "approval-source"
+        source.mkdir()
+        (source / "plugin.json").write_text(json.dumps({"name": "approval-plugin", "version": "1.0.0"}), encoding="utf-8")
+        (source / "package.json").write_text(json.dumps({
+            "name": "approval-plugin", "version": "1.0.0", "dependencies": {"direct-dep": "1.0.0"},
+        }), encoding="utf-8")
+        subprocess.run(["git", "init", "-b", "main", str(source)], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.email", "atlas-test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.name", "Atlas test"], check=True)
+        subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], check=True, capture_output=True)
+        runtime = PluginRuntime([tmp_path / "installed"], tmp_path / "state.json")
+        if source_type == "marketplace":
+            market = tmp_path / "market"
+            market.mkdir()
+            (market / "marketplace.json").write_text(json.dumps({"plugins": [{
+                "name": "approval-plugin", "source": {"source": "url", "url": str(source), "ref": "main"},
+            }]}), encoding="utf-8")
+            runtime.add_marketplace(market, name="approval-market")
+        calls = 0
+    
+        async def pnpm(_request_id: str, _cwd: Path, _registry: str | None, _args: list[str]):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return 1, "ERR_PNPM_IGNORED_BUILDS\nIgnored build scripts: @fixture/approved-build@1.0.0"
+            return 0, "approved build completed"
+    
+        runtime._run_package_manager = pnpm
+        if source_type == "marketplace":
+            started = await runtime.start_install_operation(
+                "marketplace:approval-market/approval-plugin", source_type="marketplace",
+                marketplace="approval-market", plugin_name="approval-plugin",
+            )
+        else:
+            started = await runtime.start_install_operation(str(source), source_type="git", ref="main")
+        deadline = asyncio.get_running_loop().time() + 10
+        pending = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+        while pending["status"] not in {"awaiting_approval", "failed", "completed"}:
+            assert asyncio.get_running_loop().time() < deadline, pending
+            await asyncio.sleep(0.02)
+            pending = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+        assert pending["status"] == "awaiting_approval", pending
+        assert pending["approvalRequired"] == ["@fixture/approved-build"]
+        assert calls == 1
+        runtime.grant_script_approval(
+            "@fixture/approved-build", request_id=started["requestId"],
+            expires_at="2099-01-01T00:00:00Z",
+        )
+        deadline = asyncio.get_running_loop().time() + 10
+        completed = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+        while completed["status"] not in {"completed", "failed", "cancelled"}:
+            assert asyncio.get_running_loop().time() < deadline, completed
+            await asyncio.sleep(0.02)
+            completed = await runtime.wait_install_operation(started["requestId"], wait_seconds=0)
+>       assert completed["status"] == "completed", json.dumps(completed, ensure_ascii=False, default=str)
+E       AssertionError: {"requestId": "5a10ef4f959b40e2aeb5249a2093c874", "status": "failed", "createdAt": "2026-11-18T21:43:17.037234+00:00", "updatedAt": "2026-11-18T21:43:17.560073+00:00", "approvalRequired": [], "registryPlan": {"registries": [null], "requested": null, "decision": "pnpm-own-unknown", "registryRefusal": "pnpm-own-registry-unknown", "specKind": "unknown", "specHost": null, "directSource": "unknown", "fallbackAllowed": false}, "phase": "failed", "dependencyAttempts": [{"registry": null, "returnCode": 1, "ok": true, "failureKind": null, "attribution": null, "output": "ERR_PNPM_IGNORED_BUILDS\nIgnored build scripts: @fixture/approved-build@1.0.0"}], "dependencyOutcome": {"ok": true, "finalRegistry": null, "failureKind": null, "attribution": null, "failureSummary": "", "fallbackAttempted": false, "fallbackRefused": false, "attempts": [{"registry": null, "returnCode": 1, "ok": true, "failureKind": null, "attribution": null, "output": "ERR_PNPM_IGNORED_BUILDS\nIgnored build scripts: @fixture/approved-build@1.0.0"}]}, "blockedPackages": ["@fixture/approved-build"], "approvedBuildOutcome": {"ok": true, "finalRegistry": null, "failureKind": null, "attribution": null, "failureSummary": "", "fallbackAttempted": false, "fallbackRefused": false, "attempts": [{"registry": null, "returnCode": 0, "ok": true, "failureKind": null, "attribution": null, "output": "approved build completed"}]}, "executedBuildPackages": ["@fixture/approved-build"], "failureType": "PermissionError", "rollback": ["package.json", "pnpm-lock.yaml"], "error": "PermissionError"}
+E       assert 'failed' == 'completed'
+E         
+E         - completed
+E         + failed
+
+tests\test_plugin_install_operations.py:382: AssertionError
+============================== warnings summary ===============================
+::test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle[git]
+  D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\overlay-core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+::test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle[git]
+  D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\overlay-core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+::test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle[git]
+  D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\overlay-core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+::test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle[git]
+  D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\overlay-core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+::test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle[git]
+  D:\Atlas\.worktrees\zcode-par10-registry-runtime\.tmp\par10-t1\overlay-core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED ..\..\..\core::test_git_and_marketplace_sources_share_dependency_approval_request_lifecycle[marketplace]
+1 failed, 2 passed, 23 deselected, 5 warnings in 8.70s

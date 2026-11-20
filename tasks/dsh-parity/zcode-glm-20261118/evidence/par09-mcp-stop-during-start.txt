@@ -1,0 +1,11 @@
+SCENARIO stop-during-start
+PYTHON C:\Users\25011\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+2026-11-19 05:10:03 [info     ] config.loaded                  path=D:\Atlas\.worktrees\zcode-exec05-mcp\.tmp\par09-mcp-real\data\stop-during-start\config\atlas.toml
+2026-11-19 05:10:03 [info     ] mcp.starting                   count=1 names=['slow']
+PHASE slow_connecting {"available": false, "blocking_reason": "MCP server startup is still in progress", "servers": [{"name": "slow", "enabled": true, "connected": false, "state": "starting", "tool_discovery": "pending", "tool_count": 0, "blocking_reason": null}]}
+CHECK PASS slow: startup remains in starting/connecting :: {'name': 'slow', 'configured': True, 'enabled': True, 'transport': 'stdio', 'connected': False, 'state': 'starting', 'tool_discovery': 'pending', 'tool_count': 0, 'blocking_reason': None}
+CHECK PASS slow: child spawned :: 64372
+PHASE slow_stopped {"available": false, "blocking_reason": "MCP server startup is still in progress", "servers": [{"name": "slow", "enabled": true, "connected": false, "state": "starting", "tool_discovery": "pending", "tool_count": 0, "blocking_reason": null}]}
+CHECK PASS slow: child process gone after stop during startup :: 64372
+OBSERVATION stop_during_start status={"name": "slow", "configured": true, "enabled": true, "transport": "stdio", "connected": false, "state": "starting", "tool_discovery": "pending", "tool_count": 0, "blocking_reason": null}
+RESULT stop-during-start checks=3 failed=0

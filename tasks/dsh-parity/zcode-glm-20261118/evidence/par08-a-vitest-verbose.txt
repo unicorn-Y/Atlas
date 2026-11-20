@@ -1,0 +1,26 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.4 [39m[90mD:/Atlas/.worktrees/zcode-exec06-csv-preview/frontend[39m
+
+ [32m✓[39m src/renderer/shell/panels/csvPreview.test.tsx[2m > [22mcsv/tsv table preview[2m > [22mregisters both extensions and renders a header plus body cells[32m 6[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/csvPreview.test.tsx[2m > [22mcsv/tsv table preview[2m > [22mparses quoted separators, embedded newlines and escaped quotes as one cell[32m 1[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/csvPreview.test.tsx[2m > [22mcsv/tsv table preview[2m > [22mkeeps a lone empty quoted field as one row at EOF and renders it[32m 1[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/csvPreview.test.tsx[2m > [22mcsv/tsv table preview[2m > [22mrenders a blank-line record as a one-row table, not as an empty file[32m 0[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/csvPreview.test.tsx[2m > [22mcsv/tsv table preview[2m > [22mshows the empty note only when the file has zero records[32m 0[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/csvPreview.test.tsx[2m > [22mcsv/tsv table preview[2m > [22mdetects the delimiter from the first logical record across a quoted newline[32m 0[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/csvPreview.test.tsx[2m > [22mcsv/tsv table preview[2m > [22mhonors .tsv and detects semicolon delimiters outside quotes[32m 0[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/csvPreview.test.tsx[2m > [22mcsv/tsv table preview[2m > [22mcaps rows and states truncation instead of rendering an unbounded table[32m 18[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/csvPreview.test.tsx[2m > [22mcsv/tsv table preview[2m > [22mkeeps ragged rows and caps columns without inventing cells[32m 0[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/csvPreview.test.tsx[2m > [22mcsv/tsv table preview[2m > [22mstates binary, empty and truncated-source conditions explicitly[32m 4[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/documentPreviewRegistry.test.tsx[2m > [22mdocument preview renderer registry[2m > [22mresolves all built-in preview families with case-insensitive extensions[32m 2[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/documentPreviewRegistry.test.tsx[2m > [22mdocument preview renderer registry[2m > [22mrenders registered document components and restores the built-in renderer on dispose[32m 4[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/documentPreviewRegistry.test.tsx[2m > [22mdocument preview renderer registry[2m > [22mmakes new preview formats available and rejects duplicate renderer identities[32m 1[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/FilesPanel.test.tsx[2m > [22mancestorPaths[2m > [22mreturns every ancestor directory of a nested file, accumulated[32m 3[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/FilesPanel.test.tsx[2m > [22mancestorPaths[2m > [22mreturns nothing for a top-level file and filters empty segments[32m 0[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/FilesPanel.test.tsx[2m > [22mFilesPanel static rendering[2m > [22mshows the empty state without a workspace[32m 16[2mms[22m[39m
+ [32m✓[39m src/renderer/shell/panels/FilesPanel.test.tsx[2m > [22mFilesPanel static rendering[2m > [22mshows the reading hint while the root listing has not loaded[32m 1[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m17 passed[39m[22m[90m (17)[39m
+[2m   Start at [22m 03:26:02
+[2m   Duration [22m 1.44s[2m (import 81%, transform 11%, tests 5%, worker 2%)[22m
+

@@ -225,3 +225,9 @@ data/workbench/
 
 # glm-hammer run state and receipts
 .glm-hammer/
+
+# 机器本地 PowerShell 模块分析缓存（非项目代码）
+core/Microsoft/
+
+# 398MB 生成索引，GitHub 单文件上限 100MB，只保留其生成脚本
+tasks/dsh-parity/atomic/source-index.json
